@@ -41,3 +41,5 @@ __pycache__/
 # other
 *.key
 bem.pdf
+inflow.pdf
+velocity-deficit.pdf
