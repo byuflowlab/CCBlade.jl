@@ -43,3 +43,4 @@ __pycache__/
 bem.pdf
 inflow.pdf
 velocity-deficit.pdf
+*.idraw
