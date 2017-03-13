@@ -820,26 +820,8 @@ We see that we can immediately combine cases I and IV as well as II and III, as 
     \end{cases}
     \label{eq:asing}
 \end{equation}
-This expression can be further consolidated with the logic shown in \cref{alg:a}.
-\begin{algorithm}[htbp]
-\caption{determine axial induction factor}
-\begin{algorithmic}
+This expression can be further consolidated with the logic shown in the first half of \cref{alg:aap}.
 
-\If {$\phi < 0$}
-    \State $\kappa = -\kappa$
-\EndIf
-\\
-\If {$\kappa \le 2/3$}
-    \State $a = \frac{\kappa}{\kappa + 1}$
-    \Comment{if $\kappa = -1$ return any nonzero residual as discussed later.}
-\Else
-    \State $a = \frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}$
-    \Comment{if $\gamma_3 = 0$ use \cref{eq:aconverge}.}
-\EndIf
-
-\end{algorithmic}
-\label{alg:a}
-\end{algorithm}
 
 We note the existence of a singularity at $\kappa = -1$ for $\phi > 0$ and at $\kappa = 1$ for $\phi < 0$.  We will see later what cases this condition corresponds to.
 
@@ -871,21 +853,9 @@ Similarly, for $V_x < 0$ we obtain
 \begin{equation}
     a^\prime = \frac{-\kappa^\prime}{1 + \kappa^\prime}
 \end{equation}
-Or equivalently, we can use the same formula in \cref{eq:aprime}, but negate $\kappa^\prime$ if $V_x < 0$.  We see that the $V_x < 0$ case is defined everywhere except when $\kappa^\prime = -1$.  These two cases can be combined into the algorithm shown in \cref{alg:ap}.
+Or equivalently, we can use the same formula in \cref{eq:aprime}, but negate $\kappa^\prime$ if $V_x < 0$.  We see that the $V_x < 0$ case is defined everywhere except when $\kappa^\prime = -1$.  These two cases can be combined into the algorithm shown in the bottom half of \cref{alg:aap}.
 
-\begin{algorithm}[htbp]
-\caption{determine tangential induction factor}
-\begin{algorithmic}
 
-\If {$V_x < 0$}
-    \State $\kappa^\prime = -\kappa^\prime$
-\EndIf
-\\
-\State $a^\prime = \kappa^\prime/(1 - \kappa^\prime)$
-\Comment{if $\kappa^\prime = 1$ return any nonzero residual as discussed later.}
-\end{algorithmic}
-\label{alg:ap}
-\end{algorithm}
 
 
 
@@ -947,6 +917,34 @@ $V_x$ & $V_y$ & quadrant order \\
 \end{table}
 
 
+
+\begin{algorithm}[htbp]
+\caption{Solve the residual equation $\mathcal{R}(\phi)$}
+\begin{algorithmic}
+
+\If {$\phi < 0$}
+    \State $\kappa = -\kappa$
+\EndIf
+\\
+\If {$\kappa \le 2/3$}
+    \State $a = \frac{\kappa}{\kappa + 1}$
+    \Comment{if $\kappa = -1$ return any nonzero residual.}
+\Else
+    \State $a = \frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}$
+    \Comment{if $\gamma_3 = 0$ use \cref{eq:aconverge}.}
+\EndIf
+\\
+\If {$V_x < 0$}
+    \State $\kappa^\prime = -\kappa^\prime$
+\EndIf
+\\
+\State $a^\prime = \kappa^\prime/(1 - \kappa^\prime)$
+\Comment{if $\kappa^\prime = 1$ return any nonzero residual.}
+\\
+\State $\mathcal{R}(\phi) = \frac{\sin\phi}{(1 - a(\phi))} - \frac{V_x}{V_y} \frac{\cos\phi}{(1 + a^\prime(\phi))}$
+\end{algorithmic}
+\label{alg:aap}
+\end{algorithm}
 
 \subsection{No Wind In One of the Directions}
 
@@ -1034,7 +1032,7 @@ The relevant quadrants can be determined from the sign of $V_y$.  Because $a^\pr
 
 \begin{table}[htb]
 \centering
-\caption{$V_x = 0$}
+\caption{$V_x = 0$, $\theta$ includes pitch}
 \label{tab:bracket2}
 \begin{tabular}{@{}ccl@{}}
 \toprule
@@ -1062,7 +1060,7 @@ Once, we solve this 1D equation for $\phi$, we can compute the torque distributi
 
 
 \begin{algorithm}[htbp]
-\caption{solve for $\phi$}
+\caption{Solve the residual equation for the case $V_x = 0$.}
 \begin{algorithmic}
 
 
@@ -1073,50 +1071,51 @@ Once, we solve this 1D equation for $\phi$, we can compute the torque distributi
     \State $u = -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
     \Comment{If $c_n > 0$ return any nonzero residual}
 \EndIf
-
+\\
 \State $\mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y}$
-
+\\
+\State $W = \frac{V_y}{\cos\phi}$
 \end{algorithmic}
-\label{alg:complete}
+\label{alg:Vx0}
 \end{algorithm}
 
-The resulting logic is:
-
-if turbine and $V_y > 0$: search bracket $[0, \pi/2]$ (note no singularity at 0)
-
-if turbine and $V_y < 0$: search bracket $[\pi/2, \pi]$
-
-if $c_n > 0$, then return 1 or some other nonzero value for the residual.  Otherwise evaluate:
-\begin{equation}
-    u = -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}
-\end{equation}
-\begin{equation}
-    \mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
-\end{equation}
-
-
-if propeller and $V_y > 0$: search bracket $[-\pi/2, 0]$ (note no singularity at 0)
-
-if propeller and $V_y < 0$: search bracket $[-\pi, -\pi/2]$
-
-if $c_n < 0$, then return 1 or some other nonzero value for the residual.  Otherwise evaluate:
-\begin{equation}
-    u = \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}
-\end{equation}
-\begin{equation}
-    \mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
-\end{equation}
+% The resulting logic is:
+%
+% if turbine and $V_y > 0$: search bracket $[0, \pi/2]$ (note no singularity at 0)
+%
+% if turbine and $V_y < 0$: search bracket $[\pi/2, \pi]$
+%
+% if $c_n > 0$, then return 1 or some other nonzero value for the residual.  Otherwise evaluate:
+% \begin{equation}
+%     u = -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}
+% \end{equation}
+% \begin{equation}
+%     \mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
+% \end{equation}
+%
+%
+% if propeller and $V_y > 0$: search bracket $[-\pi/2, 0]$ (note no singularity at 0)
+%
+% if propeller and $V_y < 0$: search bracket $[-\pi, -\pi/2]$
+%
+% if $c_n < 0$, then return 1 or some other nonzero value for the residual.  Otherwise evaluate:
+% \begin{equation}
+%     u = \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}
+% \end{equation}
+% \begin{equation}
+%     \mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
+% \end{equation}
 
 \subsubsection{No Wind in the y-direction}
 
-If $V_y = 0$ we equate momentum theory in \cref{eq:CQmom} with blade element theory in [ref].  If $V_x > 0$ we have:
+If $V_y = 0$ we equate momentum theory in \cref{eq:CQmom} with blade element theory in \cref{eq:beQ}.  If $V_x > 0$ we have:
 \begin{equation}
 \begin{aligned}
 4 \pi F r^2 v \rho V_x dr = B r c_t \frac{1}{2} \rho W^2 c dr\\
 4  F v  V_x  = \sigma^\prime c_t  W^2 \\
 \end{aligned}
 \end{equation}
-If we use one of each substitution for $W = V_x/\sin\phi$ and $W = v/cos\phi$ fromn \cref{eq:Wopt} in the above expression we have
+If we use one of each substitution for $W = V_x/\sin\phi$ and $W = v/\cos\phi$ from \cref{eq:Wopt} in the above expression we have
 \begin{equation}
 \begin{aligned}
 4  F v  V_x  = \sigma^\prime c_t \frac{V_x v}{\sin\phi \cos\phi} \\
@@ -1131,7 +1130,7 @@ Like the axial inflow case, these scenarios fill in the singularity shown in \cr
 
 
 
-Like before are simplification yielding $\kappa^\prime = \pm1$ in insightful, but doesn't lead to a solution process.  We can instead use either substitution for $W$, but in the following we will use $W = V_x / \sin\phi$.  This yields the following for $V_x > 0$:
+Like before, the simplifications yielding $\kappa^\prime = \pm1$ are insightful, but don't lead to a solution process.  We can instead use either substitution for $W$, but in the following we will use $W = V_x / \sin\phi$.  This yields the following for $V_x > 0$:
 \begin{equation}
     v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} V_x
 \end{equation}
@@ -1139,7 +1138,7 @@ and if $V_x < 0$ we have
 \begin{equation}
     v = -\frac{\sigma^\prime c_t}{4 F \sin^2\phi} V_x
 \end{equation}
-We see that $v$ follows the sign of $c_t$, which is consistent with the physics discussed in \cref{sec:nowindtan}.
+We see that $v$ follows the sign of $c_t$, which is consistent with the physics discussed in \cref{sec:nowindtan}.  We can condense these two cases as shown in \cref{alg:Vy0}.
 
 % Solving for $v$ yields:
 % \begin{equation}
@@ -1157,6 +1156,7 @@ Once we solve for $\phi$ we can compute the thrust and torque distributions as n
 \begin{equation}
     W = \frac{V_x}{\sin\phi}
 \end{equation}
+The algorithm for this case is shown in \cref{alg:Vy0}.
 
 \begin{table}[htb]
 \centering
@@ -1174,6 +1174,19 @@ $V_x$ & $|\theta|$ & quadrant order \\
 \end{tabular}
 \end{table}
 
+\begin{algorithm}[htbp]
+\caption{Solve the residual equation for the case $V_y = 0$.}
+\begin{algorithmic}
+\State $v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} |V_x|$
+\\
+\State $\mathcal{R}(\phi) = \frac{\sin\phi}{V_x} - \frac{\cos\phi}{v(\phi)}$
+\\
+\State $W = \frac{V_x}{\sin\phi}$
+
+\end{algorithmic}
+\label{alg:Vy0}
+\end{algorithm}
+
 % \begin{equation}
 %     T^\prime = B c_n \frac{1}{2} \rho \frac{V_x^2}{\sin^2\phi} c
 % \end{equation}
@@ -1187,34 +1200,7 @@ $V_x$ & $|\theta|$ & quadrant order \\
 % \end{equation}
 % Thus, $V_x$ does not directly appear in the residual equation and so we don't need to worry about its sign, as is consistent with the discussion in section??.
 
-\section{Final Algorithm}
 
-Putting all the pieces together results in the algorithm shown in \cref{alg:complete}.
-
-\begin{algorithm}[htbp]
-\caption{determine axial induction factor}
-\begin{algorithmic}
-
-\If {$V_x = 0$ and $V_y = 0$}
-    \State T = 0, Q = 0
-
-\ElsIf {$V_x = 0$}
-    \State
-\EndIf
-
-\If {$\phi < 0$}
-    \State $\kappa = -\kappa$
-\EndIf
-\\
-\If {$\kappa \le 2/3$}
-    \State $a = \frac{\kappa}{\kappa + 1}$
-\Else
-    \State $a = \frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}$
-\EndIf
-
-\end{algorithmic}
-\label{alg:complete}
-\end{algorithm}
 
 \bibliographystyle{aiaa}
 \bibliography{/Users/andrewning/Dropbox/BYU/References/flow}
