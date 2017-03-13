@@ -22,7 +22,7 @@
 
 \section{Introduction}
 
-The basic blade element momentum theory works well for on-design operation and is detailed in many references.  For the standard case, the author has developed a reformulated approach that simplifies the solution processes and is provably convergent \cite{Ning2014-Simple-Solution}.  However, when considering operation under turbulent conditions, with flexible blades, and in other non-ideal operating scenarios, a more complete derivation is needed.  In this derivation we extend basic blade element momentum theory to consider all possible inflow angles, large axial inductions, turbines and propellers simultaneously, and yawed inflow.
+The basic blade element momentum theory works well for on-design operation and is detailed in many references.  For the standard case, the author has developed a reformulated approach that simplifies the solution processes and is provably convergent \cite{Ning2014-Simple-Solution}.  However, when considering operation under turbulent conditions, gusts, maneuvers, with flexible blades, and in other non-ideal operating scenarios, a more complete derivation is needed.  In this derivation we extend basic blade element momentum theory to consider all possible inflow angles, large axial inductions, turbines and propellers simultaneously, and yawed inflow.
 
 \section{Linear Momentum Balance}
 
@@ -267,7 +267,7 @@ Because we are keeping our positive convention as a positive thrust downwind, th
         \end{cases}\\
     V_y = 0:&\quad T = 0\\
 \end{aligned}
-\label{eq:CTmom}
+\label{eq:CTmomsum}
 \end{equation}
 
 % Otherwise, if $V_x < 0$, then $C_T$ has the opposite sign.
@@ -358,22 +358,22 @@ If $V_y = 0$, then there is no induced velocity in the axial direction ($a = 0$)
         2 r v \dot{m} &= Q\\
         Q &= 2 r v \rho V_x A_d\\
     \end{aligned}
-    \label{eq:momQ}
 \end{equation}
-Then, the torque coefficient is (we can still normalize because $V_x \neq 0$), and adding in the hub/tip loss factor:
-\begin{equation}
-\begin{aligned}
-    C_Q &=  \frac{2 r v \rho V_x A_d R}{\frac{1}{2}\rho V_x^2 A_d r} = 4F \frac{v}{V_x}
-\end{aligned}
-\end{equation}
-Note that this is the same expression, if we were to use the existing formula for $C_Q$ but use $a = 0$, and replace $V_y a^\prime$ with $v$.
+We can normalize, because $V_x \ne 0$, but it will be convenient to keep this expression in the nonnormalized form.  We do, however, need to add the hub/tip loss factor
+% Then, the torque coefficient is (we can still normalize because $V_x \neq 0$), and adding in the hub/tip loss factor:
+% \begin{equation}
+% \begin{aligned}
+%     C_Q &=  \frac{2 r v \rho V_x A_d R}{\frac{1}{2}\rho V_x^2 A_d r} = 4F \frac{v}{V_x}
+% \end{aligned}
+% \end{equation}
+Note that this is the same expression, if we were to use the existing formula for $Q$ but use $a = 0$, and replace $V_y a^\prime$ with $v$.
 
-The sign of $v$ is consistent with the sign of $C_Q$ automatically.  A positive $v$ is in the y-direction, as is consistent with the normal case where $v = V_y a^\prime$.  However, as discussed in the previous section, reversing the sign of $V_x$ must be accounted for (total sign of $C_Q$ stays the same, so we must multiply by $-1$ to cancel sign change for $V_x$).
-
-It will be more convenient, in the case with no wind to use the torque, rather than the torque coefficient:
+The sign of $v$ is consistent with the sign of $Q$ automatically.  A positive $v$ is in the y-direction, as is consistent with the normal case where $v = V_y a^\prime$.  However, as discussed in the previous section, reversing the sign of $V_x$ must be accounted for (total sign of $Q$ stays the same, so we must multiply by $-1$ to cancel sign change for $V_x$).
 \begin{equation}
     Q = \pm 4 \pi F r^2 v \rho V_x dr
 \end{equation}
+
+
 
 \subsubsection{Propellers}
 
@@ -545,45 +545,45 @@ It turns out that nothing in this derivation changes for other inflow directions
 \subsubsection{No Wind In One of the Directions}
 \label{sec:nowindtan}
 
-If $V_x = 0$, then from the Kutta-Joukowski theorem, $a^\prime = 0$.  Also, $a$ is undefined, because of the normalization by $V_x$ and so we must refer to the total axial induced velocity $u$.  There are two possible direction for $u$ (\cref{fig:inflowu}).
+If $V_x = 0$, then from the Kutta-Joukowski theorem, $a^\prime = 0$.  Also, $a$ is undefined, because of the normalization by $V_x$ and so we must refer to the total axial induced velocity $u$.  There are two possible directions for $u$ (\cref{fig:inflowu}).
 
 \begin{figure}[htbp]
     \centering
     \includegraphics[width=3.5in]{figures/inflow4}
-    \caption{}
+    \caption{Two possible directions for the induced axial velocity $u$.  The black $u$ is positive according to our sign convention, and the blue $u$ is negative.}
     \label{fig:inflowu}
 \end{figure}
 
-We note the relationship between $W$ and $u$ from \cref{fig:inflowu} is:
+We note that we can define $W$ as (\cref{fig:inflowu}):
 \begin{equation}
-    \sin(\phi) = -\frac{u}{W}
+    W = \frac{-u}{\sin\phi} = \frac{V_y}{\cos\phi}
 \end{equation}
 We also cannot use the thrust coefficient directly, because we used a normalization with $V_x$ as the velocity.  We revert back to the definition of thrust in \cref{eq:beT} using the expression for $W$ above.
-\begin{equation}
-\begin{aligned}
-    T = B c_n \frac{1}{2}\rho \frac{u^2}{\sin^2 \phi} c dr\\
-\end{aligned}
-\end{equation}
+% \begin{equation}
+% \begin{aligned}
+%     T = B c_n \frac{1}{2}\rho \frac{u^2}{\sin^2 \phi} c dr\\
+% \end{aligned}
+% \end{equation}
 
 From the Kutta-Joukowski theorem, the direction of $u$ and $c_n$ must be opposite.  Thus, for the case of $u > 0$ (remember a positive u is in the negative x-direction using the wind turbine convention), then $c_n$ must be positive, and $\phi < 0$.  The opposite is true for the case with $u < 0$: $c_n < 0$ and $\phi > 0$.  We can determine these signs a priori, unlike the more general case, because the velocity is strictly determined by $u$ and not $V_x - u$, and the tangential velocity has no induction.  The direction of circulation can change, depending on the sign of $V_y$, but the signs of $c_n$ and $u$ cannot.
 
 
-Similarly, for torque we use \cref{eq:beQ} and note that
-\begin{equation}
-    \cos(\phi) = \frac{V_y}{W}
-\end{equation}
-\begin{equation}
-\begin{aligned}
-Q = B r c_t \frac{1}{2}\rho \frac{V_y^2}{\cos^2 \phi} c dr\\
-\end{aligned}
-\end{equation}
+% Similarly, for torque we use \cref{eq:beQ} and note from \cref{fig:inflowv} that
+% \begin{equation}
+%     W = \frac{V_x}{\sin\phi} = \frac{v}{\cos\phi}
+% \end{equation}
+% \begin{equation}
+% \begin{aligned}
+% Q = B r c_t \frac{1}{2}\rho \frac{V_y^2}{\cos^2 \phi} c dr\\
+% \end{aligned}
+% \end{equation}
 
 % [TODO: move this to BEM: The inflow angle is unknown, so we ignore the downwash]
 % \[Q = B r c_t \frac{1}{2}\rho V_y^2 c dr\]
 
 If $V_y = 0$, then from the Kutta-Joukowski theorem, $a = 0$.  Also, $a^\prime$ is undefined, because of the normalization by $V_y$ and so we must refer to the total tangential induced velocity $v$.  There are two possibilities for $v$ shown in black and blue in \cref{fig:inflowv}.  From the Kutta-Joukowski theorem we know that $c_t$ and $v$ must have opposite signs.  We will consider $v$ as positive in the direction of a positive $a^\prime$ (for a positive $V_y$), thus the black $v$ is positive.  Two cases yield the following possibilities for $V_x > 0$ (with similar results for $V_x < 0$): either $\phi \in (0, \pi/2)$, in which case $c_t > 0$ and $v > 0$ or $\phi \in (\pi/2, \pi)$, in which case $c_t < 0$ and $v < 0$.
 
-In either case we can define thrust and torque using \cref{eq:beT,eq:beQ} where
+In either case we can define thrust and torque using \cref{eq:beT,eq:beQ} where from \cref{fig:inflowv} we see that
 \begin{equation}
     W = \frac{V_x}{\sin\phi} = \frac{v}{\cos\phi}
 \end{equation}
@@ -665,13 +665,13 @@ We can now combine the results from momentum theory and blade element theory.  W
 
 \subsection{Axial Inflow}
 
-We equate the thrust coefficients from momentum theory and blade element theory.  For now, we consider the typical cases where $V_x \ne 0$ and $V_y \ne 0$.  The thrust coefficient from blade element theory is always the same, but the momentum thrust coefficient changes depending on the sign of $V_x$ and $a$ (\cref{eq:CTmom}).  There are multiple cases that must be considered depending on the sign of $V_x$ and the magnitude of $a$.
+We equate the thrust coefficients from momentum theory and blade element theory.  For now, we consider the typical cases where $V_x \ne 0$ and $V_y \ne 0$.  The thrust coefficient from blade element theory is always the same, but the momentum thrust coefficient changes depending on the sign of $V_x$ and $a$ (\cref{eq:CTmomsum}).  There are multiple cases that must be considered depending on the sign of $V_x$ and the magnitude of $a$.
 
 \begin{itemize}
 
 \item Case I: $V_x > 0$ and $a \le 0.4$
 
-Equate the corresponding thrust from momentum theory \cref{eq:CTmom} with that of blade element theory \cref{eq:CTbe}:
+Equate the corresponding thrust from momentum theory \cref{eq:CTmomsum} with that of blade element theory \cref{eq:CTbe}:
 \begin{equation}
     \begin{aligned}
         4 a (1 - a) F &= c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\\
@@ -707,7 +707,7 @@ Thus, this equation applies if $-1 < \kappa \le 2/3$.
 
 \item Case II: $V_x < 0$ and $a \le 0.4$
 
-Equate the thrust from momentum theory \cref{eq:CTmom} and blade element theory \cref{eq:CTbe} yields:
+Equate the thrust from momentum theory \cref{eq:CTmomsum} and blade element theory \cref{eq:CTbe} yields:
 \begin{equation}
     - 4 a (1 - a) F = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2
 \end{equation}
@@ -1073,8 +1073,6 @@ Once, we solve this 1D equation for $\phi$, we can compute the torque distributi
 \EndIf
 \\
 \State $\mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y}$
-\\
-\State $W = \frac{V_y}{\cos\phi}$
 \end{algorithmic}
 \label{alg:Vx0}
 \end{algorithm}
@@ -1126,7 +1124,7 @@ Conversely, if we use the case $V_x < 0$, the resulting simplification is
 \begin{equation}
     \kappa^\prime = -1
 \end{equation}
-Like the axial inflow case, these scenarios fill in the singularity shown in \cref{alg:ap}.  For the case $V_y \ne 0$, the calculation of $a^\prime$ is undefined is $\kappa^\prime = 1$ for $V_x > 0$ or if $\kappa^\prime = -1$ for $V_x < 0$.  We see now that it is undefined because that case corresponds to $V_y = 0$.  As in the axial inflow case, we simply return a nonzero residual if that case occurs in \cref{alg:ap}, and we handle the case $V_y = 0$ explicitly below.
+Like the axial inflow case, these scenarios fill in the singularity shown in \cref{alg:aap}.  For the case $V_y \ne 0$, the calculation of $a^\prime$ is undefined is $\kappa^\prime = 1$ for $V_x > 0$ or if $\kappa^\prime = -1$ for $V_x < 0$.  We see now that it is undefined because that case corresponds to $V_y = 0$.  As in the axial inflow case, we simply return a nonzero residual if that case occurs in \cref{alg:aap}, and we handle the case $V_y = 0$ explicitly below.
 
 
 
@@ -1180,8 +1178,6 @@ $V_x$ & $|\theta|$ & quadrant order \\
 \State $v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} |V_x|$
 \\
 \State $\mathcal{R}(\phi) = \frac{\sin\phi}{V_x} - \frac{\cos\phi}{v(\phi)}$
-\\
-\State $W = \frac{V_x}{\sin\phi}$
 
 \end{algorithmic}
 \label{alg:Vy0}
@@ -1199,6 +1195,58 @@ $V_x$ & $|\theta|$ & quadrant order \\
 %     \mathcal{R}(\phi) = \kappa^\prime(\phi) \sin\phi - \cos\phi = 0
 % \end{equation}
 % Thus, $V_x$ does not directly appear in the residual equation and so we don't need to worry about its sign, as is consistent with the discussion in section??.
+
+
+\subsection{Loads}
+
+Once the residual equation is solved, the distributed loads (force per unit length) can be computed as defined in \cref{alg:loads}.  The total normal and tangential loads at this blade station are given by
+\begin{equation}
+\begin{aligned}
+    N &= \int_0^R N^\prime dr\\
+    T &= \int_0^R T^\prime dr\\
+\end{aligned}
+\end{equation}
+% and the power is
+% \begin{equation}
+%     P = Q \Omega
+% \end{equation}
+%
+% thrust = Npfull*cos(cone)
+% torque = Tpfull*z_az
+%
+% # Power
+% P = Q * Omega*pi/30.0  # RPM to rad/s
+%
+% # normalize if necessary
+% if coefficient:
+%     q = 0.5 * self.rho * Uinf**2
+%     A = pi * self.rotorR**2
+%     CP = P / (q * A * Uinf)
+%     CT = T / (q * A)
+%     CQ = Q / (q * self.rotorR * A)
+
+
+\begin{algorithm}[htbp]
+\caption{Solve for the load distributions.}
+\begin{algorithmic}
+\If {$V_x = 0$}
+% \State $W = \frac{V_y}{\cos\phi}$
+\State $W = \sqrt{u^2 + V_y^2}$
+\ElsIf {$V_y = 0$}
+% % \State $W = \frac{V_x}{\sin\phi}$
+\State $W = \sqrt{V_x^2 + v^2}$
+\Else
+\State $W = \sqrt{(V_x(1 - a))^2 + (V_y(1 + a^\prime))^2}$
+\EndIf
+\\
+\\
+\State $q = \frac{1}{2}\rho W^2$
+\State $N^\prime = B c_n q c$
+\State $T^\prime = B c_t q c$
+
+\end{algorithmic}
+\label{alg:loads}
+\end{algorithm}
 
 
 
