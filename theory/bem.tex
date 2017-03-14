@@ -6,10 +6,11 @@
 \usepackage{caption}
 % \captionsetup[table]{skip=5pt}  % table caption too close
 \usepackage{booktabs} % better tables
-\usepackage[colorlinks,bookmarks,bookmarksnumbered,allcolors=blue]{hyperref}
-\usepackage[capitalise]{cleveref}
+\usepackage{subfig}
 \usepackage{algpseudocode}
 \usepackage{algorithm}
+\usepackage[colorlinks,bookmarks,bookmarksnumbered,allcolors=blue]{hyperref}
+\usepackage[capitalise]{cleveref}
 
 
 \begin{document}
@@ -1199,33 +1200,7 @@ $V_x$ & $|\theta|$ & quadrant order \\
 
 \subsection{Loads}
 
-Once the residual equation is solved, the distributed loads (force per unit length) can be computed as defined in \cref{alg:loads}.  The total normal and tangential loads at this blade station are given by
-\begin{equation}
-\begin{aligned}
-    N &= \int_0^R N^\prime dr\\
-    T &= \int_0^R T^\prime dr\\
-\end{aligned}
-\end{equation}
-% and the power is
-% \begin{equation}
-%     P = Q \Omega
-% \end{equation}
-%
-% thrust = Npfull*cos(cone)
-% torque = Tpfull*z_az
-%
-% # Power
-% P = Q * Omega*pi/30.0  # RPM to rad/s
-%
-% # normalize if necessary
-% if coefficient:
-%     q = 0.5 * self.rho * Uinf**2
-%     A = pi * self.rotorR**2
-%     CP = P / (q * A * Uinf)
-%     CT = T / (q * A)
-%     CQ = Q / (q * self.rotorR * A)
-
-
+Once the residual equation is solved, the distributed loads (force per unit length) can be computed as defined in \cref{alg:loads}.
 \begin{algorithm}[htbp]
 \caption{Solve for the load distributions.}
 \begin{algorithmic}
@@ -1247,6 +1222,36 @@ Once the residual equation is solved, the distributed loads (force per unit leng
 \end{algorithmic}
 \label{alg:loads}
 \end{algorithm}
+
+The local airfoil coordinate system is shown in \cref{fig:csys}.  The z-direction is directed along the blade, the y-direction opposite to the rotational velocity, and the x-direction given by the right-hand rule (nominally in the downwind direction).  This coordinate system is equally valid for downwind turbines, but in both cases, assumes that the rotor is rotating clockwise when viewed from upwind.  Because the blade may be curved (whether due to a nonstraight design or deflection), the coordinate system is local to each section along the blade (\cref{fig:curved}).  Swept blades can also be handled, but it is assumed that sweep is accomplished through shearing, rather than rotation, so that the local airfoils and local coordinate systems are still defined relative to the unswept rotation direction (\cref{fig:swept}).
+
+\begin{figure}[htbp]
+\centering
+ \subfloat[Side view of curved blade.  Coordinate system is normal to curvature.]{
+   \makebox[3.0in][c]{\includegraphics[height=2.5in]{figures/curved}}
+   \label{fig:curved}
+ }
+ \qquad
+ \subfloat[Front view of swept blade.  Sweep is accomplished through shearing, so coordinate system stays parallel to sweep of blade root.]{
+   \makebox[3.0in][c]{\includegraphics[height=2.5in]{figures/swept}}
+   \label{fig:swept}
+ }
+ \caption{Definition of local airfoil coordinate system.}
+ \label{fig:csys}
+\end{figure}
+
+If we define the coning angle as $\Phi$ then the thrust can be found through
+integration as:
+\begin{equation}
+   T = \int_0^R N^\prime \cos\Phi dr
+\end{equation}
+the torque is given by
+\begin{equation}
+    Q = \int_0^R T^\prime (r\cos\Phi + precurve\sin\Phi) dr
+\end{equation}
+
+% TODO: azimuthally averaging
+% TODO: normalization for turbines and props
 
 
 
