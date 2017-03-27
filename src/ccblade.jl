@@ -10,8 +10,12 @@ Allows for non-ideal conditions (reversed flow, no wind in one direction, etc.)
 
 module BEM
 
+using PyPlot  # TODO: remove
+
 using Roots: fzero
 using Dierckx: Spline1D
+
+export AirfoilData, Rotor, OperatingPoint, distributedLoads
 
 # pretabulated cl/cd data
 immutable AirfoilData
@@ -146,7 +150,7 @@ end
 
 
 
-function firstbracket(f, xmin, xmax, n)
+function firstbracket(f, xmin, xmax, n, backwardsearch=false)
     """Find a bracket for the root closest to xmin by subdividing
     interval (xmin, xmax) into n intervals
 
@@ -155,11 +159,19 @@ function firstbracket(f, xmin, xmax, n)
     """
 
     xvec = linspace(xmin, xmax, n)
+    if backwardsearch  # start from xmax and work backwards
+        xvec = reverse(xvec)
+    end
+
     fprev = f(xvec[1])
     for i = 2:n
         fnext = f(xvec[i])
         if fprev*fnext < 0  # bracket found
-            return true, xvec[i-1], xvec[i]
+            if backwardsearch
+                return true, xvec[i], xvec[i-1]
+            else
+                return true, xvec[i-1], xvec[i]
+            end
         end
         fprev = fnext
     end
@@ -194,6 +206,7 @@ function distributedLoads(rotor::Rotor, op::OperatingPoint)
         Vy = rotor.Vy[i]
         sec = Section(rotor.r[i], rotor.chord[i], twist, rotor.af[i], Vx, Vy,
             rotor.Rhub, rotor.Rtip, rotor.B, rho)
+        startfrom90 = false
 
         if isapprox(Vx, 0.0, rtol=1e-6) && isapprox(Vy, 0.0, rtol=1e-6)
             Np[i] = 0.0; Tp[i] = 0.0
@@ -216,6 +229,7 @@ function distributedLoads(rotor::Rotor, op::OperatingPoint)
         elseif isapprox(Vy, 0.0, rtol=1e-6)
 
             resid = residualVy0
+            startfrom90 = true  # start from 90 deg
 
             if Vx > 0 && abs(twist) < pi/2
                 order = (q1, q3)
@@ -252,28 +266,33 @@ function distributedLoads(rotor::Rotor, op::OperatingPoint)
         for j = 1:length(order)
             phimin = order[j][1]
             phimax = order[j][2]
-            success, phiL, phiU = firstbracket(R, phimin, phimax, npts)
+
+            # optimize search direction
+            backwardsearch = false
+            if !startfrom90
+                if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                    backwardsearch = true
+                end
+            else
+                if phimax == pi/2  # q1
+                    backwardsearch = true
+                end
+            end
+
+            success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
+
             if success
 
                 phistar = fzero(R, phiL, phiU)
-                println(j)
                 _, Np[i], Tp[i] = resid(phistar, sec)
 
                 break
             end
 
-            # if no solution found, it just returns zeros for this section, although this shouldn't happen
-            # alternatively, one could increase npts
+            # if no solution found, it just returns zeros for this section, although this really shouldn't get here
+            # alternatively, one could increase npts and try again
         end
-        # if !success
-        #     # no solution found.  could increase npts and try again or just return zeros
-        #     Np[i] = 0.0; Tp[i] = 0.0
-        #     break
-        # end
-
-
     end
-
 
     return Np, Tp
 end
@@ -398,17 +417,26 @@ function residualVx0(phi::Float64, sec::Section)
     _, _, _, k2, _, Nu, Tu = residualbase(phi, sec)
     Vy = sec.Vy
 
-    # induced velocity
-    s = sign(phi)
-    u = s*sqrt(s*k2)*abs(Vy)
+    os = -sign(phi)
 
-    # residual
-    R = - sin(phi)/u - cos(phi)/Vy
+    if os*k2 < 0
+        R = 1.0  # any nonzero residual
 
-    # loads
-    W2 = u^2 + Vy^2
-    Np = Nu*W
-    Tp = Tu*W
+        Np = 0.0
+        Tp = 0.0
+    else
+        # induced velocity
+        u = os*sqrt(os*k2)*abs(Vy)
+
+        # residual
+        R = - sin(phi)/u - cos(phi)/Vy
+
+        # loads
+        W2 = u^2 + Vy^2
+        Np = Nu*W2
+        Tp = Tu*W2
+    end
+
 
     return R, Np, Tp
 end
@@ -423,7 +451,7 @@ function residualVy0(phi::Float64, sec::Section)
     v = kp2*abs(Vx)
 
     # residual
-    R = sin(phi)/Vx - cos(phi)/v
+    R = v*sin(phi) - Vx*cos(phi)
 
     # loads
     W2 = v^2 + Vx^2
@@ -487,9 +515,11 @@ op = OperatingPoint(Uinf, Omega, pitch, azimuth, rho)
 
 Vx, Vy = windComponents(r, precone, yaw, tilt, hubHt, shearExp, op)
 
+# Vx = zeros(Vx)
+
 rotor = Rotor(r, chord, theta, af, Vx, Vy, Rhub, Rtip, B)
 
-Np, Tp = distributedLoads(rotor::Rotor, op::OperatingPoint)
+Np, Tp = distributedLoads(rotor, op)
 
 using PyPlot
 close("all")
@@ -497,6 +527,65 @@ close("all")
 figure()
 plot(r/Rtip, Np/1e3)
 plot(r/Rtip, Tp/1e3)
+
+#
+#
+#
+# # geometry
+# Rhub =.0254*.5
+# Rtip = .0254*3.0
+#
+# r = .0254*[0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332,
+#      1.1128, 1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911,
+#      1.6708, 1.7505, 1.8302, 1.9099, 1.9896, 2.0693, 2.1490, 2.2287,
+#      2.3084, 2.3881, 2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]
+# chord = .0254*[0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973, 0.5887,
+#           0.5794, 0.5695, 0.5590, 0.5479, 0.5362, 0.5240, 0.5111, 0.4977,
+#           0.4836, 0.4689, 0.4537, 0.4379, 0.4214, 0.4044, 0.3867, 0.3685,
+#           0.3497, 0.3303, 0.3103, 0.2897, 0.2618, 0.1920]
+#
+# theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
+#                    29.7730, 28.0952, 26.5833, 25.2155, 23.9736, 22.8421, 21.8075,
+#                    20.8586, 19.9855, 19.1800, 18.4347, 17.7434, 17.1005, 16.5013,
+#                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
+#                    12.8685, 12.5233, 12.2138]
+# B = 2  # number of blades
+#
+#
+# n = length(r)
+# af_idx = 8*ones(Int64, n)
+#
+# af = Array(AirfoilData, n)
+# for i = 1:n
+#     af[i] = aftypes[af_idx[i]]
+# end
+#
+#
+# # operating point for the turbine/propeller
+# Uinf = 10.0
+# pitch = 0.0*pi/180
+# Omega = 8000.0*pi/30.0
+# azimuth = 0.0*pi/180
+# rho = 1.225
+# op = OperatingPoint(Uinf, Omega, pitch, azimuth, rho)
+#
+# Vx = Uinf*ones(n)
+# Vy = Omega*r
+#
+# # switch for prop
+# theta = -theta
+# Vx = -Vx
+#
+# rotor = Rotor(r, chord, theta, af, Vx, Vy, Rhub, Rtip, B)
+#
+# Np, Tp = distributedLoads(rotor, op)
+#
+#
+# figure()
+# plot(r/Rtip, Np)
+#
+# figure()
+# plot(r/Rtip, -Tp)  # opposite direction for a prop
 
 
 end  # module

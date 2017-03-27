@@ -969,7 +969,7 @@ Conversely, if $u < 0$ the same expression yields
 \end{equation}
 We note that the first case with $u > 0$ implies that $\phi < 0$ (see velocity  triangle in \cref{fig:inflowu}) and results in the expression $\kappa = 1$.  This case fills in our singularity noted in \cref{eq:asing}.  In other words, the case $\phi < 0, \kappa = 1$, only exists for $V_x = 0$.  Similarly, the derivation for $u < 0$ corresponds to $\phi > 0$ with the result that $\kappa = -1$, which fills in the other singularity.  Thus, the previous formulation ($V_x \ne 0, V_y \ne 0$) should ignore the case $\kappa = -1$ as it won't satisfy the residual equation.  Any nonzero residual could be returned.  We deal with this case explicitly in this section with a different formulation.
 
-While, the substitution $W = -u/\sin\phi$ led to the insight of filling in our singularity, it doesn't help us solve the equation.  Instead, we will use the second substitution from \cref{eq:Wopt}: $W = V_y / \cos\phi$ (incidentally, one of each of the W expressions could be used instead, either approach will lead to the same solution once the residual is converged).  This substitutions leads to (for the case $u > 0$, which corresponds to $\phi > 0$):
+While, the substitution $W = -u/\sin\phi$ led to the insight of filling in our singularity, it doesn't help us solve the equation.  Instead, we will use the second substitution from \cref{eq:Wopt}: $W = V_y / \cos\phi$ (incidentally, one of each of the W expressions could be used instead, either approach will lead to the same solution once the residual is converged).  This substitutions leads to (for the case $u > 0$, which corresponds to $\phi < 0$):
 \begin{equation}
 \begin{aligned}
 4 u^2 F&= \sigma^\prime c_n \frac{V_y^2}{\cos^2\phi}\\
@@ -1049,7 +1049,7 @@ $V_y$ & $\theta$ & quadrant order \\
 
 % Note that for this case, there is no singularity at $\phi = 0$, thus we can use different brackets.  For a turbine the most likely scenario is a negative normal force coefficient (unless the turbine has a large negative twist for some reason), thus $\phi > 0$.  Because there is no tangential induction, only one of the two quadrants is physically sensible, and this is known based on the sign of $V_y$.  The above discussion applies for a propeller but with opposite sign for $\phi$.
 
-Once, we solve this 1D equation for $\phi$, we can compute the torque distribution purely from blade element theory as momentum theory does not predict any torque for the case $V_x = 0$. We can use either expression for $W$ in \cref{eq:Wopt}.
+Once we solve this 1D equation for $\phi$, we can compute the torque distribution purely from blade element theory as momentum theory does not predict any torque for the case $V_x = 0$. We can use either expression for $W$ in \cref{eq:Wopt}.
 
 %  to compute the thrust and torque as normal
 % \begin{equation}
@@ -1066,11 +1066,11 @@ Once, we solve this 1D equation for $\phi$, we can compute the torque distributi
 
 
 \If {$\phi > 0$}
-    \State $u = \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
-    \Comment{If $c_n < 0$ return any nonzero residual}
-\Else
     \State $u = -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
     \Comment{If $c_n > 0$ return any nonzero residual}
+\Else
+    \State $u = \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
+    \Comment{If $c_n < 0$ return any nonzero residual}
 \EndIf
 \\
 \State $\mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y}$
@@ -1147,9 +1147,13 @@ We see that $v$ follows the sign of $c_t$, which is consistent with the physics 
 The residual equation is
 \begin{equation}
     \frac{\sin\phi}{V_x} - \frac{\cos\phi}{v(\phi)} = 0
-    \label{eq:noVyresid}
 \end{equation}
-which we can derive from the velocity triangle in \cref{fig:inflowu} or from \cref{eq:residual} where we set $V_y a^\prime = v$ then allow $V_y \rightarrow 0$.  The quadrant search order is defined in \cref{tab:bracket3} (unless $\theta$ is larger than $\pm \pi/2$, in which case
+which we can derive from the velocity triangle in \cref{fig:inflowu} or from \cref{eq:residual} where we set $V_y a^\prime = v$ then allow $V_y \rightarrow 0$.  This form of the residual is actually inconvenient because $v$ can change sign causing a singularity in the denominator.  We arrange to the mathematically equivalent, but better behaved numerically equation:
+\begin{equation}
+    v(\phi)\sin\phi - V_x \cos\phi = 0
+\end{equation}
+
+The quadrant search order is defined in \cref{tab:bracket3}.
 
 Once we solve for $\phi$ we can compute the thrust and torque distributions as normal, but computing $W$ as:
 \begin{equation}
@@ -1178,7 +1182,7 @@ $V_x$ & $|\theta|$ & quadrant order \\
 \begin{algorithmic}
 \State $v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} |V_x|$
 \\
-\State $\mathcal{R}(\phi) = \frac{\sin\phi}{V_x} - \frac{\cos\phi}{v(\phi)}$
+\State $\mathcal{R}(\phi) = v(\phi)\sin\phi - V_x \cos\phi$
 
 \end{algorithmic}
 \label{alg:Vy0}
