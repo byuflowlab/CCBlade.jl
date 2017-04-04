@@ -1210,22 +1210,24 @@ Once the residual equation is solved, the distributed loads (force per unit leng
 \begin{algorithmic}
 \If {$V_x = 0$}
 % \State $W = \frac{V_y}{\cos\phi}$
-\State $W = \sqrt{u^2 + V_y^2}$
+\State $W^2 = u^2 + V_y^2$
 \ElsIf {$V_y = 0$}
 % % \State $W = \frac{V_x}{\sin\phi}$
-\State $W = \sqrt{V_x^2 + v^2}$
+\State $W^2 = V_x^2 + v^2$
 \Else
-\State $W = \sqrt{(V_x(1 - a))^2 + (V_y(1 + a^\prime))^2}$
+\State $W^2 = (V_x(1 - a))^2 + (V_y(1 + a^\prime))^2$
 \EndIf
 \\
 \\
 \State $q = \frac{1}{2}\rho W^2$
-\State $N^\prime = B c_n q c$
-\State $T^\prime = B c_t q c$
+\State $N^\prime = c_n q c$
+\State $T^\prime = c_t q c$
 
 \end{algorithmic}
 \label{alg:loads}
 \end{algorithm}
+
+TODO: replace with no curvature/sweep.  I don't feel like our methods are equipped to handle that anyway.
 
 The local airfoil coordinate system is shown in \cref{fig:csys}.  The z-direction is directed along the blade, the y-direction opposite to the rotational velocity, and the x-direction given by the right-hand rule (nominally in the downwind direction).  This coordinate system is equally valid for downwind turbines, but in both cases, assumes that the rotor is rotating clockwise when viewed from upwind.  Because the blade may be curved (whether due to a nonstraight design or deflection), the coordinate system is local to each section along the blade (\cref{fig:curved}).  Swept blades can also be handled, but it is assumed that sweep is accomplished through shearing, rather than rotation, so that the local airfoils and local coordinate systems are still defined relative to the unswept rotation direction (\cref{fig:swept}).
 
@@ -1244,19 +1246,59 @@ The local airfoil coordinate system is shown in \cref{fig:csys}.  The z-directio
  \label{fig:csys}
 \end{figure}
 
-If we define the coning angle as $\Phi$ then the thrust can be found through
+Using this coordinate system (which is consistent with those used earlier in the paper), the normal force per unit length ($N^\prime$) is in the +x direction, and the tangential force per unit length ($T^\prime$) is in the -y direction.  If we define the coning angle along the blade as $\Phi(s)$ (add figure) then the thrust can be found through
 integration as:
 \begin{equation}
-   T = \int_0^R N^\prime \cos\Phi dr
+   % T = \int_0^R N^\prime \cos\Phi dr
+   T_i = \int_0^R N^\prime \cos\Phi dr
 \end{equation}
 the torque is given by
 \begin{equation}
-    Q = \int_0^R T^\prime (r\cos\Phi + precurve\sin\Phi) dr
+    % Q = \int_0^R T^\prime (z \cos\phi + x\sin\phi) dr
+    Q_i = \int_0^R T^\prime r \cos\Phi dr
 \end{equation}
 
-% TODO: azimuthally averaging
-% TODO: normalization for turbines and props
+These integrals actually give the instantaneous thrust and torque and a particular azimuthal angle, and for one blade.  To get the total thrust and torque for the rotor, we need to azimuthally average and multiply by the number of blades:
+\begin{equation}
+\begin{aligned}
+    T &= \frac{B}{2\pi}\int_0^{2\pi} T_i d\theta\\
+    Q &= \frac{B}{2\pi}\int_0^{2\pi} Q_i d\theta\\
+\end{aligned}
+\end{equation}
+Usually, this integration is done fairly coarsely by computing the instantaneous thrust and torque at a few different equally spaced azimuthal positions (e.g., 4 or 8) and then averaging those instantaneous values.  Of course, if there is no variation in inflow across the rotor, then no averaging is required.  Power is then given by
+\begin{equation}
+    P = \Omega Q
+\end{equation}
 
+Finally, normalization of these quantities is often desirable.  For turbines we normalize the thrust coefficient, torque coefficient, and power coefficient using:
+\begin{equation}
+\begin{aligned}
+q &= \frac{1}{2} \rho V_{hub}^2\\
+A &= \pi R_p^2\\
+C_T &= \frac{T}{q A}\\
+C_Q &= \frac{Q}{q R A}\\
+C_P &= \frac{P}{q A V_{hub}}\\
+\end{aligned}
+\end{equation}
+where $V_{hub}$ is the hub velocity, and $R_p$ is the projected rotor radius, or $R \cos\Phi$ using our nomenclature.  These values are normally tabulated versus the tip-speed ratio defined as:
+\begin{equation}
+    \lambda = \frac{\Omega R_p}{V_{hub}}
+\end{equation}
+
+For propellers, a different normalization is used, as per usual convention.  The power coefficient is generally of less interest here, as power is an input.  Instead, the efficiency is of interest, which is defined as the forward power produced relative to the power input.
+\begin{equation}
+\begin{aligned}
+n &= \frac{\Omega}{2 \pi} \\
+C_T &= \frac{T}{\rho n^2 D_p^4}\\
+C_Q &= \frac{Q}{\rho n^2 D_p^5}\\
+\eta &= \frac{T V_{hub}}{P} \\
+% \eta &= \frac{C_T}{C_Q} \frac{J}{2 \pi} \\
+\end{aligned}
+\end{equation}
+where $n$ is the rotation rate in revolutions/sec (instead of rad/s) and $D_p = 2 R_p$ is the projected diameter.  These quantities are normally tabulated as functions of the advance ratio (essentially the inverse of the tip-speed ratio):
+\begin{equation}
+    J = \frac{V_{hub}}{D_p n}
+\end{equation}
 
 
 \bibliographystyle{aiaa}
