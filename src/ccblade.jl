@@ -44,6 +44,7 @@ immutable Rotor
     Rhub::Float64
     Rtip::Float64
     B::Int64
+    precone::Float64
 end
 
 # operating point for the turbine/propeller
@@ -99,24 +100,6 @@ function readaerodyn(filename)
 end
 
 
-# function definecurvature(r, precone)
-#
-#     # coordinate in azimuthal coordinate system
-#     x_az = -r*sin(precone) # + precurve*cos(precone)
-#     z_az = r*cos(precone) # + precurve*sin(precone)
-#     y_az = zeros(r) # presweep
-#
-#     # compute total coning angle for purposes of relative velocity
-#     cone = zeros(r)
-#     cone[1] = atan2(-(x_az[2] - x_az[1]), z_az[2] - z_az[1])
-#     cone[2:end-1] = 0.5*(atan2(-(x_az[2:end-1] - x_az[1:end-2]), z_az[2:end-1] - z_az[1:end-2])
-#                        + atan2(-(x_az[3:end] - x_az[2:end-1]), z_az[3:end] - z_az[2:end-1]))
-#     cone[end] = atan2(-(x_az[end] - x_az[end-1]), z_az[end] - z_az[end-1])
-#
-#     return x_az, y_az, z_az, cone
-# end
-
-
 function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
     sy = sin(yaw)
@@ -165,11 +148,11 @@ function windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt,
 
     for j = 1:nsectors
         azimuth = 2*pi*float(j)/nsectors
-        ops[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp)
+        ops[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
     end
 
 
-    return opts
+    return ops
 end
 
 
@@ -523,7 +506,7 @@ function thrusttorque(Rhub, r, Rtip, precone, Np, Tp)
 
     # integrate Thrust and Torque (trapezoidal)
     thrust = Npfull*cos(precone)
-    torque = Tpfull.*r*cos(precone)
+    torque = Tpfull.*rfull*cos(precone)
 
     T = trapz(rfull, thrust)
     Q = trapz(rfull, torque)
@@ -549,7 +532,6 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
     nsectors = length(ops)  # number of sectors (should be evenly spaced)
     T = 0.0
     Q = 0.0
-    rhovec = zeros(nsectors)
 
     # coarse integration - rectangle rule
     for j = 1:nsectors  # integrate across azimuth
@@ -560,8 +542,6 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
 
         T += rotor.B * Tsub / nsectors
         Q += rotor.B * Qsub / nsectors
-
-        rhovec[i] = ops[j].rho
     end
 
     P = Q * Omega
@@ -569,11 +549,11 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
     Dp = 2*Rp
 
     if turbine
-        q = 0.5 * rhovec * Vhub^2
+        q = 0.5 * ops[1].rho * Vhub^2  # FIXME
         A = pi * Rp^2
-        CP = P ./ (q * A * Vhub)
-        CT = T ./ (q * A)
-        CQ = Q ./ (q * Rp * A)
+        CP = P / (q * A * Vhub)
+        CT = T / (q * A)
+        CQ = Q / (q * Rp * A)
 
         return P, T, Q, CP, CT, CQ
 
@@ -585,7 +565,7 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
         CT = T / (rho * n^2 * Dp^4)
         CQ = Q / (rho * n^2 * Dp^5)
 
-        eff[T .< 0] = 0  # creating drag not thrust
+        # eff[T .< 0] = 0  # creating drag not thrust
 
         return P, T, Q, eff, CT, CQ
 
@@ -643,19 +623,18 @@ azimuth = 0.0*pi/180
 rho = 1.225
 
 op = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B)
-
+rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
 
 turbine = true
 
 Np, Tp = distributedLoads(rotor, op, turbine)
 
-tsrvec = linspace(2, 10, 20)
+tsrvec = linspace(2, 15, 20)
 cpvec = zeros(20)
 nsectors = 4
 
 for i = 1:20
-    Omega = Vinf*tsr[i]/rotorR
+    Omega = Vinf*tsrvec[i]/rotorR
 
     ops = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
 
