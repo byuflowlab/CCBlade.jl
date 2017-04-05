@@ -117,41 +117,60 @@ end
 # end
 
 
-function windComponents(r, precone, yaw, tilt, hubHt, shearExp, op::OperatingPoint)
+function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
     sy = sin(yaw)
     cy = cos(yaw)
     st = sin(tilt)
     ct = cos(tilt)
-    sa = sin(op.azimuth)
-    ca = cos(op.azimuth)
+    sa = sin(azimuth)
+    ca = cos(azimuth)
+    sc = sin(precone)
+    cc = cos(precone)
 
-    x_az, y_az, z_az, cone = definecurvature(r, precone)
-    sc = sin(cone)
-    cc = cos(cone)
+    # coordinate in azimuthal coordinate system
+    x_az = -r*sin(precone)
+    z_az = r*cos(precone)
+    y_az = zeros(r)
 
     # get section heights in wind-aligned coordinate system
     heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
 
     # velocity with shear
-    V = op.Vinf*(1 + heightFromHub/hubHt).^shearExp
+    V = Vinf*(1 + heightFromHub/hubHt).^shearExp
 
     # transform wind to blade c.s.
     Vwind_x = V .* ((cy*st*ca + sy*sa)*sc + cy*ct*cc)
     Vwind_y = V .* (cy*st*sa - sy*ca)
 
     # wind from rotation to blade c.s.
-    Vrot_x = -op.Omega*y_az.*sc
-    Vrot_y = op.Omega*z_az
+    Vrot_x = -Omega*y_az.*sc
+    Vrot_y = Omega*z_az
 
     # total velocity
     Vx = Vwind_x + Vrot_x
     Vy = Vwind_y + Vrot_y
 
-    return Vx, Vy
+    # operating point
+    op = OperatingPoint(Vx, Vy, rho)
+
+    return op
 
 end
 
+function windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+
+
+    ops = Array{OperatingPoint}(nsectors)
+
+    for j = 1:nsectors
+        azimuth = 2*pi*float(j)/nsectors
+        ops[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp)
+    end
+
+
+    return opts
+end
 
 
 
@@ -556,7 +575,7 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
         CT = T ./ (q * A)
         CQ = Q ./ (q * Rp * A)
 
-        return CP, CT, CQ
+        return P, T, Q, CP, CT, CQ
 
     else
 
@@ -568,12 +587,14 @@ function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhu
 
         eff[T .< 0] = 0  # creating drag not thrust
 
-        return eff, CT, CQ
+        return P, T, Q, eff, CT, CQ
 
     end
 
 end
 
+
+# -------- wind turbine example ----------------
 
 # geometry
 Rhub = 1.5
@@ -613,21 +634,35 @@ hubHt = 90.0
 shearExp = 0.2
 
 # operating point for the turbine/propeller
-Uinf = 10.0
+Vinf = 10.0
 tsr = 7.55
-pitch = 0.0*pi/180
-Omega = Uinf*tsr/Rtip
+# pitch = 0.0*pi/180
+rotorR = Rtip*cos(precone)
+Omega = Vinf*tsr/rotorR
 azimuth = 0.0*pi/180
 rho = 1.225
-op = OperatingPoint(Uinf, Omega, pitch, azimuth, rho)
 
-Vx, Vy = windComponents(r, precone, yaw, tilt, hubHt, shearExp, op)
+op = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B)
 
-# Vx = zeros(Vx)
 
-rotor = Rotor(r, chord, theta, af, Vx, Vy, Rhub, Rtip, B)
+turbine = true
 
-Np, Tp = distributedLoads(rotor, op)
+Np, Tp = distributedLoads(rotor, op, turbine)
+
+tsrvec = linspace(2, 10, 20)
+cpvec = zeros(20)
+nsectors = 4
+
+for i = 1:20
+    Omega = Vinf*tsr[i]/rotorR
+
+    ops = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+
+    P, T, Q, cpvec[i], CT, CQ = forces(rotor, ops, Omega, Vinf, turbine)
+
+end
+
 
 using PyPlot
 close("all")
@@ -636,64 +671,9 @@ figure()
 plot(r/Rtip, Np/1e3)
 plot(r/Rtip, Tp/1e3)
 
-#
-#
-#
-# # geometry
-# Rhub =.0254*.5
-# Rtip = .0254*3.0
-#
-# r = .0254*[0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332,
-#      1.1128, 1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911,
-#      1.6708, 1.7505, 1.8302, 1.9099, 1.9896, 2.0693, 2.1490, 2.2287,
-#      2.3084, 2.3881, 2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]
-# chord = .0254*[0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973, 0.5887,
-#           0.5794, 0.5695, 0.5590, 0.5479, 0.5362, 0.5240, 0.5111, 0.4977,
-#           0.4836, 0.4689, 0.4537, 0.4379, 0.4214, 0.4044, 0.3867, 0.3685,
-#           0.3497, 0.3303, 0.3103, 0.2897, 0.2618, 0.1920]
-#
-# theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
-#                    29.7730, 28.0952, 26.5833, 25.2155, 23.9736, 22.8421, 21.8075,
-#                    20.8586, 19.9855, 19.1800, 18.4347, 17.7434, 17.1005, 16.5013,
-#                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
-#                    12.8685, 12.5233, 12.2138]
-# B = 2  # number of blades
-#
-#
-# n = length(r)
-# af_idx = 8*ones(Int64, n)
-#
-# af = Array(AirfoilData, n)
-# for i = 1:n
-#     af[i] = aftypes[af_idx[i]]
-# end
-#
-#
-# # operating point for the turbine/propeller
-# Uinf = 10.0
-# pitch = 0.0*pi/180
-# Omega = 8000.0*pi/30.0
-# azimuth = 0.0*pi/180
-# rho = 1.225
-# op = OperatingPoint(Uinf, Omega, pitch, azimuth, rho)
-#
-# Vx = Uinf*ones(n)
-# Vy = Omega*r
-#
-# # switch for prop
-# theta = -theta
-# Vx = -Vx
-#
-# rotor = Rotor(r, chord, theta, af, Vx, Vy, Rhub, Rtip, B)
-#
-# Np, Tp = distributedLoads(rotor, op)
-#
-#
-# figure()
-# plot(r/Rtip, Np)
-#
-# figure()
-# plot(r/Rtip, -Tp)  # opposite direction for a prop
+figure()
+plot(tsrvec, cpvec)
+
 
 
 end  # module
