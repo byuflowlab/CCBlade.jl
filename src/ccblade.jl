@@ -10,10 +10,10 @@ Allows for non-ideal conditions (reversed flow, no wind in one direction, etc.)
 
 module BEM
 
-using Roots: fzero
-using Dierckx: Spline1D
+using Roots: fzero  # solve residual equation
+using Dierckx: Spline1D  # cubic b-spline for airfoil cl/cd data
 
-export AirfoilData, Rotor, OperatingPoint, distributedLoads
+# export AirfoilData, Rotor, OperatingPoint, distributedLoads
 
 # pretabulated cl/cd data
 immutable AirfoilData
@@ -21,6 +21,7 @@ immutable AirfoilData
     cd::Spline1D
 end
 
+# data for a given BEM section
 immutable Section
     r::Float64
     chord::Float64
@@ -39,8 +40,6 @@ immutable Rotor
     chord::Array{Float64, 1}
     theta::Array{Float64, 1}
     af::Array{AirfoilData, 1}
-    # Vx::Array{Float64, 1}
-    # Vy::Array{Float64, 1}
     Rhub::Float64
     Rtip::Float64
     B::Int64
@@ -48,11 +47,7 @@ immutable Rotor
 end
 
 # operating point for the turbine/propeller
-immutable OperatingPoint
-    # Vinf::Float64
-    # Omega::Float64
-    # pitch::Float64
-    # azimuth::Float64
+immutable Inflow
     Vx::Array{Float64, 1}
     Vy::Array{Float64, 1}
     rho::Float64
@@ -100,6 +95,15 @@ function readaerodyn(filename)
 end
 
 
+function simpleInflow(Vinf, Omega, r, precone, rho)
+
+    Vx = Vinf * cos(precone)
+    Vy = Omega * r * cos(precone)
+
+    return Inflow(Vx, Vy, rho)
+
+end
+
 function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
     sy = sin(yaw)
@@ -114,7 +118,7 @@ function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, s
     # coordinate in azimuthal coordinate system
     x_az = -r*sin(precone)
     z_az = r*cos(precone)
-    y_az = zeros(r)
+    y_az = zeros(r)  # could omit (the more general case allows for presweep so this is nonzero)
 
     # get section heights in wind-aligned coordinate system
     heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
@@ -135,24 +139,21 @@ function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, s
     Vy = Vwind_y + Vrot_y
 
     # operating point
-    op = OperatingPoint(Vx, Vy, rho)
-
-    return op
+    return Inflow(Vx, Vy, rho)
 
 end
 
 function windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
 
 
-    ops = Array{OperatingPoint}(nsectors)
+    infs = Array{Inflow}(nsectors)
 
     for j = 1:nsectors
         azimuth = 2*pi*float(j)/nsectors
-        ops[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+        infs[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
     end
 
-
-    return ops
+    return infs
 end
 
 
@@ -364,8 +365,7 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 end
 
 
-
-function distributedLoads(rotor::Rotor, op::OperatingPoint, turbine::Bool)
+function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
     """
     Compute the distributed loads along blade at specified condition
     """
@@ -392,10 +392,10 @@ function distributedLoads(rotor::Rotor, op::OperatingPoint, turbine::Bool)
 
         # setup
         twist = swapsign*rotor.theta[i] #  + op.pitch  TODO: pitch is just part of theta specificiation
-        Vx = swapsign*op.Vx[i]
-        Vy = op.Vy[i]
+        Vx = swapsign*inflow.Vx[i]
+        Vy = inflow.Vy[i]
         sec = Section(rotor.r[i], rotor.chord[i], twist, rotor.af[i], Vx, Vy,
-            rotor.Rhub, rotor.Rtip, rotor.B, rho)
+            rotor.Rhub, rotor.Rtip, rotor.B, inflow.rho)
         startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
         # Vx = 0 and Vy = 0
@@ -496,7 +496,7 @@ end
 
 
 
-function thrusttorque(Rhub, r, Rtip, precone, Np, Tp)
+function thrusttorqueintegrate(Rhub, r, Rtip, precone, Np, Tp)
     """integrate the thrust/torque across the blade, including 0 loads at hub/tip"""
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
@@ -526,52 +526,61 @@ function trapz(x::Array{Float64,1}, y::Array{Float64,1})  # integrate y w.r.t. x
 end
 
 
-function forces(rotor::Rotor, ops::Array{OperatingPoint, 1}, Omega::Float64, Vhub::Float64, turbine::Bool)  #, nsectors::Int64)
+function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #, nsectors::Int64)
     """one operating point for each sector"""
 
-    nsectors = length(ops)  # number of sectors (should be evenly spaced)
+    nsectors = length(inflow)  # number of sectors (should be evenly spaced)
     T = 0.0
     Q = 0.0
 
     # coarse integration - rectangle rule
     for j = 1:nsectors  # integrate across azimuth
 
-        Np, Tp = distributedLoads(rotor, ops[j], turbine)
+        Np, Tp = distributedLoads(rotor, inflow[j], turbine)
 
-        Tsub, Qsub = thrusttorque(rotor.Rhub, rotor.r, rotor.Rtip, rotor.precone, Np, Tp)
+        Tsub, Qsub = thrusttorqueintegrate(rotor.Rhub, rotor.r, rotor.Rtip, rotor.precone, Np, Tp)
 
         T += rotor.B * Tsub / nsectors
         Q += rotor.B * Qsub / nsectors
     end
 
+    return T, Q
+
+end
+
+
+function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
+    """nondimensionalize"""
+
     P = Q * Omega
-    Rp = rotor.Rtip*cos(rotor.precone)
-    Dp = 2*Rp
+    Rp = Rtip*cos(precone)
 
     if turbine
-        q = 0.5 * ops[1].rho * Vhub^2  # FIXME
+
+        q = 0.5 * rho * Vhub^2
         A = pi * Rp^2
+
         CP = P / (q * A * Vhub)
         CT = T / (q * A)
         CQ = Q / (q * Rp * A)
 
-        return P, T, Q, CP, CT, CQ
+        return CP, CT, CQ
 
     else
 
         n = Omega/(2*pi)
+        Dp = 2*Rp
 
         eff = T*Vhub/P
         CT = T / (rho * n^2 * Dp^4)
         CQ = Q / (rho * n^2 * Dp^5)
 
-        # eff[T .< 0] = 0  # creating drag not thrust
-
-        return P, T, Q, eff, CT, CQ
+        return eff, CT, CQ
 
     end
 
 end
+
 
 
 # -------- wind turbine example ----------------
@@ -622,12 +631,12 @@ Omega = Vinf*tsr/rotorR
 azimuth = 0.0*pi/180
 rho = 1.225
 
-op = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+inflow = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
 
 turbine = true
 
-Np, Tp = distributedLoads(rotor, op, turbine)
+Np, Tp = distributedLoads(rotor, inflow, turbine)
 
 tsrvec = linspace(2, 15, 20)
 cpvec = zeros(20)
@@ -636,22 +645,27 @@ nsectors = 4
 for i = 1:20
     Omega = Vinf*tsrvec[i]/rotorR
 
-    ops = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+    inflow = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
 
-    P, T, Q, cpvec[i], CT, CQ = forces(rotor, ops, Omega, Vinf, turbine)
+    T, Q = thrusttorque(rotor, inflow, turbine)
+    cpvec[i], CT, CQ = nondim(T, Q, Vinf, Omega, rho, Rtip, precone, turbine)
 
 end
 
 
+# using Plots
+# pyplot()
 using PyPlot
 close("all")
 
 figure()
 plot(r/Rtip, Np/1e3)
 plot(r/Rtip, Tp/1e3)
+# display(p2)
 
 figure()
 plot(tsrvec, cpvec)
+
 
 
 
