@@ -97,7 +97,7 @@ end
 
 function simpleInflow(Vinf, Omega, r, precone, rho)
 
-    Vx = Vinf * cos(precone)
+    Vx = Vinf * cos(precone) * ones(r)
     Vy = Omega * r * cos(precone)
 
     return Inflow(Vx, Vy, rho)
@@ -490,6 +490,8 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         end
     end
 
+    Tp = swapsign * Tp  # reverse sign for propellers
+
     return Np, Tp
 end
 
@@ -571,7 +573,11 @@ function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
         n = Omega/(2*pi)
         Dp = 2*Rp
 
-        eff = T*Vhub/P
+        if T < 0
+            eff = 0  # creating drag not thrust
+        else
+            eff = T*Vhub/P
+        end
         CT = T / (rho * n^2 * Dp^4)
         CQ = Q / (rho * n^2 * Dp^5)
 
@@ -580,93 +586,6 @@ function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
     end
 
 end
-
-
-
-# -------- wind turbine example ----------------
-
-# geometry
-Rhub = 1.5
-Rtip = 63.0
-
-r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
-    28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
-    56.1667, 58.9000, 61.6333]
-chord = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748,
-    3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-theta = [13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
-    6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]*pi/180
-B = 3  # number of blades
-
-aftypes = Array(AirfoilData, 8)
-aftypes[1] = readaerodyn("airfoils/Cylinder1.dat")
-aftypes[2] = readaerodyn("airfoils/Cylinder2.dat")
-aftypes[3] = readaerodyn("airfoils/DU40_A17.dat")
-aftypes[4] = readaerodyn("airfoils/DU35_A17.dat")
-aftypes[5] = readaerodyn("airfoils/DU30_A17.dat")
-aftypes[6] = readaerodyn("airfoils/DU25_A17.dat")
-aftypes[7] = readaerodyn("airfoils/DU21_A17.dat")
-aftypes[8] = readaerodyn("airfoils/NACA64_A17.dat")
-
-af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
-
-n = length(r)
-af = Array(AirfoilData, n)
-for i = 1:n
-    af[i] = aftypes[af_idx[i]]
-end
-
-precone = 2.5*pi/180
-yaw = 0.0*pi/180
-tilt = 5.0*pi/180
-hubHt = 90.0
-shearExp = 0.2
-
-# operating point for the turbine/propeller
-Vinf = 10.0
-tsr = 7.55
-# pitch = 0.0*pi/180
-rotorR = Rtip*cos(precone)
-Omega = Vinf*tsr/rotorR
-azimuth = 0.0*pi/180
-rho = 1.225
-
-inflow = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
-
-turbine = true
-
-Np, Tp = distributedLoads(rotor, inflow, turbine)
-
-tsrvec = linspace(2, 15, 20)
-cpvec = zeros(20)
-nsectors = 4
-
-for i = 1:20
-    Omega = Vinf*tsrvec[i]/rotorR
-
-    inflow = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
-
-    T, Q = thrusttorque(rotor, inflow, turbine)
-    cpvec[i], CT, CQ = nondim(T, Q, Vinf, Omega, rho, Rtip, precone, turbine)
-
-end
-
-
-# using Plots
-# pyplot()
-using PyPlot
-close("all")
-
-figure()
-plot(r/Rtip, Np/1e3)
-plot(r/Rtip, Tp/1e3)
-# display(p2)
-
-figure()
-plot(tsrvec, cpvec)
-
-
 
 
 end  # module
