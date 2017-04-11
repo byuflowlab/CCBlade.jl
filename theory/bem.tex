@@ -1202,6 +1202,41 @@ $V_x$ & $|\theta|$ & quadrant order \\
 % Thus, $V_x$ does not directly appear in the residual equation and so we don't need to worry about its sign, as is consistent with the discussion in section??.
 
 
+\subsection{Inflow}
+
+For the simplest case with uniform inflow aligned with the hub, the x- and y-components of the inflow velocity can be computed as:
+\begin{equation}
+\begin{aligned}
+    V_x &= V_\infty \cos\Phi\\
+    V_y &= \Omega r \cos\Phi
+\end{aligned}
+\end{equation}
+and these velocities are the same at any azimuthal station.  For a more general case, we use the angle definitions shown in \cref{fig:angles} (TODO: include precone).
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=3.5in]{figures/angles}
+\caption{Definitions for some of the relevant geometric angles.}
+\label{fig:angles}
+\end{figure}
+We also allow for wind shear across the rotor face.  To account for the velocity change across the hub face we compute the height of each blade location relative to the hub using coordinate transformations:
+\begin{equation}
+    z_h = r \cos\Phi \cos\psi \cos\Theta + r \sin\Phi\sin\Theta
+\end{equation}
+then apply the shear exponent ($\alpha$):
+\begin{equation}
+    V_{shear} = V_{hub} \left(1 + \frac{z_h}{H_{hub}} \right)^\alpha
+\end{equation}
+where $H_{hub}$ is the hub height.  Finally, we can compute the x- and y-components of velocity with additional coordinate transformations:
+\begin{equation}
+\begin{aligned}
+V_x &= V_{shear} ((\cos \gamma \sin \Theta \cos \psi + \sin \gamma \sin \psi)\sin \Phi + \cos \gamma \cos \Theta \cos \Phi)\\
+V_y &= V_{shear} (\cos \gamma \sin \Theta\sin \psi - \sin \gamma \cos \psi) + \Omega r \cos\Phi
+\end{aligned}
+\end{equation}
+
+Completely general cases can be handled as well (e.g., with turbulence, blade motion, wakes), but in these cases the user must input the velocity distributions themselves rather than use these convenience methods.
+
+
 \subsection{Loads}
 
 Once the residual equation is solved, the distributed loads (force per unit length) can be computed as defined in \cref{alg:loads}.
@@ -1246,8 +1281,8 @@ The local airfoil coordinate system is shown in \cref{fig:csys}.  The z-directio
  \label{fig:csys}
 \end{figure}
 
-Using this coordinate system (which is consistent with those used earlier in the paper), the normal force per unit length ($N^\prime$) is in the +x direction, and the tangential force per unit length ($T^\prime$) is in the -y direction.  If we define the coning angle along the blade as $\Phi(s)$ (add figure) then the thrust can be found through
-integration as:
+Using this coordinate system (which is consistent with those used earlier in the paper), the normal force per unit length ($N^\prime$) is in the +x direction, and the tangential force per unit length ($T^\prime$) is in the -y direction.  If we define the precone angle as $\Phi$ then the thrust can be found through integration as:
+% If we define the coning angle along the blade as $\Phi(s)$ (add figure) then the thrust can be found through integration as:
 \begin{equation}
    % T = \int_0^R N^\prime \cos\Phi dr
    T_i = \int_0^R N^\prime \cos\Phi dr
