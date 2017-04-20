@@ -175,6 +175,7 @@ function residualbase(phi::Float64, sec::Section)
     Rhub = sec.Rhub
     Rtip = sec.Rtip
     B = sec.B
+    rho = sec.rho
 
     # constants
     sigma_p = B/2.0/pi*chord/r
