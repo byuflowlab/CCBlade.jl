@@ -11,9 +11,13 @@ Allows for non-ideal conditions (reversed flow, no wind in one direction, etc.)
 module BEM
 
 using Roots: fzero  # solve residual equation
-using Dierckx: Spline1D  # cubic b-spline for airfoil cl/cd data
+using Dierckx  # cubic b-spline for airfoil cl/cd data
+using ForwardDiff
 
 # export AirfoilData, Rotor, OperatingPoint, distributedLoads
+
+# TODO package into a module
+include("/Users/andrewning/Dropbox/BYU/repos/gradients/smooth.jl")
 
 # pretabulated cl/cd data
 immutable AirfoilData
@@ -21,36 +25,36 @@ immutable AirfoilData
     cd::Spline1D
 end
 
-# data for a given BEM section
-immutable Section
-    r::Float64
-    chord::Float64
-    twist::Float64
-    af::AirfoilData
-    Vx::Float64
-    Vy::Float64
-    Rhub::Float64
-    Rtip::Float64
-    B::Int64
-    rho::Float64
-end
+# # data for a given BEM section
+# immutable Section
+#     r::Float64
+#     chord::Float64
+#     twist::Float64
+#     af::AirfoilData
+#     Vx::Float64
+#     Vy::Float64
+#     Rhub::Float64
+#     Rtip::Float64
+#     B::Int64
+#     rho::Float64
+# end
 
 immutable Rotor
-    r::Array{Float64, 1}
-    chord::Array{Float64, 1}
-    theta::Array{Float64, 1}
-    af::Array{AirfoilData, 1}
-    Rhub::Float64
-    Rtip::Float64
-    B::Int64
-    precone::Float64
+    r#::Array{Float64, 1}
+    chord#::Array{Float64, 1}
+    theta#::Array{Float64, 1}
+    af#::Array{AirfoilData, 1}
+    Rhub#::Float64
+    Rtip#::Float64
+    B#::Int64
+    precone#::Float64
 end
 
 # operating point for the turbine/propeller
 immutable Inflow
-    Vx::Array{Float64, 1}
-    Vy::Array{Float64, 1}
-    rho::Float64
+    Vx#::Array{Float64, 1}
+    Vy#::Array{Float64, 1}
+    rho#::Float64
 end
 
 
@@ -87,11 +91,36 @@ function readaerodyn(filename)
     k = min(length(alpha)-1, 3)  # can't use cubic spline is number of entries in alpha is small
 
     # 1D interpolations for now.  ignoring Re dependence (which is very minor)
-    afcl = Spline1D(alpha*pi/180.0, cl; k=k, s=0.1)
-    afcd = Spline1D(alpha*pi/180.0, cd; k=k, s=0.001)
+    afcl = Dierckx.Spline1D(alpha*pi/180.0, cl; k=k, s=0.1)
+    afcd = Dierckx.Spline1D(alpha*pi/180.0, cd; k=k, s=0.001)
     af = AirfoilData(afcl, afcd)
 
     return af
+end
+
+
+function airfoil(af::AirfoilData, alpha::Float64)
+
+    cl = af.cl(alpha)
+    cd = af.cd(alpha)
+
+    return cl, cd
+end
+
+
+function airfoil{T<:ForwardDiff.Dual}(af::AirfoilData, alpha::T)
+
+    a = GradEval.values(alpha)[1]
+    cl, cd = airfoil(af, a)
+
+    dclda = Dierckx.derivative(af.cl, a)
+    dcdda = Dierckx.derivative(af.cd, a)
+
+    # TODO: fix dclda and dcddaj
+    cldual = GradEval.manualderiv(cl, alpha, dclda)
+    cddual = GradEval.manualderiv(cd, alpha, dcdda)
+
+    return cldual, cddual
 end
 
 
@@ -158,23 +187,17 @@ end
 
 
 
-
-function residualbase(phi::Float64, sec::Section)
+# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]  (potential design variables or dependencies of design variables)
+# p = [af, B]  (parameters)
+function residualbase(phi, x, p)
     """
     residual function
     base calculations used in normal case, Vx=0 case, and Vy=0 case
     """
 
     # unpack variables for convenience
-    r = sec.r
-    chord = sec.chord
-    twist = sec.twist
-    af = sec.af
-    Vx = sec.Vx
-    Vy = sec.Vy
-    Rhub = sec.Rhub
-    Rtip = sec.Rtip
-    B = sec.B
+    r, chord, twist, Vx, Vy, Rhub, Rtip, rho = x
+    af, B = p
 
     # constants
     sigma_p = B/2.0/pi*chord/r
@@ -189,8 +212,7 @@ function residualbase(phi::Float64, sec::Section)
     # Re = rho * W_Re * chord / mu
 
     # airfoil cl/cd
-    cl = af.cl(alpha)
-    cd = af.cd(alpha)
+    cl, cd = airfoil(af, alpha)
 
     # resolve into normal and tangential forces
     cn = cl*cphi + cd*sphi
@@ -220,13 +242,14 @@ function residualbase(phi::Float64, sec::Section)
 end
 
 
-
-function residual(phi::Float64, sec::Section)
+# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
+# p = [af, B]
+function residual(phi, x, p)  #sec::Section)
     """residual for normal case"""
 
-    k, kp, F, _, _, Nu, Tu = residualbase(phi, sec)
-    Vx = sec.Vx
-    Vy = sec.Vy
+    k, kp, F, _, _, Nu, Tu = residualbase(phi, x, p)
+    Vx = x[4]
+    Vy = x[5]
 
     # -------- axial induction ----------
     if phi < 0
@@ -279,12 +302,14 @@ end
 
 
 
-function residualVx0(phi::Float64, sec::Section)
+# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
+# p = [af, B]
+function residualVx0(phi, x, p)
     """residual for Vx=0 case"""
 
     # base params
-    _, _, _, k2, _, Nu, Tu = residualbase(phi, sec)
-    Vy = sec.Vy
+    _, _, _, k2, _, Nu, Tu = residualbase(phi, x, p)
+    Vy = x[5]
 
     os = -sign(phi)
 
@@ -310,13 +335,14 @@ function residualVx0(phi::Float64, sec::Section)
     return R, Np, Tp
 end
 
-
-function residualVy0(phi::Float64, sec::Section)
+# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
+# p = [af, B]
+function residualVy0(phi, x, p)
     """residual for Vy=0 case"""
 
     # base params
-    _, _, _, _, kp2, Nu, Tu = residualbase(phi, sec)
-    Vx = sec.Vx
+    _, _, _, _, kp2, Nu, Tu = residualbase(phi, x, p)
+    Vx = x[4]
 
     # induced velocity
     v = kp2*abs(Vx)
@@ -385,8 +411,15 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
 
     # initialize arrays
     n = length(rotor.r)
-    Np = zeros(n)
-    Tp = zeros(n)
+    if isa(rotor.r[1], ForwardDiff.Dual)  # hack for now...I shouldn't have to do this.
+        nd = length(ForwardDiff.partials(rotor.r[1]))
+        Np = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
+        Tp = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
+
+    else
+        Np = zeros(n)
+        Tp = zeros(n)
+    end
 
     for i = 1:n  # iterate across blade
 
@@ -394,8 +427,6 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         twist = swapsign*rotor.theta[i] #  + op.pitch  TODO: pitch is just part of theta specificiation
         Vx = swapsign*inflow.Vx[i]
         Vy = inflow.Vy[i]
-        sec = Section(rotor.r[i], rotor.chord[i], twist, rotor.af[i], Vx, Vy,
-            rotor.Rhub, rotor.Rtip, rotor.B, inflow.rho)
         startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
         # Vx = 0 and Vy = 0
@@ -451,8 +482,15 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         end
 
         # wrapper to residual function to accomodate format required by fzero
+        x = [rotor.r[i], rotor.chord[i], twist, Vx, Vy, rotor.Rhub, rotor.Rtip, inflow.rho]
+        p = [rotor.af[i], rotor.B]
+        function func(x, phi)
+            zero, Npinner, Tpinner = resid(phi, x, p)
+            return [Npinner; Tpinner], zero
+        end
+
         function R(phi)
-            zero, _, _ = resid(phi, sec)
+            zero, _, _ = resid(phi, x, p)
             return zero
         end
 
@@ -479,8 +517,13 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
             # once bracket is found, solve root finding problem and compute loads
             if success
 
-                phistar = fzero(R, phiL, phiU)
-                _, Np[i], Tp[i] = resid(phistar, sec)
+                f = Smooth.fzerod(func, fzero, x, phiL, phiU)
+
+                Np[i] = f[1]
+                Tp[i] = f[2]
+
+                # phistar = fzero(R, phiL, phiU)
+                # _, Np[i], Tp[i] = resid(phistar, sec)
 
                 break
             end
