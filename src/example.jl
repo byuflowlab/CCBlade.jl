@@ -82,32 +82,32 @@ figure()
 plot(tsrvec, cpvec)
 
 
-include("/Users/andrewning/Dropbox/BYU/repos/gradients/ad.jl")
-
-function wrapper(x)
-    r = x[1:n]
-    chord = x[n+1:2*n]
-    theta = x[2*n+1:3*n]
-
-    rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
-
-    # inflow = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
-    # T, Q = thrusttorque(rotor, inflow, turbine)
-    # return [T; Q]
-
-    inflow = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-    Np, Tp = distributedLoads(rotor, inflow, turbine)
-    return [Np; Tp]
-end
-
-x = [r; chord; theta]
-f1, gfd = GradEval.centraldiff(wrapper, x)
-f2, gad = GradEval.fad(wrapper, x)
-gerror = GradEval.check(wrapper, x, gad)
-
-# println(gfd)
-# println(gad)
-println(maximum(abs(gerror)))
+# include("/Users/andrewning/Dropbox/BYU/repos/gradients/ad.jl")
+#
+# function wrapper(x)
+#     r = x[1:n]
+#     chord = x[n+1:2*n]
+#     theta = x[2*n+1:3*n]
+#
+#     rotor = Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
+#
+#     # inflow = windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+#     # T, Q = thrusttorque(rotor, inflow, turbine)
+#     # return [T; Q]
+#
+#     inflow = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+#     Np, Tp = distributedLoads(rotor, inflow, turbine)
+#     return [Np; Tp]
+# end
+#
+# x = [r; chord; theta]
+# f1, gfd = GradEval.centraldiff(wrapper, x)
+# f2, gad = GradEval.fad(wrapper, x)
+# gerror = GradEval.check(wrapper, x, gad)
+#
+# # println(gfd)
+# # println(gad)
+# println(maximum(abs(gerror)))
 
 
 # -------- propeller example ----------------

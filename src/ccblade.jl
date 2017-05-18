@@ -12,7 +12,7 @@ module BEM
 
 using Roots: fzero  # solve residual equation
 using Dierckx  # cubic b-spline for airfoil cl/cd data
-using ForwardDiff
+# using ForwardDiff
 
 # export AirfoilData, Rotor, OperatingPoint, distributedLoads
 
@@ -108,20 +108,19 @@ function airfoil(af::AirfoilData, alpha::Float64)
 end
 
 
-function airfoil{T<:ForwardDiff.Dual}(af::AirfoilData, alpha::T)
-
-    a = GradEval.values(alpha)[1]
-    cl, cd = airfoil(af, a)
-
-    dclda = Dierckx.derivative(af.cl, a)
-    dcdda = Dierckx.derivative(af.cd, a)
-
-    # TODO: fix dclda and dcddaj
-    cldual = GradEval.manualderiv(cl, alpha, dclda)
-    cddual = GradEval.manualderiv(cd, alpha, dcdda)
-
-    return cldual, cddual
-end
+# function airfoil{T<:ForwardDiff.Dual}(af::AirfoilData, alpha::T)
+#
+#     a = GradEval.values(alpha)[1]
+#     cl, cd = airfoil(af, a)
+#
+#     dclda = Dierckx.derivative(af.cl, a)
+#     dcdda = Dierckx.derivative(af.cd, a)
+#
+#     cldual = GradEval.manualderiv(cl, alpha, dclda)
+#     cddual = GradEval.manualderiv(cd, alpha, dcdda)
+#
+#     return cldual, cddual
+# end
 
 
 function simpleInflow(Vinf, Omega, r, precone, rho)
@@ -256,9 +255,9 @@ function residual(phi, x, p)  #sec::Section)
         k = -k
     end
 
-    if isapprox(k, -1.0, rtol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+    if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
         R = 1.0
-        return R
+        return R, 0.0, 0.0
     end
 
     if k <= 2.0/3  # momentum region
@@ -269,7 +268,7 @@ function residual(phi, x, p)  #sec::Section)
         g2 = 2.0*F*k - (4.0/3-F)*F
         g3 = 2.0*F*k - (25.0/9-2*F)
 
-        if isapprox(g3, 0.0, rtol=1e-6)  # avoid singularity
+        if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
             a = 1.0 - 1.0/(2.0*sqrt(g2))
         else
             a = (g1 - sqrt(g2)) / g3
@@ -281,9 +280,9 @@ function residual(phi, x, p)  #sec::Section)
         kp = -kp
     end
 
-    if isapprox(kp, 1.0, rtol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+    if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
         R = 1.0
-        return R
+        return R, 0.0, 0.0
     end
 
     ap = kp/(1 - kp)
@@ -411,15 +410,18 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
 
     # initialize arrays
     n = length(rotor.r)
-    if isa(rotor.r[1], ForwardDiff.Dual)  # hack for now...I shouldn't have to do this.
-        nd = length(ForwardDiff.partials(rotor.r[1]))
-        Np = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
-        Tp = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
+    Np = zeros(n)
+    Tp = zeros(n)
 
-    else
-        Np = zeros(n)
-        Tp = zeros(n)
-    end
+    # if isa(rotor.r[1], ForwardDiff.Dual)  # hack for now...I shouldn't have to do this.
+    #     nd = length(ForwardDiff.partials(rotor.r[1]))
+    #     Np = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
+    #     Tp = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
+    #
+    # else
+    #     Np = zeros(n)
+    #     Tp = zeros(n)
+    # end
 
     for i = 1:n  # iterate across blade
 
@@ -430,12 +432,12 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
         # Vx = 0 and Vy = 0
-        if isapprox(Vx, 0.0, rtol=1e-6) && isapprox(Vy, 0.0, rtol=1e-6)
+        if isapprox(Vx, 0.0, atol=1e-6) && isapprox(Vy, 0.0, atol=1e-6)
             Np[i] = 0.0; Tp[i] = 0.0
             break
 
         # Vx = 0
-        elseif isapprox(Vx, 0.0, rtol=1e-6)
+    elseif isapprox(Vx, 0.0, atol=1e-6)
 
             resid = residualVx0
 
@@ -450,7 +452,7 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
             end
 
         # Vy = 0
-        elseif isapprox(Vy, 0.0, rtol=1e-6)
+    elseif isapprox(Vy, 0.0, atol=1e-6)
 
             resid = residualVy0
             startfrom90 = true  # start bracket search from 90 deg
