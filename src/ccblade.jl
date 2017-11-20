@@ -6,40 +6,28 @@ Allows for non-ideal conditions (reversed flow, no wind in one direction, etc.)
 
 =#
 
-# TODO: change immutable to struct after julia 0.6
-
-module BEM
+module CCBlade
 
 using Roots: fzero  # solve residual equation
 using Dierckx  # cubic b-spline for airfoil cl/cd data
 # using ForwardDiff
 
-# export AirfoilData, Rotor, OperatingPoint, distributedLoads
+export AirfoilData, Rotor, Inflow
+export readaerodyn, readafdata
+export simpleInflow, windTurbineInflow
+export distributedLoads, thrusttorque
 
-# TODO package into a module
-include("/Users/andrewning/Dropbox/BYU/repos/gradients/smooth.jl")
+# TODO re-add AD gradients
+# include("/Users/andrewning/Dropbox/BYU/repos/gradients/Smooth.jl")
 
 # pretabulated cl/cd data
-immutable AirfoilData
+struct AirfoilData
     cl::Spline1D
     cd::Spline1D
 end
 
 # # data for a given BEM section
-# immutable Section
-#     r::Float64
-#     chord::Float64
-#     twist::Float64
-#     af::AirfoilData
-#     Vx::Float64
-#     Vy::Float64
-#     Rhub::Float64
-#     Rtip::Float64
-#     B::Int64
-#     rho::Float64
-# end
-
-immutable Rotor
+struct Rotor
     r#::Array{Float64, 1}
     chord#::Array{Float64, 1}
     theta#::Array{Float64, 1}
@@ -51,7 +39,7 @@ immutable Rotor
 end
 
 # operating point for the turbine/propeller
-immutable Inflow
+struct Inflow
     Vx#::Array{Float64, 1}
     Vy#::Array{Float64, 1}
     rho#::Float64
@@ -87,6 +75,15 @@ function readaerodyn(filename)
             push!(cd, float(parts[3]))
         end
     end
+
+    return readafdata(alpha, cl, cd)
+end
+
+
+function readafdata(alpha, cl, cd)
+    """
+    initialize airfoil directly from alpha, cl, cd data
+    """
 
     k = min(length(alpha)-1, 3)  # can't use cubic spline is number of entries in alpha is small
 
@@ -519,13 +516,13 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
             # once bracket is found, solve root finding problem and compute loads
             if success
 
-                f = Smooth.fzerod(func, fzero, x, phiL, phiU)
+                # f = Smooth.fzerod(func, fzero, x, phiL, phiU)
+                #
+                # Np[i] = f[1]
+                # Tp[i] = f[2]
 
-                Np[i] = f[1]
-                Tp[i] = f[2]
-
-                # phistar = fzero(R, phiL, phiU)
-                # _, Np[i], Tp[i] = resid(phistar, sec)
+                phistar = fzero(R, phiL, phiU)
+                _, Np[i], Tp[i] = resid(phistar, sec)
 
                 break
             end

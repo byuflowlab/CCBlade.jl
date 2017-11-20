@@ -44,3 +44,11 @@ bem.pdf
 inflow.pdf
 velocity-deficit.pdf
 *.idraw
+
+# julia
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+
+# jupyter
+.ipynb_checkpoints

@@ -1,3 +1,5 @@
+using CCBlade
+
 # -------- wind turbine example ----------------
 
 # geometry
@@ -13,7 +15,7 @@ theta = [13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
     6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]*pi/180
 B = 3  # number of blades
 
-aftypes = Array(AirfoilData, 8)
+aftypes = Array{AirfoilData}(8)
 aftypes[1] = readaerodyn("airfoils/Cylinder1.dat")
 aftypes[2] = readaerodyn("airfoils/Cylinder2.dat")
 aftypes[3] = readaerodyn("airfoils/DU40_A17.dat")
@@ -26,7 +28,7 @@ aftypes[8] = readaerodyn("airfoils/NACA64_A17.dat")
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 
 n = length(r)
-af = Array(AirfoilData, n)
+af = Array{AirfoilData}(n)
 for i = 1:n
     af[i] = aftypes[af_idx[i]]
 end
@@ -136,7 +138,7 @@ B = 2  # number of blades
 aftype = readaerodyn("airfoils/NACA64_A17.dat")
 
 n = length(r)
-af = Array(AirfoilData, n)
+af = Array{AirfoilData}(n)
 for i = 1:n
     af[i] = aftype
 end
@@ -183,9 +185,15 @@ end
 
 figure()
 plot(J, CT)
+plot(J, CQ*2*pi)
+xlabel(L"J")
+legend([L"C_T", L"C_P"])
+# saveplot("/Users/andrewning/Desktop/cp.pdf")
 
-figure()
-plot(J, CQ)
+# figure()
 
 figure()
 plot(J, eff)
+xlabel(L"J")
+ylabel(L"\eta")
+# saveplot("/Users/andrewning/Desktop/eta.pdf")
