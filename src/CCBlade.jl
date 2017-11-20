@@ -13,9 +13,9 @@ using Dierckx  # cubic b-spline for airfoil cl/cd data
 # using ForwardDiff
 
 export AirfoilData, Rotor, Inflow
-export readaerodyn, readafdata
-export simpleInflow, windTurbineInflow, windTurbineInflowMultiple
-export distributedLoads, thrusttorque, nondim
+export af_from_aerodynfile, af_from_data
+export simpleinflow, windturbineinflow, windturbineinflowmultiple
+export distributedloads, thrusttorque, nondim
 
 # TODO re-add AD gradients
 # include("/Users/andrewning/Dropbox/BYU/repos/gradients/Smooth.jl")
@@ -26,7 +26,21 @@ struct AirfoilData
     cd::Spline1D
 end
 
-# # data for a given BEM section
+"""
+    Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
+
+Define rotor geometry.
+
+**Arguments**
+- `r::Array{Float64, 1}`: radial locations (m)
+- `chord::Array{Float64, 1}`: chord lengths (m)
+- `theta::Array{Float64, 1}`: total twist including pitch (rad)
+- `af::Array{AirfoilData, 1}`: airfoils
+- `Rhub::Float64`: hub radius (along blade length)
+- `Rtip::Float64`: tip radius (along blade length)
+- `B::Int64`: number of blades
+- `precone::Float64`: precone angle (rad)
+"""
 struct Rotor
     r#::Array{Float64, 1}
     chord#::Array{Float64, 1}
@@ -46,11 +60,14 @@ struct Inflow
 end
 
 
-function readaerodyn(filename)
-    """
-    read af files in aerodyn format.
-    currently only reads one Reynolds number if multiple exist
-    """
+"""
+    af_from_aerodynfile(filename)
+
+Read an airfoil file provided in AeroDyn file format.
+Currently only reads one Reynolds number if multiple exist.
+Returns an AirfoilData object
+"""
+function af_from_aerodynfile(filename)
 
     alpha = Float64[]
     cl = Float64[]
@@ -76,14 +93,22 @@ function readaerodyn(filename)
         end
     end
 
-    return readafdata(alpha, cl, cd)
+    return af_from_data(alpha, cl, cd)
 end
 
 
-function readafdata(alpha, cl, cd)
-    """
-    initialize airfoil directly from alpha, cl, cd data
-    """
+
+"""
+    af_from_data(alpha, cl, cd)
+
+Create an AirfoilData object directly from alpha, cl, and cd arrays.
+
+af_from_aerodynfile calls this function indirectly.  Uses a cubic B-spline
+(if the order of the data permits it).  A small amount of smoothing of
+lift and drag coefficients is also applied to aid performance
+for gradient-based optimization.
+"""
+function af_from_data(alpha, cl, cd)
 
     k = min(length(alpha)-1, 3)  # can't use cubic spline is number of entries in alpha is small
 
@@ -96,6 +121,11 @@ function readafdata(alpha, cl, cd)
 end
 
 
+"""
+private
+
+evalute airfoil spline at alpha
+"""
 function airfoil(af::AirfoilData, alpha::Float64)
 
     cl = af.cl(alpha)
@@ -119,8 +149,19 @@ end
 #     return cldual, cddual
 # end
 
+"""
+    simpleinflow(Vinf, Omega, r, precone, rho)
 
-function simpleInflow(Vinf, Omega, r, precone, rho)
+Uniform inflow through rotor.  Returns an Inflow object.
+
+**Arguments**
+- `Vinf::Float64`: freestream speed (m/s)
+- `Omega::Float64`: rotation speed (rad/s)
+- `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
+- `precone::Float64`: precone angle (rad)
+- `rho::Float64`: air density (kg/m^3)
+"""
+function simpleinflow(Vinf, Omega, r, precone, rho)
 
     Vx = Vinf * cos(precone) * ones(r)
     Vy = Omega * r * cos(precone)
@@ -129,7 +170,25 @@ function simpleInflow(Vinf, Omega, r, precone, rho)
 
 end
 
-function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+"""
+    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+
+Compute relative wind velocity components along blade accounting for inflow conditions
+and orientation of turbine.  See theory doc for angle definitions.
+
+**Arguments**
+- `Vinf::Float64`: freestream speed (m/s)
+- `Omega::Float64`: rotation speed (rad/s)
+- `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
+- `precone::Float64`: precone angle (rad)
+- `yaw::Float64`: yaw angle (rad)
+- `tilt::Float64`: tilt angle (rad)
+- `azimuth::Float64`: azimuth angle (rad)
+- `hubHt::Float64`: hub height (m) - used for shear
+- `shearExp::Float64`: power law shear exponent
+- `rho::Float64`: air density (kg/m^3)
+"""
+function windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
     sy = sin(yaw)
     cy = cos(yaw)
@@ -168,14 +227,21 @@ function windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, s
 
 end
 
-function windTurbineInflowMultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+"""
+    windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+
+Convenience function that calls windturbineinflow multiple times, once for each azimuthal angle.
+The azimuth angles are uniformly spaced (starting at 0) based on the number of sectors that
+the user wishes to divide the rotor into.
+"""
+function windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
 
 
     infs = Array{Inflow}(nsectors)
 
     for j = 1:nsectors
         azimuth = 2*pi*float(j)/nsectors
-        infs[j] = windTurbineInflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+        infs[j] = windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
     end
 
     return infs
@@ -185,11 +251,12 @@ end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]  (potential design variables or dependencies of design variables)
 # p = [af, B]  (parameters)
+"""
+(private)
+residual function
+base calculations used in normal case, Vx=0 case, and Vy=0 case
+"""
 function residualbase(phi, x, p)
-    """
-    residual function
-    base calculations used in normal case, Vx=0 case, and Vy=0 case
-    """
 
     # unpack variables for convenience
     r, chord, twist, Vx, Vy, Rhub, Rtip, rho = x
@@ -240,8 +307,11 @@ end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
 # p = [af, B]
+"""
+(private)
+residual for normal case
+"""
 function residual(phi, x, p)  #sec::Section)
-    """residual for normal case"""
 
     k, kp, F, _, _, Nu, Tu = residualbase(phi, x, p)
     Vx = x[4]
@@ -300,8 +370,11 @@ end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
 # p = [af, B]
+"""
+(private)
+residual for Vx=0 case
+"""
 function residualVx0(phi, x, p)
-    """residual for Vx=0 case"""
 
     # base params
     _, _, _, k2, _, Nu, Tu = residualbase(phi, x, p)
@@ -333,8 +406,11 @@ end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
 # p = [af, B]
+"""
+(private)
+residual for Vy=0 case
+"""
 function residualVy0(phi, x, p)
-    """residual for Vy=0 case"""
 
     # base params
     _, _, _, _, kp2, Nu, Tu = residualbase(phi, x, p)
@@ -356,13 +432,15 @@ end
 
 
 
-function firstbracket(f, xmin, xmax, n, backwardsearch=false)
-    """Find a bracket for the root closest to xmin by subdividing
-    interval (xmin, xmax) into n intervals
+"""
+(private)
+Find a bracket for the root closest to xmin by subdividing
+interval (xmin, xmax) into n intervals
 
-    Returns found, xl, xu.
-    If found = true a bracket was found between (xl, xu)
-    """
+Returns found, xl, xu.
+If found = true a bracket was found between (xl, xu)
+"""
+function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 
     xvec = linspace(xmin, xmax, n)
     if backwardsearch  # start from xmax and work backwards
@@ -387,10 +465,18 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 end
 
 
-function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
-    """
-    Compute the distributed loads along blade at specified condition
-    """
+"""
+    distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
+
+Compute the distributed loads along blade at specified condition.
+turbine can be true/false depending on if the analysis is for a turbine or prop
+(just affects some input/output conventions as noted in the theory doc).
+
+**Returns**
+- `Np::Float64`: force per unit length in the normal direction (N/m)
+- `Tp::Float64`: force per unit length in the tangential direction (N/m)
+"""
+function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
 
     # check if propeller
     swapsign = turbine ? 1 : -1
@@ -540,8 +626,11 @@ end
 
 
 
+"""
+(private)
+integrate the thrust/torque across the blade, including 0 loads at hub/tip
+"""
 function thrusttorqueintegrate(Rhub, r, Rtip, precone, Np, Tp)
-    """integrate the thrust/torque across the blade, including 0 loads at hub/tip"""
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rfull = [Rhub; r; Rtip]
@@ -559,8 +648,11 @@ function thrusttorqueintegrate(Rhub, r, Rtip, precone, Np, Tp)
 end
 
 
+"""
+(private)
+trapezoidal integration
+"""
 function trapz(x::Array{Float64,1}, y::Array{Float64,1})  # integrate y w.r.t. x
-    """trapezoidal integration"""
 
     integral = 0.0
     for i = 1:length(x)-1
@@ -570,8 +662,16 @@ function trapz(x::Array{Float64,1}, y::Array{Float64,1})  # integrate y w.r.t. x
 end
 
 
+"""
+thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)
+
+Compute thrust and toruqe at the provided inflow conditions.
+
+**Returns**
+- `T::Float64`: thrust (N)
+- `Q::Float64`: torque (N-m)
+"""
 function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #, nsectors::Int64)
-    """one operating point for each sector"""
 
     nsectors = length(inflow)  # number of sectors (should be evenly spaced)
     T = 0.0
@@ -580,7 +680,7 @@ function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #,
     # coarse integration - rectangle rule
     for j = 1:nsectors  # integrate across azimuth
 
-        Np, Tp = distributedLoads(rotor, inflow[j], turbine)
+        Np, Tp = distributedloads(rotor, inflow[j], turbine)
 
         Tsub, Qsub = thrusttorqueintegrate(rotor.Rhub, rotor.r, rotor.Rtip, rotor.precone, Np, Tp)
 
@@ -593,8 +693,32 @@ function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #,
 end
 
 
+"""
+Nondimensionalize the outputs.
+
+**Arguments**
+- `T::Float64`: thrust (N)
+- `Q::Float64`: torque (N-m)
+- `Vhub::Float64`: hub speed used in turbine normalization (m/s)
+- `Omega::Float64`: rotation speed used in propeller normalization (rad/s)
+- `rho::Float64`: air density (kg/m^3)
+- `Rtip::Float64`: rotor tip length (m)
+- `precone::Float64`: precone angle (rad)
+- `turbine::Bool`: turbine (true) or propeller (false)
+
+**Returns**
+
+if turbine
+- `CP::Float64`: power coefficient
+- `CT::Float64`: thrust coefficient
+- `CQ::Float64`: torque coefficient
+
+if propeller
+- `eff::Float64`: efficiency
+- `CT::Float64`: thrust coefficient
+- `CQ::Float64`: torque coefficient
+"""
 function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
-    """nondimensionalize"""
 
     P = Q * Omega
     Rp = Rtip*cos(precone)
