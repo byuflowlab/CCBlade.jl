@@ -1,4 +1,6 @@
 using CCBlade
+using PyPlot
+close("all")
 
 # -------- wind turbine example ----------------
 
@@ -69,11 +71,6 @@ for i = 1:20
 
 end
 
-
-# using Plots
-# pyplot()
-using PyPlot
-close("all")
 
 figure()
 plot(r/Rtip, Np/1e3)

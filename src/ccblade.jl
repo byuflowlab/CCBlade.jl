@@ -14,8 +14,8 @@ using Dierckx  # cubic b-spline for airfoil cl/cd data
 
 export AirfoilData, Rotor, Inflow
 export readaerodyn, readafdata
-export simpleInflow, windTurbineInflow
-export distributedLoads, thrusttorque
+export simpleInflow, windTurbineInflow, windTurbineInflowMultiple
+export distributedLoads, thrusttorque, nondim
 
 # TODO re-add AD gradients
 # include("/Users/andrewning/Dropbox/BYU/repos/gradients/Smooth.jl")
@@ -522,7 +522,7 @@ function distributedLoads(rotor::Rotor, inflow::Inflow, turbine::Bool)
                 # Tp[i] = f[2]
 
                 phistar = fzero(R, phiL, phiU)
-                _, Np[i], Tp[i] = resid(phistar, sec)
+                _, Np[i], Tp[i] = resid(phistar, x, p)
 
                 break
             end
