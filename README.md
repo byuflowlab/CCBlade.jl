@@ -1,4 +1,4 @@
-# CCBlade
+# CCBlade.jl
 
 Blade Element Momentum Method for Propellers and Turbines.  
 Author: Andrew Ning
