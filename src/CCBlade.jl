@@ -363,7 +363,7 @@ function residual(phi, x, p)  #sec::Section)
     Np = Nu*W2
     Tp = Tu*W2
 
-    return R, Np, Tp, -Vx*a*F, Vy*ap*F  # multiply by F because a and ap as currently used are only correct in combination with everything else.  If you want a wake model then you need to add the hub/tip loss factors separately.
+    return R, Np, Tp, Vx*a*F, Vy*ap*F  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
 end
 
 
@@ -401,7 +401,7 @@ function residualVx0(phi, x, p)
     end
 
 
-    return R, Np, Tp, -u, 0.0
+    return R, Np, Tp, u, 0.0  # F already included in these velocity deficits
 end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
@@ -624,8 +624,7 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
 
     # reverse sign of outputs for propellers
     Tp *= swapsign
-    uvec *= swapsign
-    # vvec *= swapsign
+    vvec *= swapsign
 
     return Np, Tp, uvec, vvec
 end
