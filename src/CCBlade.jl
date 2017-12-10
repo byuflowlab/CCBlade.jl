@@ -363,7 +363,7 @@ function residual(phi, x, p)  #sec::Section)
     Np = Nu*W2
     Tp = Tu*W2
 
-    return R, Np, Tp
+    return R, Np, Tp, Vx*a*F, Vy*ap*F  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
 end
 
 
@@ -401,7 +401,7 @@ function residualVx0(phi, x, p)
     end
 
 
-    return R, Np, Tp
+    return R, Np, Tp, u, 0.0  # F already included in these velocity deficits
 end
 
 # x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
@@ -427,7 +427,7 @@ function residualVy0(phi, x, p)
     Np = Nu*W2
     Tp = Tu*W2
 
-    return R, Np, Tp
+    return R, Np, Tp, 0.0, v
 end
 
 
@@ -473,8 +473,10 @@ turbine can be true/false depending on if the analysis is for a turbine or prop
 (just affects some input/output conventions as noted in the theory doc).
 
 **Returns**
-- `Np::Float64`: force per unit length in the normal direction (N/m)
-- `Tp::Float64`: force per unit length in the tangential direction (N/m)
+- `Np::Array{Float64, 1}`: force per unit length in the normal direction (N/m)
+- `Tp::Array{Float64, 1}`: force per unit length in the tangential direction (N/m)
+- `uvec::Array{Float64, 1}`: induced velocity in x direction
+- `vvec::Array{Float64, 1}`: induced velocity in y direction
 """
 function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
 
@@ -495,6 +497,8 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
     n = length(rotor.r)
     Np = zeros(n)
     Tp = zeros(n)
+    uvec = zeros(n)
+    vvec = zeros(n)
 
     # if isa(rotor.r[1], ForwardDiff.Dual)  # hack for now...I shouldn't have to do this.
     #     nd = length(ForwardDiff.partials(rotor.r[1]))
@@ -575,7 +579,7 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         end
 
         function R(phi)
-            zero, _, _ = resid(phi, x, p)
+            zero, _, _, _, _ = resid(phi, x, p)
             return zero
         end
 
@@ -608,7 +612,7 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
                 # Tp[i] = f[2]
 
                 phistar = fzero(R, phiL, phiU)
-                _, Np[i], Tp[i] = resid(phistar, x, p)
+                _, Np[i], Tp[i], uvec[i], vvec[i] = resid(phistar, x, p)
 
                 break
             end
@@ -618,9 +622,11 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
         end
     end
 
-    Tp = swapsign * Tp  # reverse sign for propellers
+    # reverse sign of outputs for propellers
+    Tp *= swapsign
+    vvec *= swapsign
 
-    return Np, Tp
+    return Np, Tp, uvec, vvec
 end
 
 
