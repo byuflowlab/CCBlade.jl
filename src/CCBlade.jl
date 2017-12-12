@@ -324,7 +324,7 @@ function residual(phi, x, p)  #sec::Section)
 
     if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
         R = 1.0
-        return R, 0.0, 0.0
+        return R, 0.0, 0.0, 0.0, 0.0
     end
 
     if k <= 2.0/3  # momentum region
@@ -349,7 +349,7 @@ function residual(phi, x, p)  #sec::Section)
 
     if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
         R = 1.0
-        return R, 0.0, 0.0
+        return R, 0.0, 0.0, 0.0, 0.0
     end
 
     ap = kp/(1 - kp)
