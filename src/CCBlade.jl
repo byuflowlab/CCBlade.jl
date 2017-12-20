@@ -385,6 +385,7 @@ function residualVx0(phi, x, p)
     if os*k2 < 0
         R = 1.0  # any nonzero residual
 
+        u = 0.0
         Np = 0.0
         Tp = 0.0
     else
