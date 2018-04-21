@@ -287,6 +287,7 @@ function residualbase(phi, x, p)
     factorhub = B/2.0*(r - Rhub)/(Rhub*abs(sphi))
     Fhub = 2.0/pi*acos(exp(-factorhub))
     F = Ftip * Fhub
+    # F = 1
 
     # sec parameters
     k = cn*sigma_p/(4.0*F*sphi*sphi)
@@ -525,35 +526,35 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
             break
 
         # Vx = 0
-    elseif isapprox(Vx, 0.0, atol=1e-6)
+        elseif isapprox(Vx, 0.0, atol=1e-6)
 
-            resid = residualVx0
+                resid = residualVx0
 
-            if Vy > 0 && twist > 0
-                order = (q1, q2)
-            elseif Vy > 0 && twist < 0
-                order = (q2, q1)
-            elseif Vy < 0 && twist > 0
-                order = (q3, q4)
-            else  # Vy < 0 && twist < 0
-                order = (q4, q3)
-            end
+                if Vy > 0 && twist > 0
+                    order = (q1, q2)
+                elseif Vy > 0 && twist < 0
+                    order = (q2, q1)
+                elseif Vy < 0 && twist > 0
+                    order = (q3, q4)
+                else  # Vy < 0 && twist < 0
+                    order = (q4, q3)
+                end
 
         # Vy = 0
-    elseif isapprox(Vy, 0.0, atol=1e-6)
+        elseif isapprox(Vy, 0.0, atol=1e-6)
 
-            resid = residualVy0
-            startfrom90 = true  # start bracket search from 90 deg
+                resid = residualVy0
+                startfrom90 = true  # start bracket search from 90 deg
 
-            if Vx > 0 && abs(twist) < pi/2
-                order = (q1, q3)
-            elseif Vx < 0 && abs(twist) < pi/2
-                order = (q2, q4)
-            elseif Vx > 0 && abs(twist) > pi/2
-                order = (q3, q1)
-            else  # Vx < 0 && abs(twist) > pi/2
-                order = (q4, q2)
-            end
+                if Vx > 0 && abs(twist) < pi/2
+                    order = (q1, q3)
+                elseif Vx < 0 && abs(twist) < pi/2
+                    order = (q2, q4)
+                elseif Vx > 0 && abs(twist) > pi/2
+                    order = (q3, q1)
+                else  # Vx < 0 && abs(twist) > pi/2
+                    order = (q4, q2)
+                end
 
         else  # normal case
 
