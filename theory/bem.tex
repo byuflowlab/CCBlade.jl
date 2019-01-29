@@ -1,4 +1,4 @@
-\documentclass{article}
+  \documentclass{article}
 
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
@@ -12,6 +12,8 @@
 \usepackage[colorlinks,bookmarks,bookmarksnumbered,allcolors=blue]{hyperref}
 \usepackage[capitalise]{cleveref}
 
+\DeclareMathOperator{\sgn}{sgn}
+
 
 \begin{document}
 
@@ -23,11 +25,11 @@
 
 \section{Introduction}
 
-The basic blade element momentum theory works well for on-design operation and is detailed in many references.  For the standard case, the author has developed a reformulated approach that simplifies the solution processes and is provably convergent \cite{Ning2014-Simple-Solution}.  However, when considering operation under turbulent conditions, gusts, maneuvers, with flexible blades, and in other non-ideal operating scenarios, a more complete derivation is needed.  In this derivation we extend basic blade element momentum theory to consider all possible inflow angles, large axial inductions, turbines and propellers simultaneously, and yawed inflow.
+The basic blade element momentum theory works well for on-design operation and is detailed in many references.  For the standard case, the author has developed a reformulated approach that simplifies the solution processes and is provably convergent \cite{Ning2014b}.  However, when considering operation under turbulent conditions, gusts, maneuvers, with flexible blades, and in other non-ideal operating scenarios, a more complete derivation is needed.  In this derivation we extend basic blade element momentum theory to consider all possible inflow angles, large axial inductions, turbines and propellers simultaneously, and yawed inflow.
 
 \section{Linear Momentum Balance}
 
-We begin simply by applying mass and momentum balances for a streamtube passing through a rotor.  Rather than using one streamtube for the entire rotor disk, we use an annulus streamtube passing through a specific location of $r$ along the rotor (\cref{fig:annulus}). This will be more convenient when relating to blade element theory later.  Through most of the document we will use the conventions for wind turbines, but the theory is equally applicable to propellers/fans as well.  The small modifications necessary for propellers are discussed throughout.  We will use the term propellers to generically refer to any turbomachine that adds momentum to the fluid.
+We begin by applying mass and momentum balances for a streamtube passing through a rotor disk.  Rather than using one streamtube for the entire rotor disk, we use an annulus streamtube passing through a specific radial location ($r$) of the rotor (\cref{fig:annulus}). This choice will be more convenient when relating to blade element theory later.  Through most of the document we will use the conventions for wind turbines, but the theory is equally applicable to propellers/fans as well.  The small modifications necessary for propellers are discussed throughout.  We will use the term propellers to generically refer to any turbomachine that adds momentum to the fluid.
 
 \begin{figure}[htbp]
 \centering
@@ -36,7 +38,7 @@ We begin simply by applying mass and momentum balances for a streamtube passing 
 \label{fig:annulus}
 \end{figure}
 
-First, let's perform a mass balance.  In the following derivation we neglect any variations in density.  For a wind turbines an incompressibility assumption is reasonable, but for high-speed propellers some compressibility corrections may be necessary.  For the velocity upstream we will use $V_x$ rather than $V_\infty$ to match the convention used later in blade element theory.
+First, we perform a mass balance.  In the following derivation we neglect any variations in density, as the wake is well approximated as incompressible.  Compressibility, if necessary, is included in the blade element formulation.  For the velocity upstream we will use $V_x$ rather than $V_\infty$ to match the convention used later in blade element theory.
 \begin{equation}
     \rho V_x A_\infty = \rho V_2 A_2 = \rho V_w A_w
 \end{equation}
@@ -48,22 +50,21 @@ We make no assumption about the direction of the thrust, but just use our sign c
 \begin{equation}
 \begin{aligned}
     T &= \rho A_2 V_2 (V_x - V_w)\\
-    % &= \rho_2 A_d V_d (V_1 - V_4)
 \end{aligned}
 \label{eq:thrust1}
 \end{equation}
 % where $A_d$ is the rotor disk area and $V_d$ is the velocity at the rotor disk ($A_2 = A_3 = A_d$, and $V_2 = V_3 = V_d$).
 
-It is not obvious that the pressure terms from the sides of our control volume cancel, but they do.  We can come up with the same result more rigorously, with the below control volume in \cref{fig:turbine-cv}.  Those details are omitted here, but can be found in \cite{?}.
+It is not obvious that the pressure terms from the sides of our control volume cancel, but they do.  We can come up with the same result more rigorously, with the below control volume in \cref{fig:turbine-cv} though the details are omitted here.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/turbine-cv}
-\caption{c}
+\caption{An alternative control volume to show that pressures on the sides of the original control volume must cancel.}
 \label{fig:turbine-cv}
 \end{figure}
 
-Let's now use a second control volume just across the disk (2 to 3).  Performing a momentum balance yields (neglecting any density changes across the disk):
+Let us now use a second control volume just across the disk (2 to 3).  Performing a momentum balance yields (neglecting any density changes across the disk):
 \begin{equation}
 \begin{aligned}
     0 &= - T + P_2 A_2 - P_3 A_3\\
@@ -79,7 +80,7 @@ Combining the two expressions for thrust yields (\cref{eq:thrust1,eq:thrust2}):
     \label{eq:momentum1}
 \end{equation}
 
-To relate the pressure change from station 2 to 3, we will use Bernoulli's equation.  The assumptions for the form of Bernoulli's equation we use are that the flow must be inviscid and incompressible, there must not be any work done on the fluid, there must not be any heat transfer, and it is only applicable along a streamline.  Other versions of Bernoulli's equation exist where we can relax some of these assumptions, for our purposes they are reasonable assumptions upstream of the turbine and downstream of the turbine separately.  Note, we cannot apply Bernoulli's equation from station 2 to station 3 directly because work is done on the fluid.
+To relate the pressure change from station 2 to 3, we will use Bernoulli's equation.  The assumptions for the form of Bernoulli's equation used below are that the flow is inviscid and incompressible, there is no work done on the fluid, there is no heat transfer, and it is only applicable along a streamline.  Other versions of Bernoulli's equation exist where we can relax some of these assumptions, for our purposes they are reasonable assumptions upstream of the turbine and downstream of the turbine separately.  Note, we cannot apply Bernoulli's equation from station 2 to station 3 directly because work is done on the fluid.
 
 First, from station $\infty$ to station 2:
 \begin{equation}
@@ -109,10 +110,10 @@ With this relationship, and knowing that the velocity is decreasing through the 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/velocity-deficit1}
-\caption{}
+\caption{Depiction of the induced velocity in at the rotor disk and in the farfield.}
 \label{fig:velocity-deficit}
 \end{figure}
-By convention we nondimensionalize $u$ as follows
+By convention one typically nondimensionalizes $u$ as follows:
 % (where we call $V_1$ the freestream velocity $V_\infty$ by convention):
 \begin{equation}
 \begin{aligned}
@@ -124,7 +125,7 @@ V_2 &= V_x - u\\
 \end{equation}
 The quantity $a$ is called the axial induction factor.  Similarly, we can express the far-field velocity as:
 \begin{equation}
-    V_4 = V_x(1 - 2a)
+    V_w = V_x(1 - 2a)
     \label{eq:V4}
 \end{equation}
 
@@ -132,12 +133,12 @@ The thrust can also be expressed in terms of the axial induction factor (using \
 \begin{equation}
 \begin{aligned}
     T &= \rho A_2 V_2 (V_x - V_w)\\
-    T &= \rho A_2 V_x(1-a) (V_x - V_x(1-2a))\\
-    T &= \rho A_2 V_x^2 2a (1-a) \\
+    &= \rho A_2 V_x(1-a) (V_x - V_x(1-2a))\\
+    &= \rho A_2 V_x^2 2a (1-a) \\
 \end{aligned}
 \label{eq:momT}
 \end{equation}
-Finally, we nondimensionalize this expression to form the thrust coefficient.  We use $V_x$ as the reference velocity, and the local annulus area as the reference area.
+We can also nondimensionalize this expression to form the thrust coefficient.  We use $V_x$ as the reference velocity, and the local annulus area as the reference area.
 \begin{equation}
 \begin{aligned}
     C_T &= \frac{T}{\frac{1}{2}\rho V_x^2 A_2}\\
@@ -146,13 +147,23 @@ Finally, we nondimensionalize this expression to form the thrust coefficient.  W
 \end{aligned}
 \end{equation}
 
+In this derivation we will actually not use the nondimensionalizations for thrust coefficient or axial induction factor.  This is because we will want to consider cases where $V_x = 0$.  With the present formulation both $C_T$ and $a$ would be undefined.  Using the dimensional versions will simplify the logic for handling the various cases.  Starting with \cref{eq:momT}, but not introducing $a$ we have:
+\begin{equation}
+    T = \rho A_2 2 u (V_x - u)
+\end{equation}
+The annulus area is $A_2 = 2 \pi r dr$.  The thrust expression is thus:
+\begin{equation}
+T = 4 \pi r \rho u (V_x - u) dr
+\label{eq:Tmom}
+\end{equation}
+
 \subsection{Extensions and Modifications to the Basic Methodology}
 
 Extensions and modifications applicable to momentum theory include: hub and tip losses, high induction factors, off-design wind directions, and propeller operation.  Each of these considerations is discussed below.
 
 \subsubsection{Hub and Tip Losses}
 
-The basic momentum theory ignores the hub and tip vortices that affect the induced velocity.  Various correct methods exist; we use the simple analytical expression developed by Prandtl\cite{Glauert1935-Airplane-Propellers}.
+The basic momentum theory ignores the hub and tip vortices that affect the induced velocity.  Various correct methods exist; we use the simple analytical expression developed by Prandtl \cite{Glauert1935}.
 \begin{equation}
     \begin{aligned}
     f_{tip} &= \frac{B}{2} \left(\frac{R - r}{r|\sin\phi|} \right)\\
@@ -167,14 +178,15 @@ The absolute value is necessary because our definition permits both positive and
     C_T = 4 a (1 - a) F
     \label{eq:CTmom2}
 \end{equation}
+or in dimensional terms:
+\begin{equation}
+    T = 4 \pi r \rho u (V_x - u) F dr
+    \label{eq:Tmom2}
+\end{equation}
 
 \subsubsection{High Induction Factors}
 
-Empirical data suggests that this simple momentum model breaks down for large inductions.  The current expression for thrust coefficient (\cref{eq:CTmom2}) predicts a maximum at $a = 0.5$ as seen in \cref{fig:a}.  Additionally, this basic momentum derivation predicts a wake reversal in the far-field for axial induction factors larger than 0.5 (see \cref{eq:V4}).  This is non-physical, as the real flow entrains momentum in the wake through turbulence.  Empirical data suggests that the thrust coefficient continues to increase past induction factors of 0.5, all the way up to an axial induction factor of 1 (\cref{fig:a}).  Various simple extension methods exist, including the well-known quadratic fit from Glauert \cite{Glauert1926-General-Theory}.  However, the Glauert correction does not maintain C1 continuity when the tip/hub loss corrections are included.  Instead, we use a small modification of Glauert's method developed by Buhl \cite{Buhl2005-Empirical-Relationship}:
-\begin{equation}
-C_T = \left(\frac{50}{9} - 4F\right) a^2 - \left(\frac{40}{9} - 4F\right) a + \frac{8}{9} \qquad  0.4 \le a \le 1
-\label{eq:CTBuhl}
-\end{equation}
+Empirical data suggests that this simple momentum model breaks down for large inductions.  The current expression for thrust coefficient (\cref{eq:CTmom2}) predicts a maximum at $a = 0.5$ as seen in \cref{fig:a}.  
 
 \begin{figure}[htbp]
 \centering
@@ -183,7 +195,18 @@ C_T = \left(\frac{50}{9} - 4F\right) a^2 - \left(\frac{40}{9} - 4F\right) a + \f
 \label{fig:a}
 \end{figure}
 
-Additional considerations are needed for induction factors larger than 1, the so-called propeller brake region.  The current expression \cref{eq:CTmom2} predicts a negative thrust for induction factors larger than 1 (in other words, propeller operation).  However, repeating the momentum conservation, suggests that the thrust changes signs, in other words it still acts as a drag device.
+Additionally, this basic momentum derivation predicts a wake reversal in the far-field for axial induction factors larger than 0.5 (see \cref{eq:V4}).  This is non-physical, as the real flow entrains momentum in the wake through turbulence.  Empirical data suggests that the thrust coefficient continues to increase past induction factors of 0.5, all the way up to an axial induction factor of 1 (\cref{fig:a}).  Various simple extension methods exist, including the well-known quadratic fit from Glauert \cite{Glauert1926}.  However, the Glauert correction does not maintain $C^1$ continuity when the tip/hub loss corrections are included.  Instead, we use a small modification of Glauert's method developed by Buhl \cite{Buhl-Jr.2005}:
+\begin{equation}
+C_T = \left(\frac{50}{9} - 4F\right) a^2 - \left(\frac{40}{9} - 4F\right) a + \frac{8}{9} \qquad  0.4 \le a \le 1
+\label{eq:CTBuhl}
+\end{equation}
+% or in dimensional form:
+% \begin{equation}
+% T = \pi r \rho V_x^2 \left[\left(\frac{50}{9} - 4F\right) \left(\frac{u}{V_x}\right)^2 - \left(\frac{40}{9} - 4F\right) \frac{u}{V_x} + \frac{8}{9} \right] dr \qquad  0.4 \le \frac{u}{V_x} \le 1
+% \label{eq:CTBuhl}
+% \end{equation}
+
+Additional considerations are needed for induction factors larger than 1, the so-called propeller brake region.  The current expression \cref{eq:CTmom2} predicts a negative thrust for induction factors larger than 1 (in other words, propeller operation).  However, repeating the momentum conservation, suggests that the thrust changes signs, in other words it still acts as a drag device (recall that $a > 1$ for this case).
 \begin{equation}
     C_T = - 4 a (1 - a) F
     \label{eq:CTpb}
@@ -194,17 +217,19 @@ Additional considerations are needed for induction factors larger than 1, the so
 
 \subsubsection{Other Wind Directions}
 
-The above derivation is independent of the tangential, or in-plane velocities.  If the axial wind direction is reversed, nothing in the above derivation changes.  The positive thrust direction is still downwind, although because the ``downwind'' direction changes with a wind reversal, all of the thrust coefficients change sign if $V_x$ changes sign.  This is summarized in \cref{sec:momsum}.
+The above derivation is independent of the tangential, or in-plane velocities.  If the axial wind direction is reversed ($V_x < 0$), then the typical direction (and thus sign) for thrust and $u$ change as well.  In this case a positive thrust (to the right) is predicted when it should be negative.  Thus we need to multiply the thrust equation by $\sgn(V_x)$.
+
+% nothing in the above derivation changes.  The positive thrust direction is still downwind, although because the ``downwind'' direction changes with a wind reversal, all of the thrust coefficients change sign if $V_x$ changes sign.  This is summarized in \cref{sec:momsum}.
 
 \subsubsection{No Wind In One of the Directions}
 
-Consider the case where $V_x = 0$.  As shown later, there is no tangential induction, but there is still an axially induced velocity.  However, we can no longer use the normalization $a = u/V_x$, because $V_x = 0$.  Instead, we must use the full induced velocity $u$.
+Consider the case where $V_x = 0$.  As shown later, there is no tangential induction, but there is still an axially induced velocity.  However, as noted earlier, we cannot use the normalization $a = u/V_x$, because $V_x = 0$.  Instead, we must use the full induced velocity $u$.
 
 Two scenarios are possible (\cref{fig:velocity-deficit2}).  No other scenario is possible, because the thrust and induction must be in opposite directions (see Kutta-Joukowski theorem and discussion in \cref{sec:be}).  These cases are analogous to a helicopter in hover.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/velocity-deficit2}
-\caption{}
+\caption{Two possibilities for the direction of thrust and induced velocity for a rotating blade with no inflow (e.g., hover).}
 \label{fig:velocity-deficit2}
 \end{figure}
 
@@ -253,22 +278,18 @@ Because we are keeping our positive convention as a positive thrust downwind, th
 
 \begin{equation}
 \begin{aligned}
-    V_x > 0:&\quad
-    C_T =
+    V_x \ne 0, V_y \ne 0:&\quad
+    T = \sgn(V_x)
     \begin{cases}
-        4 a (1 - a) F &  a \le 0.4 \\
-        \left(\frac{50}{9} - 4F\right) a^2 - \left(\frac{40}{9} - 4F\right) a + \frac{8}{9} &  0.4 < a < 1 \\
-        -4 a (1 - a) F &  a \ge 1 \\
+        4 \pi r \rho u (V_x - u) F dr &  \frac{u}{V_x} \le 0.4 \\
+        \pi r \rho V_x^2 \left[\left(\frac{50}{9} - 4F\right) \left(\frac{u}{V_x}\right)^2 - \left(\frac{40}{9} - 4F\right) \frac{u}{V_x} + \frac{8}{9} \right] dr  &  0.4 < \frac{u}{V_x} < 1 \\
+        -4 \pi r \rho u (V_x - u) F dr &  \frac{u}{V_x} \ge 1 \\
     \end{cases}\\
-    V_x < 0:&\quad C_T \text{ has the opposite sign of above}\\
     V_x = 0:&\quad  T =
-        \begin{cases}
-        4 \pi r \rho u^2 F dr & u > 0\\
-        -4 \pi r \rho u^2 F dr & u < 0\\
-        \end{cases}\\
+        \sgn(u) 4 \pi r \rho u^2 F dr\\
     V_y = 0:&\quad T = 0\\
 \end{aligned}
-\label{eq:CTmomsum}
+\label{eq:Tmomsum}
 \end{equation}
 
 % Otherwise, if $V_x < 0$, then $C_T$ has the opposite sign.
@@ -295,7 +316,7 @@ We use a disk-shaped control volume that surrounds the rotor disk, and assume no
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.0in]{figures/wtvt}
-\caption{}
+\caption{Velocity vectors for angular momentum balance.}
 \label{fig:wtvt}
 \end{figure}
 
@@ -327,6 +348,10 @@ As we did for thrust, we normalize to form the torque coefficient using $V_x$ as
     C_Q &= \frac{Q}{\frac{1}{2}\rho V_x^2 A_d r}\\
      &= 4 a^\prime (1-a) \frac{V_y}{V_x}
 \end{align}
+or in dimensional terms:
+\begin{equation}
+Q = 4 \pi r^2 \rho v (V_x - u) dr
+\end{equation}
 % \begin{align*}
 %     C_Q &= \frac{Q}{\frac{1}{2}\rho V_\infty^2 A_d r}\\
 %      &= 4 a^\prime (1-a) \frac{V_x V_y}{V_\infty^2}
@@ -342,11 +367,16 @@ The torque correction is the same approach as is used for thrust, where the hub/
 
 \subsubsection{Other Wind Directions}
 
-If the direction of $V_x$ reverses, then nothing in the above derivation changes.  We note that only component of velocity that matters is the induced velocity: $V_y 2 a^\prime$.  If $V_x$ reverses, then the induced velocity $V_y 2 a^\prime$ switches to the other side of the airfoil, but still points upward.  Because the direction of the velocity is the same, the $\vec{r} \times \vec{V}$ retains the same sign, and the mass flow is still on the ``out'' side of the control volume and also retains the same side.  However, because $V_x$ appears in our formula, and has switched signs itself, we need to add a negative sign so that the overall sign for $C_Q$ remains unchanged.
+If the direction of $V_x$ reverses, then nothing in the above derivation changes.  We note that only component of velocity that matters is the induced velocity: $V_y 2 a^\prime$.  If $V_x$ reverses, then the induced velocity $V_y 2 a^\prime$ switches to the other side of the airfoil, but still points upward.  Because the direction of the velocity is the same, the $\vec{r} \times \vec{V}$ retains the same sign, and the mass flow is still on the ``out'' side of the control volume and also retains the same sign.  However, because $V_x$ appears in our formula, and has switched signs itself (along with $u$), we need to add a negative sign so that the overall sign for $Q$ remains unchanged.  Alternatively, we could apply an absolute value symbol:
+\begin{equation}
+Q = 4 \pi r^2 \rho v |V_x - u| dr
+\end{equation}
 
 % The positive direction for torque also changes, but that changes signs for both sides of the equation and in the end nothing is changed.
 
-If $V_y$ changes sign, either because the blades rotate backwards, or because the local wind $v$ becomes large in magnitude and negative, then the direction for the induced velocity $V_y 2 a^\prime$ changes direction as well.  In that case, there is a change in sign for the $\vec{r} \times \vec{V}$ term.  The torque coefficient changes signs, but is otherwise unaffected.  Because $V_y$ appears in the above equation, that sign change is taken care of automatically.
+Changes in $V_y$ don't matter per se, as long as the sign for $v$ doesn't change.  A change in sign for $v$ is taken care of automatically as it appears in the equation, so no additional change is needed.
+
+% If $V_y$ changes sign, either because the blades rotate backwards, or because the local wind $v$ becomes large in magnitude and negative, then the direction for the induced velocity $V_y 2 a^\prime$ changes direction as well.  In that case, there is a change in sign for the $\vec{r} \times \vec{V}$ term.  The torque coefficient changes signs, but is otherwise unaffected.  Because $V_y$ appears in the above equation, that sign change is taken care of automatically.
 
 \subsubsection{No Wind In One of the Directions}
 
@@ -382,6 +412,8 @@ As discussed previously, when $a$ becomes negative the rotor acts as a propeller
 
 \subsection{Summary}
 
+As before, we will expression everthing in dimensional variables so that it can be used consistently when $V_x$ or $V_y$ is zero.
+
 % \begin{equation}
 %     C_Q =
 %     \begin{cases}
@@ -397,16 +429,11 @@ As discussed previously, when $a$ becomes negative the rotor acts as a propeller
 
 \begin{equation}
 \begin{aligned}
-    V_y \ne 0:&\quad
-    C_Q = \begin{cases}
-        4 F a^\prime (1-a) \frac{V_y}{V_x} &  V_x > 0 \\
-        - 4 F a^\prime (1-a) \frac{V_y}{V_x} &  V_x < 0 \\
-    \end{cases}\\
+    V_x \ne 0, V_y \ne 0:&\quad
+    % C_Q = 4 F a^\prime (1-a) \frac{V_y}{|V_x|} \\
+    Q = 4 \pi F r^2 \rho v |V_x - u| dr \\
     V_y = 0:&\quad
-    Q = \begin{cases}
-        4 \pi F r^2 v \rho V_x dr &  V_x > 0 \\
-        -4 \pi F r^2 v \rho V_x dr &  V_x < 0 \\
-    \end{cases}\\
+    Q = 4 \pi F r^2 \rho v  |V_x| dr \\
     V_x = 0:&\quad Q = 0\\
 \end{aligned}
 \label{eq:CQmom}
@@ -422,7 +449,7 @@ Consider the airfoil section shown in \cref{fig:inflow1} with the positive direc
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/inflow1}
-\caption{caption}
+\caption{Definition for positive twist and coordinate system for the blade element theory.}
 \label{fig:inflow1}
 \end{figure}
 
@@ -430,12 +457,12 @@ For now, we assume that the airfoil is generating positive lift, as it would und
 \begin{equation}
     \vec{F}^\prime = \rho \vec{V} \times \vec{\Gamma}
 \end{equation}
-we can computed the resulting forces from the $V_x$ and $V_y$ components of velocity.  The resulting induced velocities oppose these forces.  For example, $V_x$ creates a force to the right, and thus an induced velocity to the left adding to that of $V_y$.  Conversely, $V_y$ creates a force upward, and thus an induced velocity downward opposing $V_x$.  As discussed previously, we normalize these induced velocities as follows: $a = u/V_x$ and $a^\prime = v/V_y$, where $u$ and $v$ are the x- and y-components of induced velocity respectively.  The resulting total inflow velocity vector $W$, positive direction for the inflow angle $\phi$, and angle of attack $\alpha$ are shown in \cref{fig:inflow2}.
+We can computed the resulting forces from the $V_x$ and $V_y$ components of velocity.  The resulting induced velocities oppose these forces.  For example, $V_x$ creates a force to the right, and thus an induced velocity to the left adding to that of $V_y$.  Conversely, $V_y$ creates a force upward, and thus an induced velocity downward opposing $V_x$.  As discussed previously, we normalize these induced velocities as follows: $a = u/V_x$ and $a^\prime = v/V_y$, where $u$ and $v$ are the x- and y-components of induced velocity respectively.  The resulting total inflow velocity vector $W$, positive direction for the inflow angle $\phi$, and angle of attack $\alpha$ are shown in \cref{fig:inflow2}.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/inflow2}
-\caption{caption}
+\caption{Additional nomenclature used in blade element theory.}
 \label{fig:inflow2}
 \end{figure}
 
@@ -444,18 +471,18 @@ From the definition of the angles we can relate the angle of attack, twist, and 
     \alpha = \phi - \theta
     \label{eq:aoa}
 \end{equation}
-From the angle of attack we compute the sectional lift and drag coefficient.  To be core complete, the lift and drag coefficients are also functions of the Reynolds number.  Because we do not know $a$ and $a^\prime$ we usually approximate the Reynolds number using:
+From the angle of attack we compute the sectional lift and drag coefficient.  The lift and drag coefficients may be functions of the Reynolds number.  Because we do not know $a$ and $a^\prime$ we usually approximate the Reynolds number using:
 \begin{equation}
     \begin{aligned}
-        W &= \sqrt{V_x^2 + V_y^2}\\
-        Re &= \frac{\rho W c}{\mu}\\
+        W_0 &= \sqrt{V_x^2 + V_y^2}\\
+        Re &= \frac{\rho W_0 c}{\mu}\\
     \end{aligned}
 \end{equation}
-The impact of this approximation is generally negligible.  First, inclusion of $a$ and $a^\prime$ generally only has a small effect on the Reynolds number.  Second, usually only order of magnitude changes in Reynolds number are important.  Third, airfoil data is usually not so precise that a minor change in Reynolds number is significant.  Still, if exactness in Reynolds number is needed, this can be achieved with one or two extra iterations \cite{Ning2014-Simple-Solution}.  We can now compute the lift and drag coefficients using any appropriate method (e.g., table look-up, a panel method, 2D RANS, etc.).  We denote these functions as $f_L$ and $f_D$.
+The impact of this approximation is usually negligible.  Inclusion of $a$ and $a^\prime$ usually has only a small effect on the Reynolds number, and typically only order of magnitude changes in Reynolds number are important.  Additionally, airfoil data is usually not so precise that a minor change in Reynolds number is significant.  Still, if exactness in Reynolds number is needed, this can be achieved with one or two extra iterations \cite{Ning2014b}.  We can now compute the lift and drag coefficients using any appropriate method (e.g., table look-up, a panel method, 2D RANS, etc.).  We denote these functions as $f_L$ and $f_D$.
 \begin{equation}
     \begin{aligned}
-        c_l &= f_L(\alpha, Re)\\
-        c_d &= f_D(\alpha, Re)\\
+        c_l &= f_L(\alpha, Re, M)\\
+        c_d &= f_D(\alpha, Re, M)\\
     \end{aligned}
 \end{equation}
 Better implementations should account for unsteady aerodynamic airfoil behavior, and so the lift and drag coefficients are also functions of things like $\dot{\alpha}$, etc.
@@ -464,7 +491,7 @@ Using the Kutta-Joukowski theorem again, the directions for the lift and drag co
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/inflow3}
-\caption{caption}
+\caption{Directions for the lift and drag forces from the Kutta Joukowski theorem.}
 \label{fig:inflow3}
 \end{figure}
 We need to resolve these forces into the normal and tangential directions.  By convention, for wind turbines, we define the normal force coefficient $c_n$ in the direction of the +x-axis and the tangential force coefficient $c_t$ in the direction of the $-y$ axis (in the direction of blade rotation).
@@ -490,42 +517,45 @@ The total thrust and torque for this blade section, multiplied by the number of 
     \end{aligned}
     \label{eq:beQ}
 \end{equation}
-For normalization of thrust and torque coefficients we use the area of the affected annulus ($A = 2 \pi r dr$), and as the reference velocity in the dynamic pressure we will use the same one used in normalization in the momentum balances $q = 1/2 \rho V_x^2$.  Furthermore, we define the local solidity as:
-\begin{equation}
-    \sigma^\prime = \frac{B c}{2 \pi r}
-\end{equation}
-Performing the normalization results in:
-\begin{equation}
-    \begin{aligned}
-        C_T &= \frac{T}{q_\infty A_d}\\
-         &= c_n \sigma^\prime \left(\frac{W}{V_x}\right)^2\\
-     \end{aligned}
- \end{equation}
- \begin{equation}
-     \begin{aligned}
-        C_Q &= \frac{Q}{q_\infty A_d r}\\
-         &= c_t \sigma^\prime \left(\frac{W}{V_x}\right)^2\\
-    \end{aligned}
-\end{equation}
 
-Ultimately, we want to relate this expression in terms of the induction factors.  Using \cref{fig:inflow2}, we see that
+We will not normalize these, as discussed before the normalization won't work for all cases.  It also doesn't matter as we will equate these expressions shortly.
+
+% For normalization of thrust and torque coefficients we use the area of the affected annulus ($A = 2 \pi r dr$), and as the reference velocity in the dynamic pressure we will use the same one used in normalization in the momentum balances $q = 1/2 \rho V_x^2$.  Furthermore, we define the local solidity as:
+% \begin{equation}
+%     \sigma^\prime = \frac{B c}{2 \pi r}
+% \end{equation}
+% Performing the normalization results in:
+% \begin{equation}
+%     \begin{aligned}
+%         C_T &= \frac{T}{q_\infty A_d}\\
+%          &= c_n \sigma^\prime \left(\frac{W}{V_x}\right)^2\\
+%      \end{aligned}
+%  \end{equation}
+%  \begin{equation}
+%      \begin{aligned}
+%         C_Q &= \frac{Q}{q_\infty A_d r}\\
+%          &= c_t \sigma^\prime \left(\frac{W}{V_x}\right)^2\\
+%     \end{aligned}
+% \end{equation}
+
+Ultimately, we want to relate this expression in terms of the induced velocities.  Using \cref{fig:inflow2}, we see that
 \begin{equation}
-    W = \frac{V_x (1 - a)}{\sin \phi}
+    W = \frac{V_x  - u}{\sin \phi}
 \end{equation}
 or
 \begin{equation}
-    W = \frac{V_y (1 + a^\prime)}{\cos \phi}
+    W = \frac{V_y + v}{\cos \phi}
 \end{equation}
 
-It will be convenient later to use the first substitution in the thrust coefficient, and one of each in the torque coefficient:
-\begin{equation}
-    C_T = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\\
-    \label{eq:CTbe}
-\end{equation}
-\begin{equation}
-    C_Q = c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\left(\frac{V_y}{V_x}\right)
-    \label{eq:CQbe}
-\end{equation}
+% It will be convenient later to use the first substitution in the thrust definition, and one of each in the torque definition:
+% \begin{equation}
+%     C_T = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\\
+%     \label{eq:CTbe}
+% \end{equation}
+% \begin{equation}
+%     C_Q = c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\left(\frac{V_y}{V_x}\right)
+%     \label{eq:CQbe}
+% \end{equation}
 % \begin{equation}
 %     C_T = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\left(\frac{V_x}{V_\infty}\right)^2\\
 % \end{equation}
@@ -566,7 +596,7 @@ We also cannot use the thrust coefficient directly, because we used a normalizat
 % \end{aligned}
 % \end{equation}
 
-From the Kutta-Joukowski theorem, the direction of $u$ and $c_n$ must be opposite.  Thus, for the case of $u > 0$ (remember a positive u is in the negative x-direction using the wind turbine convention), then $c_n$ must be positive, and $\phi < 0$.  The opposite is true for the case with $u < 0$: $c_n < 0$ and $\phi > 0$.  We can determine these signs a priori, unlike the more general case, because the velocity is strictly determined by $u$ and not $V_x - u$, and the tangential velocity has no induction.  The direction of circulation can change, depending on the sign of $V_y$, but the signs of $c_n$ and $u$ cannot.
+From the Kutta-Joukowski theorem, the direction of $u$ and $c_n$ must be opposite.  Thus, for the case of $u > 0$ (remember a positive u is in the negative x-direction using the wind turbine convention), then $c_n$ must be positive, and $\phi < 0$.  The opposite is true for the case with $u < 0$: $c_n < 0$ and $\phi > 0$.  We can determine these signs a priori, unlike the more general case, because the velocity is strictly determined by $u$, and the tangential velocity has no induction.  The direction of circulation can change, depending on the sign of $V_y$, but the signs of $c_n$ and $u$ cannot.
 
 
 % Similarly, for torque we use \cref{eq:beQ} and note from \cref{fig:inflowv} that
@@ -584,7 +614,7 @@ From the Kutta-Joukowski theorem, the direction of $u$ and $c_n$ must be opposit
 
 If $V_y = 0$, then from the Kutta-Joukowski theorem, $a = 0$.  Also, $a^\prime$ is undefined, because of the normalization by $V_y$ and so we must refer to the total tangential induced velocity $v$.  There are two possibilities for $v$ shown in black and blue in \cref{fig:inflowv}.  From the Kutta-Joukowski theorem we know that $c_t$ and $v$ must have opposite signs.  We will consider $v$ as positive in the direction of a positive $a^\prime$ (for a positive $V_y$), thus the black $v$ is positive.  Two cases yield the following possibilities for $V_x > 0$ (with similar results for $V_x < 0$): either $\phi \in (0, \pi/2)$, in which case $c_t > 0$ and $v > 0$ or $\phi \in (\pi/2, \pi)$, in which case $c_t < 0$ and $v < 0$.
 
-In either case we can define thrust and torque using \cref{eq:beT,eq:beQ} where from \cref{fig:inflowv} we see that
+In either case we can define thrust and torque using \cref{eq:beT,eq:beQ} where from \cref{fig:inflowv} we see that:
 \begin{equation}
     W = \frac{V_x}{\sin\phi} = \frac{v}{\cos\phi}
 \end{equation}
@@ -593,13 +623,20 @@ In either case we can define thrust and torque using \cref{eq:beT,eq:beQ} where 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/inflow5}
-\caption{}
+\caption{Two possible directions for the induced axial velocity $v$.  The black $v$ is positive according to our sign convention, and the blue $v$ is negative.}
 \label{fig:inflowv}
 \end{figure}
 
 \subsubsection{Propellers}
 
 Conventionally, the inflow for a propeller looks like that shown in \cref{fig:inflowprop}.  To reuse the current derivation, we must use consistent inputs.  The positive directions for $a$, $a^\prime$, $\phi$, $\theta$ and $V_x$ are all opposite that of the above derivation.  Most of these will be accounted for automatically, as already discussed.  If we continue to define the total velocity as $V_x (1 - a)$, for example, then a negative value of $a$ corresponds to propeller operation.  Similarly, for $a^\prime$.  We will also use the same definition of $\phi$, so the $\phi$ pictured in \cref{fig:inflowprop} would be a negative value.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=3.5in]{figures/inflowprop}
+\caption{Typical sign conventions used in a propeller analysis.}
+\label{fig:inflowprop}
+\end{figure}
 
 Two changes explicit changes must be made, because the they are user inputs.   The positive direction for $V_x$ and $\theta$ are defined as positive in the opposite direction of what we have been using.  This is remedied by internally switching the sign for $V_x$ and $\theta$ after they have been supplied by the user.  With this change, no others changes are required.  We can see, for example, that the angle of attack is correctly computed with consistent definitions (using a negative sign for $\theta$ and $\phi$):
 \begin{equation}
@@ -614,86 +651,95 @@ For the outputs a few explicit changes are made as well.  We change the definiti
 
 % [TODO: double check this. also refer to turbine-to-prop document]
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=3.5in]{figures/inflowprop}
-\caption{}
-\label{fig:inflowprop}
-\end{figure}
+
 
 \subsection{Summary}
 
-If $V_x \ne 0, V_y \ne 0$ then
-\begin{equation}
-\begin{aligned}
-C_T &= c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2 \\
-C_Q &= c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\left(\frac{V_y}{V_x}\right)\\
-\end{aligned}
-\end{equation}
-Otherwise, use
+% If $V_x \ne 0, V_y \ne 0$ then
+% \begin{equation}
+% \begin{aligned}
+% C_T &= c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2 \\
+% C_Q &= c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\left(\frac{V_y}{V_x}\right)\\
+% \end{aligned}
+% \end{equation}
+% Otherwise, use
 \begin{equation}
 \begin{aligned}
     T &= B c_n \frac{1}{2}\rho W^2 c dr \\
     Q &= B r c_t \frac{1}{2}\rho W^2 c dr \\
 \end{aligned}
+\label{eq:TQbe}
 \end{equation}
 where
 \begin{equation}
-    W =
-    \begin{cases}
-        \frac{-u}{\sin\phi} = \frac{V_y}{\cos\phi} & V_x = 0
-        \begin{cases}
-            V_y > 0, u < 0, \phi \in (0, \pi/2), c_n < 0\\
-            V_y > 0, u > 0, \phi \in (-\pi/2, 0), c_n > 0\\
-            V_y < 0, u < 0, \phi \in (\pi/2, \pi), c_n < 0\\
-            V_y < 0, u > 0, \phi \in (-\pi, -\pi/2), c_n > 0\\
-        \end{cases}\\
-        \frac{V_x}{\sin\phi} = \frac{v}{\cos\phi} & V_y = 0
-        \begin{cases}
-            V_x > 0, v > 0, \phi \in (0, \pi/2), c_t > 0\\
-            V_x > 0, v < 0, \phi \in (\pi/2, \pi), c_t < 0\\
-            V_x < 0, v > 0, \phi \in (-\pi/2, 0), c_t > 0\\
-            V_x < 0, v < 0, \phi \in (-\pi, \pi/2), c_t < 0\\
-        \end{cases}\\
-    \end{cases}
-    \label{eq:Wopt}
+    W = \frac{V_x  - u}{\sin \phi} = \frac{V_y + v}{\cos \phi}
+    \label{eq:Woptions}
 \end{equation}
+and
+\begin{align}
+    v = 0 & \text{ when } V_x = 0\\
+    u = 0 & \text{ when } V_y = 0
+\end{align}
+% \begin{equation}
+%     W =
+%     \begin{cases}
+%         \frac{-u}{\sin\phi} = \frac{V_y}{\cos\phi} & \text{ for } V_x = 0\\
+%         \frac{V_x}{\sin\phi} = \frac{v}{\cos\phi} & \text{ for } V_y = 0
+%     \end{cases}
+%     \label{eq:Wopt}
+% \end{equation}
 
 
 
 
 \section{Blade Element Momentum}
 
-We can now combine the results from momentum theory and blade element theory.  We first the linear momentum equations (thrust), and next the angular momentum equations (torque).  Finally, we discuss the residual equation which determines whether or not we have consistency between the momentum and blade element theories.
+We can now combine the results from momentum theory and blade element theory.  We first equate the linear momentum equations (thrust), and next the angular momentum equations (torque).  Finally, we discuss the residual equation which determines whether or not we have consistency between the momentum and blade element theories.
 
 \subsection{Axial Inflow}
 
-We equate the thrust coefficients from momentum theory and blade element theory.  For now, we consider the typical cases where $V_x \ne 0$ and $V_y \ne 0$.  The thrust coefficient from blade element theory is always the same, but the momentum thrust coefficient changes depending on the sign of $V_x$ and $a$ (\cref{eq:CTmomsum}).  There are multiple cases that must be considered depending on the sign of $V_x$ and the magnitude of $a$.
+We equate the thrust from momentum theory and blade element theory.  For now, we consider the typical cases where $V_x \ne 0$ and $V_y \ne 0$.  The thrust from blade element theory is always the same, but the momentum thrust changes depending on the sign of $V_x$ and $a$ (\cref{eq:Tmomsum}).  There are multiple cases that must be considered depending on the sign of $V_x$ and the magnitude of $a$.  In the following we will often use the nondimensional parameter, the local solidity, defined as:
+\begin{equation}
+    \sigma^\prime = \frac{B c}{2 \pi r}
+\end{equation}
+We will sometimes use $a$ instead of $u/V_x$ for convenience, in the end we will replace all instances of $a$ with $u/V_x$.
 
 \begin{itemize}
 
 \item Case I: $V_x > 0$ and $a \le 0.4$
 
-Equate the corresponding thrust from momentum theory \cref{eq:CTmomsum} with that of blade element theory \cref{eq:CTbe}:
+Equate the corresponding thrust from momentum theory \cref{eq:Tmomsum} with that of blade element theory \cref{eq:TQbe} and we use the first substitution for \cref{eq:Woptions}:
 \begin{equation}
-    \begin{aligned}
-        4 a (1 - a) F &= c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\\
-        4 a F &= c_n \sigma^\prime \frac{(1-a)}{\sin^2\phi}\\
-    \end{aligned}
+\begin{aligned}
+    4 \pi r \rho u (V_x - u) F dr &= B c_n \frac{1}{2}\rho \frac{(V_x - u)^2}{\sin^2\phi} c dr\\
+    4 u F &= \sigma^\prime c_n \frac{(V_x - u)}{\sin^2\phi} \\
+\end{aligned}
+% \begin{aligned}
+%     4 a (1 - a) F &= c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2\\
+%     4 a F &= c_n \sigma^\prime \frac{(1-a)}{\sin^2\phi}\\
+% \end{aligned}
 \end{equation}
 We now define a new nondimensional quantity for convenience:
 \begin{equation}
     \kappa = \frac{c_n \sigma^\prime}{4 F \sin^2 \phi}
 \end{equation}
-Making this substitution, we can derive a simple expression for $a$:
+Making this substitution, we can derive a simple expression for $u$:
 \begin{equation}
     \begin{aligned}
-        a &= \kappa (1-a)\\
-        a &= \kappa - \kappa a\\
-        a (1 + \kappa) &= \kappa\\
-        a &= \frac{\kappa}{\kappa + 1}\\
+        u &= \kappa (V_x - u)\\
+        u &= \kappa V_x - \kappa u\\
+        u (1 + \kappa) &= \kappa V_x\\
+        \frac{u}{V_x} &= \frac{\kappa}{\kappa + 1}\\
     \end{aligned}
 \end{equation}
+% \begin{equation}
+%     \begin{aligned}
+%         a &= \kappa (1-a)\\
+%         a &= \kappa - \kappa a\\
+%         a (1 + \kappa) &= \kappa\\
+%         a &= \frac{\kappa}{\kappa + 1}\\
+%     \end{aligned}
+% \end{equation}
 
 The criteria for this equation was expressed in terms of $V_x > 0$ and $a \le 0.4$.  However, a criteria in terms of $a$ is not convenient, because that is the quantity we are solving for.  Instead, we will express the criteria in terms of $\kappa$, which is known beforehand.  Additionally, rather than using $V_x$ to distinguish the cases, we will transform the criteria in terms of $\phi$.  As we will see later, this will allow for consolidation of the various cases.
 
@@ -710,13 +756,9 @@ Thus, this equation applies if $-1 < \kappa \le 2/3$.
 
 \item Case II: $V_x < 0$ and $a \le 0.4$
 
-Equate the thrust from momentum theory \cref{eq:CTmomsum} and blade element theory \cref{eq:CTbe} yields:
-\begin{equation}
-    - 4 a (1 - a) F = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2
-\end{equation}
 This is identical to case I, except we must replace $\kappa$ with $-\kappa$:
 \begin{equation}
-    a = \frac{\kappa}{\kappa - 1}
+    \frac{u}{V_x} = \frac{\kappa}{\kappa - 1}
 \end{equation}
 
 From inspection of \cref{fig:inflow2} we see that if $V_x < 0$ and $a \le 0.4$ we must have $\phi < 0$.  Next, the conditions for $\kappa$ also must be multiplied by $-1$.  Thus, this equation applies if $-2/3 \le \kappa < 1$.  In short, we can use Case I exactly, if we replace $\kappa$ with $-\kappa$.
@@ -724,19 +766,15 @@ From inspection of \cref{fig:inflow2} we see that if $V_x < 0$ and $a \le 0.4$ w
 
 \item Case III: $V_x > 0$ and $a \ge 1$
 
-This case yields:
+This case is mathematically identical to Case II and results in the same formula:
 \begin{equation}
-    - 4 a (1 - a) F = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2
-\end{equation}
-which results in the same formula as Case II:
-\begin{equation}
-    a = \frac{\kappa}{\kappa - 1}
+    \frac{u}{V_x} = \frac{\kappa}{\kappa - 1}
 \end{equation}
 
-The condition for $\phi$ (see \cref{fig:inflow2}) is $\phi < 0$.  The condition for $\kappa$ is:
+However, the input conditions are different.  The condition for $\phi$ (see \cref{fig:inflow2}) is $\phi < 0$.  The condition for $\kappa$ is:
 \begin{equation}
     \begin{aligned}
-        a &\ge 1\\
+        u/V_x &\ge 1\\
         \frac{\kappa}{\kappa -1} &\ge 1\\
         \kappa &\ge \kappa -1,\quad \text{ (assuming $\kappa - 1 > 0$ or in other words $\kappa > 1$)} \\
         0 &\ge -1,\quad \text{this is always true, assuming the above condition}
@@ -746,19 +784,15 @@ Thus, we require $\kappa > 1$.
 
 \item Case IV: $V_x < 0$ and $a \ge 1$
 
-This case yields:
+This case is mathematically equivalent to Case I:
 \begin{equation}
-    4 a (1 - a) F = c_n \sigma^\prime \left(\frac{1-a}{\sin\phi}\right)^2
+    \frac{u}{V_x} = \frac{\kappa}{\kappa + 1}
 \end{equation}
-which results in the same formula as Case I:
-\begin{equation}
-    a = \frac{\kappa}{\kappa + 1}
-\end{equation}
-
+but with different input conditions.
 The condition for $\phi$ (see \cref{fig:inflow2}) is $\phi > 0$.  The condition for $\kappa$ is:
 \begin{equation}
     \begin{aligned}
-        a &\ge 1\\
+        u/V_x &\ge 1\\
         \frac{\kappa}{\kappa + 1} &\ge 1\\
         \kappa &\le \kappa + 1,\quad \text{ (assuming $\kappa + 1 < 0$ or in other words $\kappa < -1$)} \\
         0 &\le 1,\quad \text{this is always true, assuming the above condition}
@@ -800,7 +834,7 @@ This is identical to case V except for the negative sign in the thrust from mome
 
 Fortunately, these various cases can be consolidated.  First let's write them out:
 \begin{equation}
-    a =
+    \frac{u}{V_x} =
     \begin{cases}
         \frac{\kappa}{\kappa + 1} & I: \phi > 0 \text{ and } -1 < \kappa \le 2/3 \\
         \frac{\kappa}{\kappa - 1} & II: \phi < 0 \text{ and } -2/3 \le \kappa < 1 \\
@@ -814,7 +848,7 @@ Fortunately, these various cases can be consolidated.  First let's write them ou
 We see that we can immediately combine cases I and IV as well as II and III, as they use the same expression over contiguous ranges, excepting a point singularity.
 
 \begin{equation}
-    a =
+    \frac{u}{V_x} =
     \begin{cases}
         \frac{\kappa}{\kappa + 1} & \phi > 0, \kappa \le 2/3 \text{ for } \kappa \ne -1\\
         \frac{\kappa}{\kappa - 1} & \phi < 0, \kappa \ge -2/3 \text{ for } \kappa \ne 1\\
@@ -823,12 +857,29 @@ We see that we can immediately combine cases I and IV as well as II and III, as 
     \end{cases}
     \label{eq:asing}
 \end{equation}
-This expression can be further consolidated with the logic shown in the first half of \cref{alg:aap}.
+This expression can be further consolidated with the logic shown in \cref{alg:u}.
 
 
-We note the existence of a singularity at $\kappa = -1$ for $\phi > 0$ and at $\kappa = 1$ for $\phi < 0$.  We will see later what cases this condition corresponds to.
+We note the existence of a singularity at $\kappa = -1$ for $\phi > 0$ and at $\kappa = 1$ for $\phi < 0$.  We will see later what cases this condition corresponds to.  That condition can be handled separately, but in the above formulation we know that $\kappa$ cannot equal -1 so we can simply check that condition and return a nonzero residual
 
-TODO: move somewhere else.  That condition can be handled separately, but in the above formulation we know that $\kappa$ cannot equal -1 so we can simply check that condition and return a nonzero residual
+\begin{algorithm}[htbp]
+\caption{Solve for the axial induced velocity.}
+\begin{algorithmic}
+
+\If {$\phi < 0$}
+    \State $\kappa = -\kappa$
+\EndIf
+\\
+\If {$\kappa \le 2/3$}
+    \State $u = V_x \left(\frac{\kappa}{\kappa + 1}\right)$
+    \Comment{if $\kappa = -1$ return any nonzero residual.}
+\Else
+    \State $u = V_x \left(\frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}\right)$
+    \Comment{if $\gamma_3 = 0$ use \cref{eq:aconverge}.}
+\EndIf
+\end{algorithmic}
+\label{alg:u}
+\end{algorithm}
 
 \subsection{Tangential Inflow}
 
@@ -836,18 +887,22 @@ We now equate the torque from blade element theory (\cref{eq:CQbe}) with the tor
 
 There are two cases.  First, $V_x > 0$:
 \begin{equation}
-\begin{aligned}
- c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\frac{V_y}{V_x} &= 4 F a^\prime (1 - a) \frac{V_y}{V_x}\\
- c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi\sin\phi}\right)&= 4 F a^\prime \\
+\begin{aligned}    
+4 \pi F r^2 \rho v (V_x - u) dr &= B r c_t \frac{1}{2}\rho \frac{(V_x  - u)}{\sin \phi} \frac{(V_y + v)}{\cos \phi} c dr\\
+4 F v &= \sigma^\prime c_t \frac{1}{\sin \phi} \frac{(V_y + v)}{\cos \phi}
 \end{aligned}
+% \begin{aligned}
+%  c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi}\right)\left(\frac{1 - a}{\sin\phi}\right)\frac{V_y}{V_x} &= 4 F a^\prime (1 - a) \frac{V_y}{V_x}\\
+%  c_t \sigma^\prime \left(\frac{1 + a^\prime}{\cos\phi\sin\phi}\right)&= 4 F a^\prime \\
+% \end{aligned}
 \end{equation}
 Similar to the axial induction derivation, we define a new nondimensional quantity for convenience:
 \begin{equation}
     \kappa^\prime = \frac{c_t \sigma^\prime}{4 F \sin\phi \cos\phi}
 \end{equation}
-With that substitution we can solve for $a^\prime$ as
+With that substitution we can solve for $v$ as
 \begin{equation}
-    a^\prime = \frac{\kappa^\prime}{1 - \kappa^\prime}
+    \frac{v}{V_y} = \frac{\kappa^\prime}{1 - \kappa^\prime}
     \label{eq:aprime}
 \end{equation}
 Note that this is defined everywhere except when $\kappa^\prime = 1$ (we will see later where the $V_x > 0, \kappa^\prime = 1$ case corresponds to).
@@ -856,27 +911,42 @@ Similarly, for $V_x < 0$ we obtain
 \begin{equation}
     a^\prime = \frac{-\kappa^\prime}{1 + \kappa^\prime}
 \end{equation}
-Or equivalently, we can use the same formula in \cref{eq:aprime}, but negate $\kappa^\prime$ if $V_x < 0$.  We see that the $V_x < 0$ case is defined everywhere except when $\kappa^\prime = -1$.  These two cases can be combined into the algorithm shown in the bottom half of \cref{alg:aap}.
+Or equivalently, we can use the same formula in \cref{eq:aprime}, but negate $\kappa^\prime$ if $V_x < 0$.  We see that the $V_x < 0$ case is defined everywhere except when $\kappa^\prime = -1$.  These two cases can be combined into the algorithm shown in \cref{alg:v}.
 
+\begin{algorithm}[htbp]
+\caption{Solve the the tangnetial induced velocity.}
+\begin{algorithmic}
 
+\If {$V_x < 0$}
+    \State $\kappa^\prime = -\kappa^\prime$
+\EndIf
+\\
+\State $v = V_y \kappa^\prime/(1 - \kappa^\prime)$
+\Comment{if $\kappa^\prime = 1$ return any nonzero residual.}
+\end{algorithmic}
+\label{alg:v}
+\end{algorithm}
 
 
 
 \subsection{Residual Equation}
 
-With the induction factors calculated the residual function can be computed. This residual equation ensures compatibility between the momentum theory, and blade element theory. The current induction factors may not be correct, as they depend on the angle of attack, which in turn depends on the induction factors themselves.  Thus, an iterative, or root-finding methods is necessary.
+With the induction factors calculated the residual function can be computed. This residual equation ensures compatibility between the momentum theory, and blade element theory. The current induction factors may not be correct, as they depend on the angle of attack, which in turn depends on the induction factors themselves.  Thus, an iterative, or root-finding method is necessary.
 
-Conventionally, this is solved by considering $a$ and $a^\prime$ as the unknowns and solving using a two-dimensional root finding approach \cite{Manwell2009-Wind-Energy,Hansen2008-Aerodynamics-Wind,Burton2011-Wind-Energy}.  However, this can be solved much more effectively by examining \cref{fig:inflow2} and realizing that we can define the velocity vectors equivalently by considering the two unknowns to be $W$ and $\phi$ \cite{Ning2014-Simple-Solution}.  This results in a big simplification because $W$ only appears in the Reynolds number, and as discussed in \cref{sec:be} we can almost always safely neglect the induction factors in the Reynolds number calculation (or if we really want to include them this can be done easily in an extra iteration). In other words, we can reduce our unknowns to one: $\phi$.  This has the massive advantage that one-dimensional root finding problems are easier to solve, and unlike two-dimensional ones, we can guarantee convergence as long as we can find a suitable bracket.
+Conventionally, this is solved by considering $a$ and $a^\prime$ as the unknowns and solving using a two-dimensional root finding approach \cite{Manwell2009,Hansen2008,Burton2011}.  However, this can be solved much more effectively by examining \cref{fig:inflow2} and realizing that we can define the velocity vectors equivalently by considering the two unknowns to be $W$ and $\phi$ \cite{Ning2014b}.  This results in a big simplification because $W$ only appears in the Reynolds number, and as discussed in \cref{sec:be} we can almost always safely neglect the induction factors in the Reynolds number calculation (or if we really want to include them this can be done easily in an extra iteration). In other words, we can reduce our unknowns to one: $\phi$.  This has the massive advantage that one-dimensional root finding problems are easier to solve, and unlike two-dimensional ones, we can guarantee convergence as long as we can find a suitable bracket.
 
 The residual function is taken from \cref{fig:inflow2} where we see that
-\[\tan\phi = \frac{V_x (1 - a)}{V_y (1 + a^\prime)}\]
-This equation can be arranged many different ways to form a residual function, but not all will lead to a reliably convergent method. Singularities in the residual function are unavoidable, but it is convenient to have the quantities $(1 - a)$ and $(1 + a^\prime)$ in the denominator so that singularities occur at the predefined locations: $\phi = 0, \pm\pi$ \cite{Ning2014-Simple-Solution}. These locations are particularly convenient because they also separate regions where the physics change.  We rearrange in the residual form below:
+% \[\tan\phi = \frac{V_x (1 - a)}{V_y (1 + a^\prime)}\]
 \begin{equation}
-    \mathcal{R}(\phi) = \frac{\sin\phi}{(1 - a(\phi))} - \frac{V_x}{V_y} \frac{\cos\phi}{(1 + a^\prime(\phi))} = 0
+\tan\phi = \frac{V_x - u}{V_y  + v}
+\end{equation}
+This equation can be arranged many different ways to form a residual function, but not all will lead to a reliably convergent method. Singularities in the residual function are unavoidable, but it is convenient to have the quantities $(V_x - u)$ and $(V_y + v)$ in the denominator so that singularities occur at the predefined locations: $\phi = 0, \pm\pi$ \cite{Ning2014b}. These locations are particularly convenient because they also separate regions where the physics change.  We rearrange in the residual form below:
+\begin{equation}
+    \mathcal{R}(\phi) = \frac{\sin\phi}{V_x - u(\phi)} - \frac{\cos\phi}{V_y + v(\phi)} = 0
     \label{eq:residual}
 \end{equation}
 
-This one-dimensional equation is easily solved, if we can determine a bracket.  For the conventional methodology and modes of operation ($V_x > 0$ and $V_y > 0$), the brackets can be determined a priori \cite{Ning2014-Simple-Solution}.  However, for more general conditions the brackets may need to be established numerically.  All that is needed to establish a bracket, $(\phi_L, \phi_U)$, is to find two points between which the residual function changes sign (i.e., $\mathcal{R}(\phi_L)\mathcal{R}(\phi_U) < 0$).
+This one-dimensional equation is easily solved, if we can determine a bracket.  For the conventional methodology and modes of operation ($V_x > 0$ and $V_y > 0$), the brackets can be determined a priori \cite{Ning2014b}.  However, for more general conditions the brackets may need to be established numerically.  All that is needed to establish a bracket, $(\phi_L, \phi_U)$, is to find two points between which the residual function changes sign (i.e., $\mathcal{R}(\phi_L)\mathcal{R}(\phi_U) < 0$).
 
 From the signs of $V_x$ and $V_y$, we know where a bracket is most likely to be found.  \Cref{tab:quadrants} divides the $\phi$ range into four quadrants, which are also depicted in \cref{fig:quadrants}:
 \begin{table}[htb]
@@ -896,8 +966,8 @@ IV & $(-\pi+\epsilon, -\pi/2)$ \\
 \end{table}
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=2.5in]{figures/quadrants}
-\caption{caption}
+\includegraphics[width=2.0in]{figures/quadrants}
+\caption{Quadrants where a potential solution may exist.}
 \label{fig:quadrants}
 \end{figure}
 
@@ -905,7 +975,7 @@ We search quadrant in the order shown in \cref{tab:brackets}.  It would be very 
 
 \begin{table}[htb]
 \centering
-\caption{}
+\caption{Quadrant search order based on the location where a solution is most likely to be found.}
 \label{tab:brackets}
 \begin{tabular}{@{}ccl@{}}
 \toprule
@@ -921,33 +991,33 @@ $V_x$ & $V_y$ & quadrant order \\
 
 
 
-\begin{algorithm}[htbp]
-\caption{Solve the residual equation $\mathcal{R}(\phi)$}
-\begin{algorithmic}
+% \begin{algorithm}[htbp]
+% \caption{Solve the residual equation $\mathcal{R}(\phi)$}
+% \begin{algorithmic}
 
-\If {$\phi < 0$}
-    \State $\kappa = -\kappa$
-\EndIf
-\\
-\If {$\kappa \le 2/3$}
-    \State $a = \frac{\kappa}{\kappa + 1}$
-    \Comment{if $\kappa = -1$ return any nonzero residual.}
-\Else
-    \State $a = \frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}$
-    \Comment{if $\gamma_3 = 0$ use \cref{eq:aconverge}.}
-\EndIf
-\\
-\If {$V_x < 0$}
-    \State $\kappa^\prime = -\kappa^\prime$
-\EndIf
-\\
-\State $a^\prime = \kappa^\prime/(1 - \kappa^\prime)$
-\Comment{if $\kappa^\prime = 1$ return any nonzero residual.}
-\\
-\State $\mathcal{R}(\phi) = \frac{\sin\phi}{(1 - a(\phi))} - \frac{V_x}{V_y} \frac{\cos\phi}{(1 + a^\prime(\phi))}$
-\end{algorithmic}
-\label{alg:aap}
-\end{algorithm}
+% \If {$\phi < 0$}
+%     \State $\kappa = -\kappa$
+% \EndIf
+% \\
+% \If {$\kappa \le 2/3$}
+%     \State $a = \frac{\kappa}{\kappa + 1}$
+%     \Comment{if $\kappa = -1$ return any nonzero residual.}
+% \Else
+%     \State $a = \frac{\gamma_1 - \sqrt{\gamma_2}}{\gamma_3}$
+%     \Comment{if $\gamma_3 = 0$ use \cref{eq:aconverge}.}
+% \EndIf
+% \\
+% \If {$V_x < 0$}
+%     \State $\kappa^\prime = -\kappa^\prime$
+% \EndIf
+% \\
+% \State $a^\prime = \kappa^\prime/(1 - \kappa^\prime)$
+% \Comment{if $\kappa^\prime = 1$ return any nonzero residual.}
+% \\
+% \State $\mathcal{R}(\phi) = \frac{\sin\phi}{(1 - a(\phi))} - \frac{V_x}{V_y} \frac{\cos\phi}{(1 + a^\prime(\phi))}$
+% \end{algorithmic}
+% \label{alg:aap}
+% \end{algorithm}
 
 \subsection{No Wind In One of the Directions}
 
@@ -961,7 +1031,7 @@ If $V_x = 0$, equating thrust from the momentum and blade element theories and s
     4 u^2 F&= \sigma^\prime c_n W^2\\
 \end{aligned}
 \end{equation}
-The value for $W$ is shown in \cref{eq:Wopt} for $V_x = 0$.  Let's first use the first option: $W = -u/\sin\phi$.  Substituting into the above expression and simplifying yields
+The value for $W$ is shown in \cref{eq:Woptions} for $V_x = 0$.  Let's first use the first option: $W = -u/\sin\phi$.  Substituting into the above expression and simplifying yields
 \begin{equation}
 \kappa = 1
 \end{equation}
@@ -971,21 +1041,58 @@ Conversely, if $u < 0$ the same expression yields
 \end{equation}
 We note that the first case with $u > 0$ implies that $\phi < 0$ (see velocity  triangle in \cref{fig:inflowu}) and results in the expression $\kappa = 1$.  This case fills in our singularity noted in \cref{eq:asing}.  In other words, the case $\phi < 0, \kappa = 1$, only exists for $V_x = 0$.  Similarly, the derivation for $u < 0$ corresponds to $\phi > 0$ with the result that $\kappa = -1$, which fills in the other singularity.  Thus, the previous formulation ($V_x \ne 0, V_y \ne 0$) should ignore the case $\kappa = -1$ as it won't satisfy the residual equation.  Any nonzero residual could be returned.  We deal with this case explicitly in this section with a different formulation.
 
-While, the substitution $W = -u/\sin\phi$ led to the insight of filling in our singularity, it doesn't help us solve the equation.  Instead, we will use the second substitution from \cref{eq:Wopt}: $W = V_y / \cos\phi$ (incidentally, one of each of the W expressions could be used instead, either approach will lead to the same solution once the residual is converged).  This substitutions leads to (for the case $u > 0$, which corresponds to $\phi < 0$):
+While, the substitution $W = -u/\sin\phi$ led to the insight of filling in our singularity, it doesn't help us solve the equation.  Instead we will use one of each substitution from \cref{eq:Woptions}.  
 \begin{equation}
 \begin{aligned}
-4 u^2 F&= \sigma^\prime c_n \frac{V_y^2}{\cos^2\phi}\\
-u&= \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}\\
+4 u^2 F&= \sigma^\prime c_n \frac{V_y}{\cos\phi} \left(\frac{-u}{\sin\phi}\right)\\
+u &= -\frac{\sigma^\prime c_n}{4 F \sin\phi \cos\phi} V_y
 \end{aligned}
 \end{equation}
+We define another nondimensional quantity:
+\begin{equation}
+\kappa_0 = \frac{\sigma^\prime c_n}{4 F \sin\phi\cos\phi}
+\end{equation}
+So that:
+\begin{equation}
+u = -\kappa_0 V_y
+\end{equation}
+The physics of this case is only consistent with $c_n > 0$, $u > 0$, $\phi < 0$ and finally $V_y$ and $\cos\phi$ must have the same sign.  All of this should be handled automatically by the residual. 
+%   We must just check for $c_n > 0$, all else should be handled automatically by the residual.
+
+
+
+% Instead, we will use the second substitution from \cref{eq:Woptions}: $W = V_y / \cos\phi$ (incidentally, one of each of the W expressions could be used instead, either approach will lead to the same solution once the residual is converged).  This substitutions leads to (for the case $u > 0$, which corresponds to $\phi < 0$):
+% \begin{equation}
+% \begin{aligned}
+% 4 u^2 F&= \sigma^\prime c_n \frac{V_y^2}{\cos^2\phi}\\
+% u&= \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}\\
+% \end{aligned}
+% \end{equation}
+% We define another nondimensional quantity:
+% \begin{equation}
+% \kappa_0 = \frac{\sigma^\prime c_n}{4 F \cos^2\phi}
+% \end{equation}
+% Thus
+% \begin{equation}
+% u = \sqrt{\kappa_0} |V_y|
+% \end{equation}
 Conversely if $u < 0$ then the sign on the momentum portion of thrust switches and we have:
 \begin{equation}
 \begin{aligned}
-- 4 u^2 F&= \sigma^\prime c_n \frac{V_y^2}{\cos^2\phi}\\
-u&= -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}\\
+- 4 u^2 F&= \sigma^\prime c_n \frac{V_y}{\cos\phi} \left(\frac{-u}{\sin\phi}\right)\\
+u &= \kappa_0 V_y\\
 \end{aligned}
 \end{equation}
-where the minus sign in the front of the sqrt arises because the sqrt could have either sign, but we know that $u < 0$ for this case.  We see that these expression are consistent with the conditions derived in \cref{eq:Wopt}.  Namely, those conditions require that if $u > 0$ then $c_n > 0$ and if $u < 0$ then $c_n < 0$.  The argument under the sqrt follows the sign of $c_n$ (all other entires are positive), and so these conditions lead to positive sqrt arguments, as is physically consistent.  Thus, if during a residual solve a $c_n$ is computed inconsistent with these cases we can skip evaluating the sqrt and return any nonzero residual.
+% \begin{equation}
+% \begin{aligned}
+% - 4 u^2 F&= \sigma^\prime c_n \frac{V_y^2}{\cos^2\phi}\\
+% u&= -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}\\
+% &= -\sqrt{-\kappa_0} |V_y|\\
+% \end{aligned}
+% \end{equation}
+This solution is consistent as long as $c_n < 0$.
+% where the minus sign in the front of the sqrt arises because the sqrt could have either sign, but we know that $u < 0$ for this case.  We see that these expression are consistent with the conditions leading up to \cref{eq:Woptions}.  Namely, the Kutta-Joukowski conditions require that if $u > 0$ then $c_n > 0$ and if $u < 0$ then $c_n < 0$.  The argument under the sqrt follows the sign of $c_n$ (all other entires are positive), and so these conditions lead to positive sqrt arguments, as is physically consistent.  
+Thus, if during a residual solve a $c_n$ is computed inconsistent with these cases we can skip evaluating the sqrt and return any nonzero residual.
 
 % If on the other hand, $V_y < 0$
 
@@ -1027,10 +1134,11 @@ where the minus sign in the front of the sqrt arises because the sqrt could have
 % \end{equation}
 % which must have $c_n > 0$.
 
-The residual equation can be found by using the velocity triangle in \cref{fig:inflowu} (note that a positive $u$ is in the -x direction using our convention for the positive definition of $a$) or by dividing the existing residual equation (\cref{eq:residual}) by $V_x$, noting that $u = V_x a$, then letting $V_x \rightarrow 0$.
-\begin{equation}
-    - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
-\end{equation}
+The residual equation is the same except we know that if $V_x = 0$ then $v = 0$.  
+% can be found by using the velocity triangle in \cref{fig:inflowu} (note that a positive $u$ is in the -x direction using our convention for the positive definition of $a$) or by dividing the existing residual equation (\cref{eq:residual}) by $V_x$, noting that $u = V_x a$, then letting $V_x \rightarrow 0$.
+% \begin{equation}
+%     - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y} = 0
+% \end{equation}
 The relevant quadrants can be determined from the sign of $V_y$.  Because $a^\prime = 0$, just knowing the sign of $V_y$ immediately eliminates two of the four quadrants.  The sign of $u$ is not known, however knowing whether it is a propeller or a turbine (or more generally knowing the sign of the twist) gives us a good idea of what the sign of $u$ will be.  For a positive twist, the most likely scenario is $c_n < 0$ thus $u < 0$, and vice-versa for a negative twist.  The order of quadrants is defined in \cref{tab:bracket2}.
 
 \begin{table}[htb]
@@ -1051,7 +1159,7 @@ $V_y$ & $\theta$ & quadrant order \\
 
 % Note that for this case, there is no singularity at $\phi = 0$, thus we can use different brackets.  For a turbine the most likely scenario is a negative normal force coefficient (unless the turbine has a large negative twist for some reason), thus $\phi > 0$.  Because there is no tangential induction, only one of the two quadrants is physically sensible, and this is known based on the sign of $V_y$.  The above discussion applies for a propeller but with opposite sign for $\phi$.
 
-Once we solve this 1D equation for $\phi$, we can compute the torque distribution purely from blade element theory as momentum theory does not predict any torque for the case $V_x = 0$. We can use either expression for $W$ in \cref{eq:Wopt}.
+Once we solve this 1D equation for $\phi$, we can compute the torque distribution purely from blade element theory as momentum theory does not predict any torque for the case $V_x = 0$. We can use either expression for $W$ in \cref{eq:Woptions}.
 
 %  to compute the thrust and torque as normal
 % \begin{equation}
@@ -1066,16 +1174,24 @@ Once we solve this 1D equation for $\phi$, we can compute the torque distributio
 \caption{Solve the residual equation for the case $V_x = 0$.}
 \begin{algorithmic}
 
-
-\If {$\phi > 0$}
-    \State $u = -\sqrt{\frac{-\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
-    \Comment{If $c_n > 0$ return any nonzero residual}
-\Else
-    \State $u = \sqrt{\frac{\sigma^\prime c_n V_y^2}{4 F \cos^2\phi}}$
-    \Comment{If $c_n < 0$ return any nonzero residual}
-\EndIf
-\\
-\State $\mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y}$
+\State $u = \sgn(\phi)\kappa_0 V_y$
+% \If {$\phi > 0$}
+%     \State $u = \kappa_0 V_y$
+%     \Comment{If $c_n > 0$ return any nonzero residual}
+% \Else
+%     \State $u = -\kappa_0 V_y$
+%     \Comment{If $c_n < 0$ return any nonzero residual}
+% \EndIf
+% \If {$\phi > 0$}
+%     \State $u = -\sqrt{-\kappa_0} |V_y|$
+%     \Comment{If $c_n > 0$ return any nonzero residual}
+% \Else
+%     \State $u = \sqrt{\kappa_0} |V_y|$
+%     \Comment{If $c_n < 0$ return any nonzero residual}
+% \EndIf
+\State $v = 0$
+% \\
+% \State $\mathcal{R}(\phi) = - \frac{\sin\phi}{u(\phi)} - \frac{\cos\phi}{V_y}$
 \end{algorithmic}
 \label{alg:Vx0}
 \end{algorithm}
@@ -1116,7 +1232,7 @@ If $V_y = 0$ we equate momentum theory in \cref{eq:CQmom} with blade element the
 4  F v  V_x  = \sigma^\prime c_t  W^2 \\
 \end{aligned}
 \end{equation}
-If we use one of each substitution for $W = V_x/\sin\phi$ and $W = v/\cos\phi$ from \cref{eq:Wopt} in the above expression we have
+If we use one of each substitution for $W = V_x/\sin\phi$ and $W = v/\cos\phi$ from \cref{eq:Woptions} in the above expression we have:
 \begin{equation}
 \begin{aligned}
 4  F v  V_x  = \sigma^\prime c_t \frac{V_x v}{\sin\phi \cos\phi} \\
@@ -1127,7 +1243,7 @@ Conversely, if we use the case $V_x < 0$, the resulting simplification is
 \begin{equation}
     \kappa^\prime = -1
 \end{equation}
-Like the axial inflow case, these scenarios fill in the singularity shown in \cref{alg:aap}.  For the case $V_y \ne 0$, the calculation of $a^\prime$ is undefined is $\kappa^\prime = 1$ for $V_x > 0$ or if $\kappa^\prime = -1$ for $V_x < 0$.  We see now that it is undefined because that case corresponds to $V_y = 0$.  As in the axial inflow case, we simply return a nonzero residual if that case occurs in \cref{alg:aap}, and we handle the case $V_y = 0$ explicitly below.
+Like the axial inflow case, these scenarios fill in the singularity shown in \cref{alg:v}.  For the case $V_y \ne 0$, the calculation of $a^\prime$ is undefined is $\kappa^\prime = 1$ for $V_x > 0$ or if $\kappa^\prime = -1$ for $V_x < 0$.  We see now that it is undefined because that case corresponds to $V_y = 0$.  As in the axial inflow case, we simply return a nonzero residual if that case occurs for $V_x,V_y \ne 0$, and we handle the case $V_y = 0$ explicitly below.
 
 
 
@@ -1135,9 +1251,17 @@ Like before, the simplifications yielding $\kappa^\prime = \pm1$ are insightful,
 \begin{equation}
     v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} V_x
 \end{equation}
+We define the nondimensional quantity:
+\begin{equation}
+\kappa_0^\prime = \frac{\sigma^\prime c_t}{4 F \sin^2\phi}
+\end{equation}
+giving:
+\begin{equation}
+v = \kappa_0^\prime V_x
+\end{equation}
 and if $V_x < 0$ we have
 \begin{equation}
-    v = -\frac{\sigma^\prime c_t}{4 F \sin^2\phi} V_x
+    v = -\kappa_0^\prime V_x
 \end{equation}
 We see that $v$ follows the sign of $c_t$, which is consistent with the physics discussed in \cref{sec:nowindtan}.  We can condense these two cases as shown in \cref{alg:Vy0}.
 
@@ -1146,22 +1270,22 @@ We see that $v$ follows the sign of $c_t$, which is consistent with the physics 
 %     v = \kappa^\prime V_x
 %     \label{eq:vtoVx}
 % \end{equation}
-The residual equation is
+The residual equation is the same, but with $u = 0$:
 \begin{equation}
     \frac{\sin\phi}{V_x} - \frac{\cos\phi}{v(\phi)} = 0
 \end{equation}
-which we can derive from the velocity triangle in \cref{fig:inflowu} or from \cref{eq:residual} where we set $V_y a^\prime = v$ then allow $V_y \rightarrow 0$.  This form of the residual is actually inconvenient because $v$ can change sign causing a singularity in the denominator.  We arrange to the mathematically equivalent, but better behaved numerically equation:
+% which we can derive from the velocity triangle in \cref{fig:inflowu} or from \cref{eq:residual} where we set $V_y a^\prime = v$ then allow $V_y \rightarrow 0$.  
+This form of the residual is actually inconvenient because $v$ can change sign causing a singularity in the denominator.  We arrange to the mathematically equivalent, but better behaved numerically equation:
 \begin{equation}
     v(\phi)\sin\phi - V_x \cos\phi = 0
 \end{equation}
 
-The quadrant search order is defined in \cref{tab:bracket3}.
-
-Once we solve for $\phi$ we can compute the thrust and torque distributions as normal, but computing $W$ as:
-\begin{equation}
-    W = \frac{V_x}{\sin\phi}
-\end{equation}
+The quadrant search order is defined in \cref{tab:bracket3}.  
 The algorithm for this case is shown in \cref{alg:Vy0}.
+% Once we solve for $\phi$ we can compute the thrust and torque distributions as normal, but computing $W$ as:
+% \begin{equation}
+%     W = \frac{V_x}{\sin\phi}
+% \end{equation}
 
 \begin{table}[htb]
 \centering
@@ -1182,7 +1306,8 @@ $V_x$ & $|\theta|$ & quadrant order \\
 \begin{algorithm}[htbp]
 \caption{Solve the residual equation for the case $V_y = 0$.}
 \begin{algorithmic}
-\State $v = \frac{\sigma^\prime c_t}{4 F \sin^2\phi} |V_x|$
+\State $v = \kappa_0^\prime |V_x|$
+\State $u = 0$
 \\
 \State $\mathcal{R}(\phi) = v(\phi)\sin\phi - V_x \cos\phi$
 
@@ -1213,7 +1338,8 @@ For the simplest case with uniform inflow aligned with the hub, the x- and y-com
     V_y &= \Omega r \cos\Phi
 \end{aligned}
 \end{equation}
-and these velocities are the same at any azimuthal station.  For a more general case, we use the angle definitions shown in \cref{fig:angles} (TODO: include precone).
+and these velocities are the same at any azimuthal station.  For a more general case, we use the angle definitions shown in \cref{fig:angles}.
+% (TODO: include precone).
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=3.5in]{figures/angles}
@@ -1245,16 +1371,17 @@ Once the residual equation is solved, the distributed loads (force per unit leng
 \begin{algorithm}[htbp]
 \caption{Solve for the load distributions.}
 \begin{algorithmic}
-\If {$V_x = 0$}
-% \State $W = \frac{V_y}{\cos\phi}$
-\State $W^2 = u^2 + V_y^2$
-\ElsIf {$V_y = 0$}
-% % \State $W = \frac{V_x}{\sin\phi}$
-\State $W^2 = V_x^2 + v^2$
-\Else
-\State $W^2 = (V_x(1 - a))^2 + (V_y(1 + a^\prime))^2$
-\EndIf
-\\
+% \If {$V_x = 0$}
+% % \State $W = \frac{V_y}{\cos\phi}$
+% % \State $W^2 = u^2 + V_y^2$
+% \State $v = 0$
+% \ElsIf {$V_y = 0$}
+% % % \State $W = \frac{V_x}{\sin\phi}$
+% % \State $W^2 = V_x^2 + v^2$
+% \State $u = 0$
+% \EndIf
+% \Else
+\State $W^2 = (V_x - u)^2 + (V_y + v)^2$
 \\
 \State $q = \frac{1}{2}\rho W^2$
 \State $N^\prime = c_n q c$
@@ -1264,7 +1391,7 @@ Once the residual equation is solved, the distributed loads (force per unit leng
 \label{alg:loads}
 \end{algorithm}
 
-TODO: replace with no curvature/sweep.  I don't feel like our methods are equipped to handle that anyway.
+% TODO: replace with no curvature/sweep.  I don't feel like our methods are equipped to handle that anyway.
 
 The local airfoil coordinate system is shown in \cref{fig:csys}.  The z-direction is directed along the blade, the y-direction opposite to the rotational velocity, and the x-direction given by the right-hand rule (nominally in the downwind direction).  This coordinate system is equally valid for downwind turbines, but in both cases, assumes that the rotor is rotating clockwise when viewed from upwind.  Because the blade may be curved (whether due to a nonstraight design or deflection), the coordinate system is local to each section along the blade (\cref{fig:curved}).  Swept blades can also be handled, but it is assumed that sweep is accomplished through shearing, rather than rotation, so that the local airfoils and local coordinate systems are still defined relative to the unswept rotation direction (\cref{fig:swept}).
 
@@ -1339,6 +1466,6 @@ where $n$ is the rotation rate in revolutions/sec (instead of rad/s) and $D_p = 
 
 
 \bibliographystyle{aiaa}
-\bibliography{/Users/andrewning/Dropbox/BYU/References/flow}
+\bibliography{/Users/aning/Dropbox/byu/References/flow}
 
 \end{document}

@@ -1,30 +1,38 @@
 #=
 Author: Andrew Ning
 
-Blade Element Momentum Method for Propellers and Turbines
-Allows for non-ideal conditions (reversed flow, no wind in one direction, etc.)
+A general blade element momentum (BEM) method for propellers/fans and turbines.
+
+Some unique features:
+- a simple yet very robust solution method
+- allows for non-ideal conditions like reversed flow, or free rotation
+- allows arbitrary inflow
+- convenience methods for common wind turbine inflow scenarios
 
 =#
 
 module CCBlade
 
-using Roots: fzero  # solve residual equation
-using Dierckx  # cubic b-spline for airfoil cl/cd data
-# using ForwardDiff
 
-export AirfoilData, Rotor, Inflow
-export af_from_aerodynfile, af_from_data
+import Dierckx  # cubic b-spline for airfoil data
+import Roots  # solve residual equation
+import Parameters: @unpack
+
+
+export Section, Rotor, Inflow, Outputs
+export af_from_file, af_from_data
 export simpleinflow, windturbineinflow, windturbineinflowmultiple
 export distributedloads, thrusttorque, nondim
 
-# TODO re-add AD gradients
-# include("/Users/andrewning/Dropbox/BYU/repos/gradients/Smooth.jl")
 
-# pretabulated cl/cd data
-struct AirfoilData
-    cl::Spline1D
-    cd::Spline1D
-end
+
+# --------- structs -------------
+
+# # pretabulated cl/cd data
+# struct AirfoilData{T}
+#     cl::T  # a function that accepts alpha, Re, M
+#     cd::T
+# end
 
 """
     Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
@@ -41,33 +49,95 @@ Define rotor geometry.
 - `B::Int64`: number of blades
 - `precone::Float64`: precone angle (rad)
 """
-struct Rotor
-    r#::Array{Float64, 1}
-    chord#::Array{Float64, 1}
-    theta#::Array{Float64, 1}
-    af#::Array{AirfoilData, 1}
-    Rhub#::Float64
-    Rtip#::Float64
-    B#::Int64
-    precone#::Float64
+# struct Rotor{TF, TI, TAF}
+#     r::Array{TF, 1}
+#     chord::Array{TF, 1}
+#     theta::Array{TF, 1}
+#     af::Array{TAF, 1}
+#     Rhub::TF
+#     Rtip::TF
+#     B::TI
+#     precone::TF
+# end
+
+
+struct Section{TF, TAF}
+
+    r::TF
+    chord::TF
+    theta::TF  # includes pitch
+    af::TAF
+
 end
+
+struct Rotor{TF, TI, TB}
+    
+    Rhub::TF
+    Rtip::TF
+    B::TI
+    turbine::TB
+
+end
+
+# make rotor broadcastable as a single entity
+Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
 
 # operating point for the turbine/propeller
-struct Inflow
-    Vx#::Array{Float64, 1}
-    Vy#::Array{Float64, 1}
-    rho#::Float64
+struct Inflow{TF}
+    Vx::TF
+    Vy::TF
+    rho::TF
+    mu::TF
+    asound::TF
 end
 
+Inflow(Vx, Vy, rho) = Inflow(Vx, Vy, rho, 1.0, 1.0)  # if Re and M are unnecessary
+
+
+struct Outputs{TF}
+
+    Np::TF
+    Tp::TF
+    u::TF
+    v::TF
+    phi::TF
+    W::TF
+    cl::TF
+    cd::TF
+    F::TF
+
+end
+
+# constructor for case with no solution found
+Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+
+
+# -------------------------------
+
+
+
+# ----------- airfoil ---------------
+
 
 """
-    af_from_aerodynfile(filename)
+    af_from_file(filename)
 
-Read an airfoil file provided in AeroDyn file format.
-Currently only reads one Reynolds number if multiple exist.
+Read an airfoil file.
+Currently only reads one Reynolds number.
+Additional data like cm is optional but will be ignored.
+alpha should be in degrees
+
+format:
+
+header
+alpha1 cl1 cd1
+alpha2 cl2 cd2
+alpha3 cl3 cd3
+...
+
 Returns an AirfoilData object
 """
-function af_from_aerodynfile(filename)
+function af_from_file(filename)
 
     alpha = Float64[]
     cl = Float64[]
@@ -76,24 +146,18 @@ function af_from_aerodynfile(filename)
     open(filename) do f
 
         # skip header
-        for i = 1:13
-            readline(f)
+        readline(f)
+
+        for line in eachline(f)
+            parts = split(line)
+            push!(alpha, parse(Float64, parts[1]))
+            push!(cl, parse(Float64, parts[2]))
+            push!(cd, parse(Float64, parts[3]))
         end
 
-        # read until EOT
-        while true
-            line = readline(f)
-            if contains(line, "EOT")
-                break
-            end
-            parts = split(line)
-            push!(alpha, float(parts[1]))
-            push!(cl, float(parts[2]))
-            push!(cd, float(parts[3]))
-        end
     end
 
-    return af_from_data(alpha, cl, cd)
+    return af_from_data(alpha*pi/180.0, cl, cd)
 end
 
 
@@ -102,180 +166,107 @@ end
     af_from_data(alpha, cl, cd)
 
 Create an AirfoilData object directly from alpha, cl, and cd arrays.
+alpha should be in radians.
 
-af_from_aerodynfile calls this function indirectly.  Uses a cubic B-spline
+af_from_file calls this function indirectly.  Uses a cubic B-spline
 (if the order of the data permits it).  A small amount of smoothing of
 lift and drag coefficients is also applied to aid performance
 for gradient-based optimization.
 """
 function af_from_data(alpha, cl, cd)
 
+    # # TODO: update once smoothing is implemented: https://github.com/JuliaMath/Interpolations.jl/issues/254
+    # afcl = CubicSplineInterpolation(alpha, cl)
+    # afcd = CubicSplineInterpolation(alpha, cd)
+    # af = AirfoilData(afcl, afcd)
+
     k = min(length(alpha)-1, 3)  # can't use cubic spline is number of entries in alpha is small
 
     # 1D interpolations for now.  ignoring Re dependence (which is very minor)
-    afcl = Dierckx.Spline1D(alpha*pi/180.0, cl; k=k, s=0.1)
-    afcd = Dierckx.Spline1D(alpha*pi/180.0, cd; k=k, s=0.001)
-    af = AirfoilData(afcl, afcd)
+    afcl_1d = Dierckx.Spline1D(alpha, cl; k=k, s=0.1)
+    afcd_1d = Dierckx.Spline1D(alpha, cd; k=k, s=0.001)
 
-    return af
+    afeval(alpha, Re, M) = afcl_1d(alpha), afcd_1d(alpha)  # ignore Re, M 
+
+    return afeval
 end
 
 
-"""
-private
+# """
+# private
 
-evalute airfoil spline at alpha
-"""
-function airfoil(af::AirfoilData, alpha::Float64)
+# evalute airfoil spline at alpha (rad), Reynolds number, Mach number
+# """
+# function airfoil(af, alpha, Re, M)
 
-    cl = af.cl(alpha)
-    cd = af.cd(alpha)
+#     cl, cd = af(alpha, Re, M)
 
-    return cl, cd
-end
+#     return cl, cd
+# end
 
 
-# function airfoil{T<:ForwardDiff.Dual}(af::AirfoilData, alpha::T)
-#
-#     a = GradEval.values(alpha)[1]
+# function airfoil(af::AirfoilData, alpha::T) where {T<:ForwardDiff.Dual}
+
+#     a = Gradients.values(alpha)[1]
 #     cl, cd = airfoil(af, a)
-#
+
 #     dclda = Dierckx.derivative(af.cl, a)
 #     dcdda = Dierckx.derivative(af.cd, a)
-#
-#     cldual = GradEval.manualderiv(cl, alpha, dclda)
-#     cddual = GradEval.manualderiv(cd, alpha, dcdda)
-#
+
+#     cldual = Gradients.manualderiv(cl, alpha, dclda)
+#     cddual = Gradients.manualderiv(cd, alpha, dcdda)
+
 #     return cldual, cddual
 # end
 
-"""
-    simpleinflow(Vinf, Omega, r, precone, rho)
-
-Uniform inflow through rotor.  Returns an Inflow object.
-
-**Arguments**
-- `Vinf::Float64`: freestream speed (m/s)
-- `Omega::Float64`: rotation speed (rad/s)
-- `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
-- `precone::Float64`: precone angle (rad)
-- `rho::Float64`: air density (kg/m^3)
-"""
-function simpleinflow(Vinf, Omega, r, precone, rho)
-
-    Vx = Vinf * cos(precone) * ones(r)
-    Vy = Omega * r * cos(precone)
-
-    return Inflow(Vx, Vy, rho)
-
-end
-
-"""
-    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-
-Compute relative wind velocity components along blade accounting for inflow conditions
-and orientation of turbine.  See theory doc for angle definitions.
-
-**Arguments**
-- `Vinf::Float64`: freestream speed (m/s)
-- `Omega::Float64`: rotation speed (rad/s)
-- `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
-- `precone::Float64`: precone angle (rad)
-- `yaw::Float64`: yaw angle (rad)
-- `tilt::Float64`: tilt angle (rad)
-- `azimuth::Float64`: azimuth angle (rad)
-- `hubHt::Float64`: hub height (m) - used for shear
-- `shearExp::Float64`: power law shear exponent
-- `rho::Float64`: air density (kg/m^3)
-"""
-function windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-
-    sy = sin(yaw)
-    cy = cos(yaw)
-    st = sin(tilt)
-    ct = cos(tilt)
-    sa = sin(azimuth)
-    ca = cos(azimuth)
-    sc = sin(precone)
-    cc = cos(precone)
-
-    # coordinate in azimuthal coordinate system
-    x_az = -r*sin(precone)
-    z_az = r*cos(precone)
-    y_az = zeros(r)  # could omit (the more general case allows for presweep so this is nonzero)
-
-    # get section heights in wind-aligned coordinate system
-    heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
-
-    # velocity with shear
-    V = Vinf*(1 + heightFromHub/hubHt).^shearExp
-
-    # transform wind to blade c.s.
-    Vwind_x = V .* ((cy*st*ca + sy*sa)*sc + cy*ct*cc)
-    Vwind_y = V .* (cy*st*sa - sy*ca)
-
-    # wind from rotation to blade c.s.
-    Vrot_x = -Omega*y_az.*sc
-    Vrot_y = Omega*z_az
-
-    # total velocity
-    Vx = Vwind_x + Vrot_x
-    Vy = Vwind_y + Vrot_y
-
-    # operating point
-    return Inflow(Vx, Vy, rho)
-
-end
-
-"""
-    windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
-
-Convenience function that calls windturbineinflow multiple times, once for each azimuthal angle.
-The azimuth angles are uniformly spaced (starting at 0) based on the number of sectors that
-the user wishes to divide the rotor into.
-"""
-function windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
 
 
-    infs = Array{Inflow}(nsectors)
-
-    for j = 1:nsectors
-        azimuth = 2*pi*float(j)/nsectors
-        infs[j] = windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
-    end
-
-    return infs
-end
+# ---------------------------------
 
 
 
-# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]  (potential design variables or dependencies of design variables)
-# p = [af, B]  (parameters)
+
+
+
+# ------------ BEM core ------------------
+
+
+
 """
 (private)
 residual function
 base calculations used in normal case, Vx=0 case, and Vy=0 case
 """
-function residualbase(phi, x, p)
+function residual(phi, section, inflow, rotor)
 
-    # unpack variables for convenience
-    r, chord, twist, Vx, Vy, Rhub, Rtip, rho = x
-    af, B = p
+    # unpack inputs
+    @unpack r, chord, theta, af = section
+    @unpack Vx, Vy, rho, mu, asound = inflow
+    @unpack Rhub, Rtip, B, turbine = rotor
+
+    # check if turbine or propeller and change input sign if necessary
+    swapsign = turbine ? 1 : -1
+    theta *= swapsign
+    Vx *= swapsign
+    Vy *= swapsign
 
     # constants
-    sigma_p = B/2.0/pi*chord/r
+    sigma_p = B*chord/(2.0*pi*r)
     sphi = sin(phi)
     cphi = cos(phi)
 
     # angle of attack
-    alpha = phi - twist
+    alpha = phi - theta
 
-    # # Reynolds number (not currently used)
-    # W_Re = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
-    # Re = rho * W_Re * chord / mu
+    # Reynolds number
+    W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
+    Re = rho * W0 * chord / mu
+
+    # Mach number
+    Mach = W0/asound  # also ignoring induction
 
     # airfoil cl/cd
-    cl, cd = airfoil(af, alpha)
+    cl, cd = af(alpha, Re, Mach)
 
     # resolve into normal and tangential forces
     cn = cl*cphi + cd*sphi
@@ -293,143 +284,197 @@ function residualbase(phi, x, p)
     kp = ct*sigma_p/(4.0*F*sphi*cphi)
 
     # parameters used in Vx=0 and Vy=0 cases
-    k2 = cn*sigma_p/(4.0*F*cphi*cphi)
-    kp2 = ct*sigma_p/(4.0*F*sphi*sphi)
-
-    # force for unit W (because W varies between cases)
-    Nunit = cn*0.5*rho*chord
-    Tunit = ct*0.5*rho*chord
-
-    return k, kp, F, k2, kp2, Nunit, Tunit
-
-end
+    k0 = cn*sigma_p/(4.0*F*sphi*cphi)
+    k0p = ct*sigma_p/(4.0*F*sphi*sphi)
 
 
-# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
-# p = [af, B]
-"""
-(private)
-residual for normal case
-"""
-function residual(phi, x, p)  #sec::Section)
+    # --- solve for induced velocities ------
+    if isapprox(Vx, 0.0, atol=1e-6)
 
-    k, kp, F, _, _, Nu, Tu = residualbase(phi, x, p)
-    Vx = x[4]
-    Vy = x[5]
+        u = sign(phi)*k0*Vy
+        v = 0.0
 
-    # -------- axial induction ----------
-    if phi < 0
-        k = -k
-    end
+    elseif isapprox(Vy, 0.0, atol=1e-6)
+        
+        u = 0.0
+        v = k0p*abs(Vx)
+    
+    else
 
-    if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-        R = 1.0
-        return R, 0.0, 0.0, 0.0, 0.0
-    end
-
-    if k <= 2.0/3  # momentum region
-        a = k/(1 + k)
-
-    else  # empirical region
-        g1 = 2.0*F*k - (10.0/9-F)
-        g2 = 2.0*F*k - (4.0/3-F)*F
-        g3 = 2.0*F*k - (25.0/9-2*F)
-
-        if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-            a = 1.0 - 1.0/(2.0*sqrt(g2))
-        else
-            a = (g1 - sqrt(g2)) / g3
+        if phi < 0
+            k = -k
         end
-    end
 
-    # -------- tangential induction ----------
-    if Vx < 0
-        kp = -kp
-    end
+        if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+            return 1.0, Outputs()
+        end
 
-    if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-        R = 1.0
-        return R, 0.0, 0.0, 0.0, 0.0
-    end
+        if k <= 2.0/3  # momentum region
+            u = Vx*k/(1 + k)
 
-    ap = kp/(1 - kp)
+        else  # empirical region
+            g1 = 2.0*F*k - (10.0/9-F)
+            g2 = 2.0*F*k - (4.0/3-F)*F
+            g3 = 2.0*F*k - (25.0/9-2*F)
+
+            if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
+                u = Vx*(1.0 - 1.0/(2.0*sqrt(g2)))
+            else
+                u = Vx*((g1 - sqrt(g2)) / g3)
+            end
+        end
+
+        # -------- tangential induction ----------
+        if Vx < 0
+            kp = -kp
+        end
+
+        if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+            return 1.0, Outputs()
+        end
+
+        v = Vy*kp/(1 - kp)
+    end
 
 
     # ------- residual function -------------
-    R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
+    # R = sin(phi)*(Vy + v) - cos(phi)*(Vx - u)
+    R = sin(phi)/(Vx - u) - cos(phi)/(Vy + v)
 
     # ------- loads ---------
-    W2 = (Vx*(1-a))^2 + (Vy*(1+ap))^2
-    Np = Nu*W2
-    Tp = Tu*W2
+    W2 = (Vx - u)^2 + (Vy + v)^2
+    Np = cn*0.5*rho*W2*chord
+    Tp = ct*0.5*rho*W2*chord
 
-    return R, Np, Tp, Vx*a*F, Vy*ap*F  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
+    # ---- swap output signs as needed -----
+    Tp *= swapsign
+    v *= swapsign
+
+    
+    return R, Outputs(Np, Tp, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
+
 end
 
 
+# """
+# (private)
+# residual for normal case
+# """
+# function residual(phi, section, inflow, rotor)
 
-# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
-# p = [af, B]
-"""
-(private)
-residual for Vx=0 case
-"""
-function residualVx0(phi, x, p)
+#     k, kp, F, _, _, Nu, Tu = residualbase(phi, section, inflow, rotor)
 
-    # base params
-    _, _, _, k2, _, Nu, Tu = residualbase(phi, x, p)
-    Vy = x[5]
+#     Vx = inflow.Vx
+#     Vy = inflow.Vy
 
-    os = -sign(phi)
+#     # -------- axial induction ----------
+#     if phi < 0
+#         k = -k
+#     end
 
-    if os*k2 < 0
-        R = 1.0  # any nonzero residual
+#     if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+#         return 1.0, Outputs()
+#     end
 
-        u = 0.0
-        Np = 0.0
-        Tp = 0.0
-    else
-        # induced velocity
-        u = os*sqrt(os*k2)*abs(Vy)
+#     if k <= 2.0/3  # momentum region
+#         a = k/(1 + k)
 
-        # residual
-        R = - sin(phi)/u - cos(phi)/Vy
+#     else  # empirical region
+#         g1 = 2.0*F*k - (10.0/9-F)
+#         g2 = 2.0*F*k - (4.0/3-F)*F
+#         g3 = 2.0*F*k - (25.0/9-2*F)
 
-        # loads
-        W2 = u^2 + Vy^2
-        Np = Nu*W2
-        Tp = Tu*W2
-    end
+#         if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
+#             a = 1.0 - 1.0/(2.0*sqrt(g2))
+#         else
+#             a = (g1 - sqrt(g2)) / g3
+#         end
+#     end
+
+#     # -------- tangential induction ----------
+#     if Vx < 0
+#         kp = -kp
+#     end
+
+#     if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+#         R = 1.0
+#         return 1.0, Outputs()
+#     end
+
+#     ap = kp/(1 - kp)
 
 
-    return R, Np, Tp, u, 0.0  # F already included in these velocity deficits
-end
+#     # ------- residual function -------------
+#     R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
 
-# x = [r, chord, twist, Vx, Vy, Rhub, Rtip, rho]
-# p = [af, B]
-"""
-(private)
-residual for Vy=0 case
-"""
-function residualVy0(phi, x, p)
+#     # ------- loads ---------
+#     W2 = (Vx*(1-a))^2 + (Vy*(1+ap))^2
+#     Np = Nu*W2
+#     Tp = Tu*W2
 
-    # base params
-    _, _, _, _, kp2, Nu, Tu = residualbase(phi, x, p)
-    Vx = x[4]
+#     return R, Outputs(Np, Tp, a, ap, phi, sqrt(W), Vx*a*F, Vy*ap*F, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
+# end
 
-    # induced velocity
-    v = kp2*abs(Vx)
 
-    # residual
-    R = v*sin(phi) - Vx*cos(phi)
 
-    # loads
-    W2 = v^2 + Vx^2
-    Np = Nu*W2
-    Tp = Tu*W2
+# """
+# (private)
+# residual for Vx=0 case
+# """
+# function residualVx0(phi, section, inflow, rotor)
 
-    return R, Np, Tp, 0.0, v
-end
+#     # base params
+#     _, _, F, k2, _, Nu, Tu = residualbase(phi, section, inflow, rotor)
+
+#     Vy = inflow.Vy
+#     os = -sign(phi)
+
+#     if os*k2 < 0  # return any nonzero residual
+#         return 1.0, Outputs()
+#     end
+
+
+#     # induced velocity
+#     u = os*sqrt(os*k2)*abs(Vy)
+
+#     # residual
+#     R = - sin(phi)/u - cos(phi)/Vy
+
+#     # loads
+#     W2 = u^2 + Vy^2
+#     Np = Nu*W2
+#     Tp = Tu*W2
+
+#     return R, Outputs(Np, Tp, 0.0, 0.0, phi, sqrt(W2), u, 0.0, F)  # F already included in these velocity deficits.  a, ap both meaningless
+
+# end
+
+
+
+# """
+# (private)
+# residual for Vy=0 case
+# """
+# function residualVy0(phi, section, inflow, rotor)
+
+#     # base params
+#     _, _, F, _, kp2, Nu, Tu = residualbase(phi, section, inflow, rotor)
+
+#     Vx = inflow.Vx
+    
+#     # induced velocity
+#     v = kp2*abs(Vx)
+
+#     # residual
+#     R = v*sin(phi) - Vx*cos(phi)
+
+#     # loads
+#     W2 = v^2 + Vx^2
+#     Np = Nu*W2
+#     Tp = Tu*W2
+
+#     return R, Outputs(Np, Tp, 0.0, 0.0, phi, sqrt(W2), 0.0, v, F)
+# end
 
 
 
@@ -443,7 +488,7 @@ If found = true a bracket was found between (xl, xu)
 """
 function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 
-    xvec = linspace(xmin, xmax, n)
+    xvec = range(xmin, xmax, length=n)
     if backwardsearch  # start from xmax and work backwards
         xvec = reverse(xvec)
     end
@@ -467,25 +512,21 @@ end
 
 
 """
-    distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
-
-Compute the distributed loads along blade at specified condition.
-turbine can be true/false depending on if the analysis is for a turbine or prop
-(just affects some input/output conventions as noted in the theory doc).
-
-**Returns**
-- `Np::Array{Float64, 1}`: force per unit length in the normal direction (N/m)
-- `Tp::Array{Float64, 1}`: force per unit length in the tangential direction (N/m)
-- `uvec::Array{Float64, 1}`: induced velocity in x direction
-- `vvec::Array{Float64, 1}`: induced velocity in y direction
+distributed loads for one section
 """
-function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
-
-    # check if propeller
-    swapsign = turbine ? 1 : -1
+function distributedloads(section, inflow, rotor)
 
     # parameters
     npts = 20  # number of discretization points to find bracket in residual solve
+
+    # unpack
+    Vx = inflow.Vx
+    Vy = inflow.Vy
+    twist = section.theta
+
+    # ---- determine quadrants based on case -----
+    Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
+    Vy_is_zero = isapprox(Vy, 0.0, atol=1e-6)
 
     # quadrants
     epsilon = 1e-6
@@ -494,150 +535,229 @@ function distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
     q3 = [pi/2, pi-epsilon]
     q4 = [-pi+epsilon, -pi/2]
 
-    # initialize arrays
-    n = length(rotor.r)
-    Np = zeros(n)
-    Tp = zeros(n)
-    uvec = zeros(n)
-    vvec = zeros(n)
+    if Vx_is_zero && Vy_is_zero
+        return Outputs()
 
-    # if isa(rotor.r[1], ForwardDiff.Dual)  # hack for now...I shouldn't have to do this.
-    #     nd = length(ForwardDiff.partials(rotor.r[1]))
-    #     Np = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
-    #     Tp = Array{ForwardDiff.Dual{nd,Float64}}(n)  # an array of dual numbers
-    #
-    # else
-    #     Np = zeros(n)
-    #     Tp = zeros(n)
-    # end
+    elseif Vx_is_zero
 
-    for i = 1:n  # iterate across blade
-
-        # setup
-        twist = swapsign*rotor.theta[i] #  + op.pitch  TODO: pitch is just part of theta specificiation
-        Vx = swapsign*inflow.Vx[i]
-        Vy = inflow.Vy[i]
         startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
-        # Vx = 0 and Vy = 0
-        if isapprox(Vx, 0.0, atol=1e-6) && isapprox(Vy, 0.0, atol=1e-6)
-            Np[i] = 0.0; Tp[i] = 0.0
-            break
-
-        # Vx = 0
-    elseif isapprox(Vx, 0.0, atol=1e-6)
-
-            resid = residualVx0
-
-            if Vy > 0 && twist > 0
-                order = (q1, q2)
-            elseif Vy > 0 && twist < 0
-                order = (q2, q1)
-            elseif Vy < 0 && twist > 0
-                order = (q3, q4)
-            else  # Vy < 0 && twist < 0
-                order = (q4, q3)
-            end
-
-        # Vy = 0
-    elseif isapprox(Vy, 0.0, atol=1e-6)
-
-            resid = residualVy0
-            startfrom90 = true  # start bracket search from 90 deg
-
-            if Vx > 0 && abs(twist) < pi/2
-                order = (q1, q3)
-            elseif Vx < 0 && abs(twist) < pi/2
-                order = (q2, q4)
-            elseif Vx > 0 && abs(twist) > pi/2
-                order = (q3, q1)
-            else  # Vx < 0 && abs(twist) > pi/2
-                order = (q4, q2)
-            end
-
-        else  # normal case
-
-            resid = residual
-
-            if Vx > 0 && Vy > 0
-                order = (q1, q2, q3, q4)
-            elseif Vx < 0 && Vy > 0
-                order = (q2, q1, q4, q3)
-            elseif Vx > 0 && Vy < 0
-                order = (q3, q4, q1, q2)
-            else  # Vx < 0 && Vy < 0
-                order = (q4, q3, q2, q1)
-            end
-
+        if Vy > 0 && twist > 0
+            order = (q1, q2)
+        elseif Vy > 0 && twist < 0
+            order = (q2, q1)
+        elseif Vy < 0 && twist > 0
+            order = (q3, q4)
+        else  # Vy < 0 && twist < 0
+            order = (q4, q3)
         end
 
-        # wrapper to residual function to accomodate format required by fzero
-        x = [rotor.r[i], rotor.chord[i], twist, Vx, Vy, rotor.Rhub, rotor.Rtip, inflow.rho]
-        p = [rotor.af[i], rotor.B]
-        function func(x, phi)
-            zero, Npinner, Tpinner = resid(phi, x, p)
-            return [Npinner; Tpinner], zero
+    elseif Vy_is_zero
+
+        startfrom90 = true  # start bracket search from 90 deg
+
+        if Vx > 0 && abs(twist) < pi/2
+            order = (q1, q3)
+        elseif Vx < 0 && abs(twist) < pi/2
+            order = (q2, q4)
+        elseif Vx > 0 && abs(twist) > pi/2
+            order = (q3, q1)
+        else  # Vx < 0 && abs(twist) > pi/2
+            order = (q4, q2)
         end
 
-        function R(phi)
-            zero, _, _, _, _ = resid(phi, x, p)
-            return zero
+    else  # normal case
+
+        startfrom90 = false
+
+        if Vx > 0 && Vy > 0
+            order = (q1, q2, q3, q4)
+        elseif Vx < 0 && Vy > 0
+            order = (q2, q1, q4, q3)
+        elseif Vx > 0 && Vy < 0
+            order = (q3, q4, q1, q2)
+        else  # Vx < 0 && Vy < 0
+            order = (q4, q3, q2, q1)
         end
 
-        success = false
-        for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
-            phimin = order[j][1]
-            phimax = order[j][2]
-
-            # check to see if it would be faster to reverse the bracket search direction
-            backwardsearch = false
-            if !startfrom90
-                if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
-                    backwardsearch = true
-                end
-            else
-                if phimax == pi/2  # q1
-                    backwardsearch = true
-                end
-            end
-
-            # find bracket
-            success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
-
-            # once bracket is found, solve root finding problem and compute loads
-            if success
-
-                # f = Smooth.fzerod(func, fzero, x, phiL, phiU)
-                #
-                # Np[i] = f[1]
-                # Tp[i] = f[2]
-
-                phistar = fzero(R, phiL, phiU)
-                _, Np[i], Tp[i], uvec[i], vvec[i] = resid(phistar, x, p)
-
-                break
-            end
-
-            # if no solution found, it just returns zeros for this section, although this really shouldn't get here
-            # alternatively, one could increase npts and try again
-        end
     end
 
-    # reverse sign of outputs for propellers
-    Tp *= swapsign
-    vvec *= swapsign
+    # ----- solve residual function ------
 
-    return Np, Tp, uvec, vvec
+    # wrapper to residual function to accomodate format required by fzero
+    function R(phi)
+        zero, _ = residual(phi, section, inflow, rotor)
+        return zero
+    end
+
+    success = false
+    for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
+        phimin, phimax = order[j]
+
+        # check to see if it would be faster to reverse the bracket search direction
+        backwardsearch = false
+        if !startfrom90
+            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                backwardsearch = true
+            end
+        else
+            if phimax == pi/2  # q1
+                backwardsearch = true
+            end
+        end
+
+        # find bracket
+        success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
+
+        # once bracket is found, solve root finding problem and compute loads
+        if success
+
+            phistar = Roots.fzero(R, phiL, phiU)
+            _, outputs = residual(phistar, section, inflow, rotor)
+
+            return outputs
+        end        
+    end
+
+    # it shouldn't get to this point.  if it does it means no solution was found
+    # it will return empty outputs
+    # alternatively, one could increase npts and try again
+    
+    return Outputs()
 end
 
 
+"""
+    distributedloads(rotor::Rotor, inflow::Inflow, turbine::Bool)
+
+Compute the distributed loads along blade at specified condition.
+turbine can be true/false depending on if the analysis is for a turbine or prop
+(just affects some input/output conventions as noted in the user doc).
+
+**Returns**
+- `Np::Array{Float64, 1}`: force per unit length in the normal direction (N/m)
+- `Tp::Array{Float64, 1}`: force per unit length in the tangential direction (N/m)
+- `uvec::Array{Float64, 1}`: induced velocity in x direction
+- `vvec::Array{Float64, 1}`: induced velocity in y direction
+"""
+
+
+
+# ------------ inflow ------------------
+
 
 
 """
-(private)
+    simpleinflow(Vinf, Omega, r, precone, rho)
+
+Uniform inflow through rotor.  Returns an Inflow object.
+
+**Arguments**
+- `Vinf::Float64`: freestream speed (m/s)
+- `Omega::Float64`: rotation speed (rad/s)
+- `r::Float64`: radial location where inflow is computed (m)
+- `precone::Float64`: precone angle (rad)
+- `rho::Float64`: air density (kg/m^3)
+"""
+function simpleinflow(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+
+    Vx = Vinf * cos(precone)
+    Vy = Omega * r * cos(precone)
+
+    return Inflow(Vx, Vy, rho, mu, asound)
+
+end
+
+"""
+    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+
+Compute relative wind velocity components along blade accounting for inflow conditions
+and orientation of turbine.  See theory doc for angle definitions.
+
+**Arguments**
+- `Vinf::Float64`: freestream speed (m/s)
+- `Omega::Float64`: rotation speed (rad/s)
+- `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
+- `precone::Float64`: precone angle (rad)
+- `yaw::Float64`: yaw angle (rad)
+- `tilt::Float64`: tilt angle (rad)
+- `azimuth::Float64`: azimuth angle (rad)
+- `hubHt::Float64`: hub height (m) - used for shear
+- `shearExp::Float64`: power law shear exponent
+- `rho::Float64`: air density (kg/m^3)
+"""
+function windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu, asound)
+
+    sy = sin(yaw)
+    cy = cos(yaw)
+    st = sin(tilt)
+    ct = cos(tilt)
+    sa = sin(azimuth)
+    ca = cos(azimuth)
+    sc = sin(precone)
+    cc = cos(precone)
+
+    # coordinate in azimuthal coordinate system
+    x_az = -r*sin(precone)
+    z_az = r*cos(precone)
+    y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero)
+
+    # get section heights in wind-aligned coordinate system
+    heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
+
+    # velocity with shear
+    V = Vinf*(1 + heightFromHub/hubHt)^shearExp
+
+    # transform wind to blade c.s.
+    Vwind_x = V * ((cy*st*ca + sy*sa)*sc + cy*ct*cc)
+    Vwind_y = V * (cy*st*sa - sy*ca)
+
+    # wind from rotation to blade c.s.
+    Vrot_x = -Omega*y_az*sc
+    Vrot_y = Omega*z_az
+
+    # total velocity
+    Vx = Vwind_x + Vrot_x
+    Vy = Vwind_y + Vrot_y
+
+    # operating point
+    return Inflow(Vx, Vy, rho, mu, asound)
+
+end
+
+
+# """
+#     windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+
+# Convenience function that calls windturbineinflow multiple times, once for each azimuthal angle.
+# The azimuth angles are uniformly spaced (starting at 0) based on the number of sectors that
+# the user wishes to divide the rotor into.
+# """
+# function windturbineinflowmultiple(nsectors, Vinf, Omega, r, precone, yaw, tilt, hubHt, shearExp, rho)
+
+
+#     infs = Array{Inflow}(undef, nsectors)
+
+#     for j = 1:nsectors
+#         azimuth = 2*pi*float(j)/nsectors
+#         infs[j] = windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+#     end
+
+#     return infs
+# end
+
+
+
+# -------------------------------------
+
+
+# -------- integrate loads ------------
+
+
+"""
 integrate the thrust/torque across the blade, including 0 loads at hub/tip
 """
-function thrusttorqueintegrate(Rhub, r, Rtip, precone, Np, Tp)
+function thrusttorque(Rhub, r, Rtip, precone, Np, Tp, B)
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rfull = [Rhub; r; Rtip]
@@ -648,8 +768,8 @@ function thrusttorqueintegrate(Rhub, r, Rtip, precone, Np, Tp)
     thrust = Npfull*cos(precone)
     torque = Tpfull.*rfull*cos(precone)
 
-    T = trapz(rfull, thrust)
-    Q = trapz(rfull, torque)
+    T = B * trapz(rfull, thrust)
+    Q = B * trapz(rfull, torque)
 
     return T, Q
 end
@@ -659,7 +779,7 @@ end
 (private)
 trapezoidal integration
 """
-function trapz(x::Array{Float64,1}, y::Array{Float64,1})  # integrate y w.r.t. x
+function trapz(x, y)  # integrate y w.r.t. x
 
     integral = 0.0
     for i = 1:length(x)-1
@@ -678,26 +798,27 @@ Compute thrust and toruqe at the provided inflow conditions.
 - `T::Float64`: thrust (N)
 - `Q::Float64`: torque (N-m)
 """
-function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #, nsectors::Int64)
+# function thrusttorque(rotor::Rotor, inflow::Array{Inflow, 1}, turbine::Bool)  #, nsectors::Int64)
+# function thrusttorque(sections, inflows, rotor
 
-    nsectors = length(inflow)  # number of sectors (should be evenly spaced)
-    T = 0.0
-    Q = 0.0
+#     nsectors = length(inflow)  # number of sectors (should be evenly spaced)
+#     T = 0.0
+#     Q = 0.0
 
-    # coarse integration - rectangle rule
-    for j = 1:nsectors  # integrate across azimuth
+#     # coarse integration - rectangle rule
+#     for j = 1:nsectors  # integrate across azimuth
 
-        Np, Tp = distributedloads(rotor, inflow[j], turbine)
+#         Np, Tp = distributedloads(rotor, inflow[j], turbine)
 
-        Tsub, Qsub = thrusttorqueintegrate(rotor.Rhub, rotor.r, rotor.Rtip, rotor.precone, Np, Tp)
+#         Tsub, Qsub = thrusttorqueintegrate(rotor.Rhub, rotor.r, rotor.Rtip, rotor.precone, Np, Tp)
 
-        T += rotor.B * Tsub / nsectors
-        Q += rotor.B * Qsub / nsectors
-    end
+#         T += rotor.B * Tsub / nsectors
+#         Q += rotor.B * Qsub / nsectors
+#     end
 
-    return T, Q
+#     return T, Q
 
-end
+# end
 
 
 """
@@ -725,12 +846,12 @@ if propeller
 - `CT::Float64`: thrust coefficient
 - `CQ::Float64`: torque coefficient
 """
-function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
+function nondim(T, Q, Vhub, Omega, rho, Rtip, rotortype, precone=0.0)
 
     P = Q * Omega
     Rp = Rtip*cos(precone)
 
-    if turbine
+    if rotortype == "windturbine"
 
         q = 0.5 * rho * Vhub^2
         A = pi * Rp^2
@@ -741,7 +862,7 @@ function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
 
         return CP, CT, CQ
 
-    else
+    elseif rotortype == "propeller"
 
         n = Omega/(2*pi)
         Dp = 2*Rp
@@ -756,6 +877,15 @@ function nondim(T, Q, Vhub, Omega, rho, Rtip, precone, turbine)
 
         return eff, CT, CQ
 
+    elseif rotortype == "helicopter"
+
+        A = pi * Rp^2
+
+        CT = T / (rho * A * (Omega*Rp)^2)
+        CP = P / (rho * A * (Omega*Rp)^3)
+        FM = CT^(3/2)/(sqrt(2)*CP)
+
+        return FM, CT, CP
     end
 
 end

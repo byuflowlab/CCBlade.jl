@@ -52,3 +52,6 @@ velocity-deficit.pdf
 
 # jupyter
 .ipynb_checkpoints
+
+docs/build/
+docs/site/
