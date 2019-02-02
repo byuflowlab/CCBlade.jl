@@ -22,7 +22,7 @@ import Parameters: @unpack
 export Section, Rotor, Inflow, Outputs
 export af_from_file, af_from_data
 export simpleinflow, windturbineinflow, windturbineinflowmultiple
-export distributedloads, thrusttorque, nondim
+export solve, loads, wakeproperties, thrusttorque, nondim
 
 
 
@@ -248,7 +248,7 @@ function residual(phi, section, inflow, rotor)
     swapsign = turbine ? 1 : -1
     theta *= swapsign
     Vx *= swapsign
-    Vy *= swapsign
+    # Vy *= swapsign
 
     # constants
     sigma_p = B*chord/(2.0*pi*r)
@@ -339,6 +339,7 @@ function residual(phi, section, inflow, rotor)
 
     # ------- residual function -------------
     # R = sin(phi)*(Vy + v) - cos(phi)*(Vx - u)
+    # R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
     R = sin(phi)/(Vx - u) - cos(phi)/(Vy + v)
 
     # ------- loads ---------
@@ -350,7 +351,6 @@ function residual(phi, section, inflow, rotor)
     Tp *= swapsign
     v *= swapsign
 
-    
     return R, Outputs(Np, Tp, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
 
 end
@@ -514,15 +514,21 @@ end
 """
 distributed loads for one section
 """
-function distributedloads(section, inflow, rotor)
+function solve(section, inflow, rotor)
+
+    # error handling
+    if typeof(section) <: Array
+        error("You passed in an array, but this funciton does not accept an array.\nProbably you intended to use broadcasting (notice the dot): solve.(sections, inflows, rotor)")
+    end
 
     # parameters
     npts = 20  # number of discretization points to find bracket in residual solve
 
     # unpack
-    Vx = inflow.Vx
+    swapsign = rotor.turbine ? 1 : -1
+    Vx = inflow.Vx * swapsign  # TODO: shouldn't be doing the sign swap in two different places
     Vy = inflow.Vy
-    twist = section.theta
+    twist = section.theta * swapsign
 
     # ---- determine quadrants based on case -----
     Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
@@ -751,13 +757,35 @@ end
 # -------------------------------------
 
 
-# -------- integrate loads ------------
+# -------- convenience methods ------------
+
+function loads(outputs)
+    Np = getfield.(outputs, :Np)
+    Tp = getfield.(outputs, :Tp)
+    
+    return Np, Tp
+end
+
+
+function wakeproperties(inflows, outputs)
+
+    u = getfield.(outputs, :u)
+    v = getfield.(outputs, :v)
+    Vx = getfield.(inflows, :Vx)
+    Vy = getfield.(inflows, :Vy)
+
+    a = u ./ Vx
+    ap = v ./ Vy
+
+    return a, ap, u, v
+
+end
 
 
 """
 integrate the thrust/torque across the blade, including 0 loads at hub/tip
 """
-function thrusttorque(Rhub, r, Rtip, precone, Np, Tp, B)
+function thrusttorque(Rhub, r, Rtip, Np, Tp, B, precone=0.0)
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rfull = [Rhub; r; Rtip]
