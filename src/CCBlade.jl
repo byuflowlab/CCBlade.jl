@@ -22,17 +22,12 @@ import Parameters: @unpack
 export Section, Rotor, Inflow, Outputs
 export af_from_file, af_from_data
 export simpleinflow, windturbineinflow, windturbineinflowmultiple
-export solve, loads, wakeproperties, thrusttorque, nondim
+export solve, loads, effectivewake, thrusttorque, nondim
 
 
 
 # --------- structs -------------
 
-# # pretabulated cl/cd data
-# struct AirfoilData{T}
-#     cl::T  # a function that accepts alpha, Re, M
-#     cd::T
-# end
 
 """
     Rotor(r, chord, theta, af, Rhub, Rtip, B, precone)
@@ -98,6 +93,8 @@ struct Outputs{TF}
 
     Np::TF
     Tp::TF
+    a::TF
+    ap::TF
     u::TF
     v::TF
     phi::TF
@@ -109,7 +106,7 @@ struct Outputs{TF}
 end
 
 # constructor for case with no solution found
-Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 
 # -------------------------------
@@ -293,11 +290,15 @@ function residual(phi, section, inflow, rotor)
 
         u = sign(phi)*k0*Vy
         v = 0.0
+        a = 0.0
+        ap = 0.0
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
         
         u = 0.0
         v = k0p*abs(Vx)
+        a = 0.0
+        ap = 0.0
     
     else
 
@@ -310,7 +311,7 @@ function residual(phi, section, inflow, rotor)
         end
 
         if k <= 2.0/3  # momentum region
-            u = Vx*k/(1 + k)
+            a = k/(1 + k)
 
         else  # empirical region
             g1 = 2.0*F*k - (10.0/9-F)
@@ -318,11 +319,13 @@ function residual(phi, section, inflow, rotor)
             g3 = 2.0*F*k - (25.0/9-2*F)
 
             if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-                u = Vx*(1.0 - 1.0/(2.0*sqrt(g2)))
+                a = 1.0 - 1.0/(2.0*sqrt(g2))
             else
-                u = Vx*((g1 - sqrt(g2)) / g3)
+                a = (g1 - sqrt(g2)) / g3
             end
         end
+
+        u = a * Vx
 
         # -------- tangential induction ----------
         if Vx < 0
@@ -333,7 +336,8 @@ function residual(phi, section, inflow, rotor)
             return 1.0, Outputs()
         end
 
-        v = Vy*kp/(1 - kp)
+        ap = kp/(1 - kp)
+        v = ap * Vy
     end
 
 
@@ -351,7 +355,7 @@ function residual(phi, section, inflow, rotor)
     Tp *= swapsign
     v *= swapsign
 
-    return R, Outputs(Np, Tp, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
+    return R, Outputs(Np, Tp, a, ap, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
 
 end
 
@@ -767,17 +771,20 @@ function loads(outputs)
 end
 
 
-function wakeproperties(inflows, outputs)
+function effectivewake(outputs)
 
     u = getfield.(outputs, :u)
     v = getfield.(outputs, :v)
-    Vx = getfield.(inflows, :Vx)
-    Vy = getfield.(inflows, :Vy)
+    F = getfield.(outputs, :F)
+    a = getfield.(outputs, :a)
+    
+    # the effective "F" if it were multiplied against the velocities instead of the forces
+    G = (1.0 .- sqrt.(1.0 .- 4*a.*(1.0 .- a).*F))./(2*a)
 
-    a = u ./ Vx
-    ap = v ./ Vy
+    ueff = u.*G
+    veff = v.*G
 
-    return a, ap, u, v
+    return ueff, veff
 
 end
 

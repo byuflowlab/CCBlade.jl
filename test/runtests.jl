@@ -54,11 +54,10 @@ inflows = simpleinflow.(Vinf, Omega, r, rho)
 
 outputs = solve.(sections, inflows, rotor)
 
-# Np = getfield.(outputs, :Np)
-Np = [o.Np for o in outputs]
-avec = [o.u/Vinf for o in outputs]
-apvec = [o.v for o in outputs] ./ (Omega*r)
-phivec = [o.phi for o in outputs]
+Np, Tp = loads(outputs)
+avec = getfield.(outputs, :a)
+apvec = getfield.(outputs, :ap)
+phivec = getfield.(outputs, :phi)
 
 ivec = phivec*180/pi .- theta*180/pi
 betavec = 90 .- phivec*180/pi
@@ -84,6 +83,39 @@ betavec = 90 .- phivec*180/pi
 @test isapprox(betavec[6], 84.7113, atol=1e-3)  # using my more converged solution
 
 
+# 
+# 
+
+# idx = 6
+
+# aguess = avec[idx]
+# apguess = apvec[idx]
+
+# # aguess = 0.2557
+# # apguess = 0.0046
+
+# for i = 1:100
+
+#     sigmap = B*chord[idx]/(2*pi*r[idx])
+#     lambdar = inflows[idx].Vy/inflows[idx].Vx
+#     beta2 = atan(lambdar*(1 + apguess)/(1 - aguess))
+#     inc2 = gamma[idx]*pi/180 - beta2
+#     cl2, cd2 = affunc(inc2, 1.0, 1.0)
+#     global aguess = 1.0/(1 + 4*cos(beta2)^2/(sigmap*cl2*sin(beta2)))
+#     global apguess = sigmap*cl2/(4*lambdar*cos(beta2))*(1 - a2)
+#     # global apguess = 1.0 / (4*sin(beta2)/(sigmap*cl2) - 1)
+
+# end
+
+# aguess
+# apguess
+
+
+
+# --------------------------------------------------------------
+
+
+
 # -------- verification: propellers.  using script at http://www.aerodynamics4students.com/propulsion/blade-element-propeller-theory.php ------
 # I increased their tolerance to 1e-6
 
@@ -97,7 +129,7 @@ pitch = 1.0  # pitch distance in meters.
 
 # --- rotor definition ---
 turbine = false
-Rhub = 0.01
+Rhub = 1e-6
 Rtip = 100.0  # something large to eliminate tip effects
 B = 2  # number of blades
 
@@ -151,32 +183,37 @@ for i = 1:60
 end
 
 
-# 
-# 
+Vinf = 20.0
+Omega = RPM * pi/30
 
-# idx = 6
+inflows = simpleinflow.(Vinf, Omega, r, rho)
 
-# aguess = avec[idx]
-# apguess = apvec[idx]
+outputs = solve.(sections, inflows, rotor)
 
-# # aguess = 0.2557
-# # apguess = 0.0046
+Np, Tp = loads(outputs)
 
-# for i = 1:100
+T = sum(Np*(r[2]-r[1]))*B
+Q = sum(r.*Tp*(r[2]-r[1]))*B
+eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, r[end], "propeller")
 
-#     sigmap = B*chord[idx]/(2*pi*r[idx])
-#     lambdar = inflows[idx].Vy/inflows[idx].Vx
-#     beta2 = atan(lambdar*(1 + apguess)/(1 - aguess))
-#     inc2 = gamma[idx]*pi/180 - beta2
-#     cl2, cd2 = affunc(inc2, 1.0, 1.0)
-#     global aguess = 1.0/(1 + 4*cos(beta2)^2/(sigmap*cl2*sin(beta2)))
-#     global apguess = sigmap*cl2/(4*lambdar*cos(beta2))*(1 - a2)
-#     # global apguess = 1.0 / (4*sin(beta2)/(sigmap*cl2) - 1)
 
-# end
+@test isapprox(CT, 0.056110238632657, atol=1e-7)
+@test isapprox(CQ, 0.004337202960642, atol=1e-8)
+@test isapprox(eff, 0.735350632777002, atol=1e-6)
 
-# aguess
-# apguess
+# using PyPlot
+# uvec = getfield.(outputs, :u) .* getfield.(outputs, :F)   
+# vvec = getfield.(outputs, :v) .* getfield.(outputs, :F)   
+# uvec2, vvec2 = effectivewake(outputs)     
+# figure()
+# plot(r, uvec)
+# plot(r, uvec2)
+# figure()
+# plot(r, vvec)
+# plot(r, vvec2)
+
+
+
 
 
 # # --- rotor definition ---
