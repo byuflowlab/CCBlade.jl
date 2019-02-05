@@ -52,7 +52,7 @@ inflows = simpleinflow.(Vinf, Omega, r, rho)
 
 # --- evaluate ---
 
-outputs = solve.(sections, inflows, rotor)
+outputs = solve.(rotor, sections, inflows)
 
 Np, Tp = loads(outputs)
 avec = getfield.(outputs, :a)
@@ -129,10 +129,13 @@ pitch = 1.0  # pitch distance in meters.
 
 # --- rotor definition ---
 turbine = false
-Rhub = 1e-6
-Rtip = 100.0  # something large to eliminate tip effects
+Rhub = 0.0
+Rtip = D/2
+Rhub_eff = 1e-6  # something small to eliminate hub effects
+Rtip_eff = 100.0  # something large to eliminate tip effects
 B = 2  # number of blades
 
+rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B, turbine)
 rotor = Rotor(Rhub, Rtip, B, turbine)
 
 # --- section definitions ---
@@ -168,7 +171,7 @@ for i = 1:60
 
   # --- evaluate ---
 
-  outputs = solve.(sections, inflows, rotor)
+  outputs = solve.(rotor_no_F, sections, inflows)
 
   Np, Tp = loads(outputs)
 
@@ -188,13 +191,13 @@ Omega = RPM * pi/30
 
 inflows = simpleinflow.(Vinf, Omega, r, rho)
 
-outputs = solve.(sections, inflows, rotor)
+outputs = solve.(rotor_no_F, sections, inflows)
 
 Np, Tp = loads(outputs)
 
 T = sum(Np*(r[2]-r[1]))*B
 Q = sum(r.*Tp*(r[2]-r[1]))*B
-eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, r[end], "propeller")
+eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
 
 
 @test isapprox(CT, 0.056110238632657, atol=1e-7)
@@ -234,7 +237,7 @@ eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, r[end], "propeller")
 # theta = [13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
 #     6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]*pi/180
 
-# aftypes = Array{Tuple}(undef, 8)
+# aftypes = Array{Any}(undef, 8)
 # aftypes[1] = af_from_file("airfoils/Cylinder1.dat")
 # aftypes[2] = af_from_file("airfoils/Cylinder2.dat")
 # aftypes[3] = af_from_file("airfoils/DU40_A17.dat")
