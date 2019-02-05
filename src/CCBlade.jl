@@ -203,14 +203,14 @@ for gradient-based optimization.
 
 Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M are currently ignored.
 """
-function af_from_data(alpha, cl, cd)
+function af_from_data(alpha, cl, cd, spl_k=3)
 
     # # TODO: update once smoothing is implemented: https://github.com/JuliaMath/Interpolations.jl/issues/254
     # afcl = CubicSplineInterpolation(alpha, cl)
     # afcd = CubicSplineInterpolation(alpha, cd)
     # af = AirfoilData(afcl, afcd)
 
-    k = min(length(alpha)-1, 3)  # can't use cubic spline is number of entries in alpha is small
+    k = min(length(alpha)-1, spl_k)  # can't use cubic spline is number of entries in alpha is small
 
     # 1D interpolations for now.  ignoring Re dependence (which is very minor)
     afcl_1d = Dierckx.Spline1D(alpha, cl; k=k, s=0.1)
