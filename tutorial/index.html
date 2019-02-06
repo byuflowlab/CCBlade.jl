@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Guide · CCBlade Documentation</title><link href="https://cdnjs.cloudflare.com/ajax/libs/normalize/4.2.0/normalize.min.css" rel="stylesheet" type="text/css"/><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/default.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.2.0/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link href="../assets/documenter.css" rel="stylesheet" type="text/css"/></head><body><nav class="toc"><h1>CCBlade Documentation</h1><select id="version-selector" onChange="window.location.href=this.value" style="visibility: hidden"></select><form class="search" id="search-form" action="../search/"><input id="search-query" name="q" type="text" placeholder="Search docs"/></form><ul><li><a class="toctext" href="../">CCBlade Documentation</a></li><li class="current"><a class="toctext" href>Guide</a><ul class="internal"><li><a class="toctext" href="#Wind-Turbine-1">Wind Turbine</a></li><li><a class="toctext" href="#Propellers-1">Propellers</a></li></ul></li></ul></nav><article id="docs"><header><nav><ul><li><a href>Guide</a></li></ul><a class="edit-page" href="https://github.com/byuflowlab/CCBlade.jl/blob/master/docs/src/tutorial.md"><span class="fa"></span> Edit on GitHub</a></nav><hr/><div id="topbar"><span>Guide</span><a class="fa fa-bars" href="#"></a></div></header><h1><a class="nav-anchor" id="Guide-1" href="#Guide-1">Guide</a></h1><p>This section contains two examples, one for a wind turbine and one for a propeller.  Each function in the module is introduced along the way.  Because the workflow for the propeller is essentially the same as that for the wind turbine (except the inflow), the propeller example does not repeat the same level of detail or comments.</p><p>To start, we import CCBlade as well as a plotting module.  I prefer to use <code>import</code> rather than <code>using</code> as it makes the namespace clear when multiple modules exist (except with plotting where it is obvious), but for the purposes of keeping this example concise I will use <code>using</code>.</p><p>All angles should be in radians.  The only exception is the airfoil input file, which has angle of attack in degrees for readability.</p><div><pre><code class="language-julia">using CCBlade
+using PyPlot</code></pre></div><h2><a class="nav-anchor" id="Wind-Turbine-1" href="#Wind-Turbine-1">Wind Turbine</a></h2><p>First, we need to define parameters that are common to the rotor.  Rhub/Rtip are used for hub/tip corrections, for integration of loads, and for nondimensionalization.    The parameter <code>turbine</code> just changes the intput/output conventions.  If <code>turbine=true</code> then the following positive directions for inputs, induced velocities, and loads are used as shown in the figure below.</p><p><img src="../turbine.png" alt/></p><p>The definition for the precone is shown below:</p><p><img src="../precone.png" alt/></p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.Rotor" href="#CCBlade.Rotor"><code>CCBlade.Rotor</code></a> — <span class="docstring-category">Type</span>.</div><div><div><pre><code class="language-none">Rotor(Rhub, Rtip, B, turbine, precone=0.0)</code></pre><p>Define geometry common to the entire rotor.</p><p><strong>Arguments</strong></p><ul><li><code>Rhub::Float64</code>: hub radius (along blade length)</li><li><code>Rtip::Float64</code>: tip radius (along blade length)</li><li><code>B::Int64</code>: number of blades</li><li><code>turbine::Bool</code>: true if turbine, false if propeller</li><li><code>precone::Float64</code>: precone angle</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L52-L63">source</a></section><p>This example corresponds to the NREL 5MW reference wind turbine.</p><div><pre><code class="language-julia"># --- rotor definition ---
+Rhub = 1.5
+Rtip = 63.0
+B = 3  # number of blades
+turbine = true
+precone = 2.5*pi/180
+
+rotor = Rotor(Rhub, Rtip, B, turbine, precone)</code></pre></div><p>Next, we need to define the section properties.  The positive definition for twist is shown in the figure above.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.Section" href="#CCBlade.Section"><code>CCBlade.Section</code></a> — <span class="docstring-category">Type</span>.</div><div><div><pre><code class="language-none">Section(r, chord, theta, af)</code></pre><p>Define section properties at a given radial location on the rotor</p><p><strong>Arguments</strong></p><ul><li><code>r::Float64</code>: radial location (Rhub &lt; r &lt; Rtip)</li><li><code>chord::Float64</code>: local chord length</li><li><code>theta::Float64</code>: twist angle (radians)</li><li><code>af</code>: a function of the form: cl, cd = af(alpha, Re, Mach)</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L32-L42">source</a></section><p>Let&#39;s define all of these variables except the airfoils, which take a little more explanation.  Note that <span>$r$</span> is the distance along the blade, rather than in the rotor plane.  </p><div class="admonition warning"><div class="admonition-title">Warning</div><div class="admonition-text"><p>You must have Rhub &lt; r &lt; Rtip for all r.  These are strict inequalities (not equal to).</p></div></div><div><pre><code class="language-julia">r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
+    28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
+    56.1667, 58.9000, 61.6333]
+chord = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748,
+    3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
+theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
+    6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]</code></pre></div><p>The airfoil input is any function of the form: <code>cl, cd = airfoil(alpha, Re, Mach)</code> where <code>cl</code> and <code>cd</code> are the lift and drag coefficient respectively, <code>alpha</code> is the angle of attack in radians, <code>Re</code> is the Reynolds number, and <code>Mach</code> is the Mach number.  Some of the inputs can be ignored if desired (e.g., Mach number).  While users can supply any function, two convenience methods exist for creating these functions.  One takes data from a file, the other uses input arrays.  Both convert the data into a smooth cubic spline, with some smoothing to prevent spurious jumps, as a function of angle of attack (Re and Mach currently ignored).  </p><p>The required file format contains one header line that is ignored in parsing.  Its purpose is to allow you to record any information you want about the data in that file (e.g., where it came from, type of corrections applied, Reynolds number, etc.).  The rest of the file contains data in columns split by  whitespace (not commas) in the following order: alpha, cl, cd.  You can add additional columns of data (e.g., cm), but they will be ignored in this module.  Currently, only one Reynolds number is allowed.</p><p>For example, a simple file (a cylinder section) would look like:</p><pre><code class="language-none">Cylinder section with a Cd of 0.50.  Re = 1 million.
+-180.0   0.000   0.5000   0.000
+0.00     0.000   0.5000   0.000
+180.0    0.000   0.5000   0.000</code></pre><p>The function call is given by:</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.af_from_file-Tuple{Any}" href="#CCBlade.af_from_file-Tuple{Any}"><code>CCBlade.af_from_file</code></a> — <span class="docstring-category">Method</span>.</div><div><div><pre><code class="language-none">af_from_file(filename)</code></pre><p>Read an airfoil file. Currently only reads one Reynolds number. Additional data like cm is optional but will be ignored. alpha should be in degrees</p><p>format:</p><p>header</p><p>alpha1 cl1 cd1</p><p>alpha2 cl2 cd2</p><p>alpha3 cl3 cd3</p><p>...</p><p>Returns a function of the form <code>cl, cd = func(alpha, Re, M)</code> although Re and M are currently ignored.</p></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L150-L171">source</a></section><p>Alternatively, if you have the alpha, cl, cd data already in vectors you can initialize directly from the vectors:</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.af_from_data-Tuple{Any,Any,Any}" href="#CCBlade.af_from_data-Tuple{Any,Any,Any}"><code>CCBlade.af_from_data</code></a> — <span class="docstring-category">Method</span>.</div><div><div><pre><code class="language-none">af_from_data(alpha, cl, cd)</code></pre><p>Create an AirfoilData object directly from alpha, cl, and cd arrays. alpha should be in radians.</p><p><code>af_from_file</code> calls this function indirectly.  Uses a cubic B-spline (if the order of the data permits it).  A small amount of smoothing of lift and drag coefficients is also applied to aid performance for gradient-based optimization.</p><p>Returns a function of the form <code>cl, cd = func(alpha, Re, M)</code> although Re and M are currently ignored.</p></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L193-L205">source</a></section><p>In this example, we will initialize from files since the data arrays would be rather long.  The only complication is that there are 8 different airfoils used at the 17 different radial stations so we need to assign them to the correct stations corresponding to the vector <span>$r$</span> defined previously.</p><div><pre><code class="language-julia"># Define airfoils.  In this case we have 8 different airfoils that we load into an array.
+# These airfoils are defined in files.
+aftypes = Array{Any}(undef, 8)
+aftypes[1] = af_from_file(&quot;airfoils/Cylinder1.dat&quot;)
+aftypes[2] = af_from_file(&quot;airfoils/Cylinder2.dat&quot;)
+aftypes[3] = af_from_file(&quot;airfoils/DU40_A17.dat&quot;)
+aftypes[4] = af_from_file(&quot;airfoils/DU35_A17.dat&quot;)
+aftypes[5] = af_from_file(&quot;airfoils/DU30_A17.dat&quot;)
+aftypes[6] = af_from_file(&quot;airfoils/DU25_A17.dat&quot;)
+aftypes[7] = af_from_file(&quot;airfoils/DU21_A17.dat&quot;)
+aftypes[8] = af_from_file(&quot;airfoils/NACA64_A17.dat&quot;)
+
+# indices correspond to which airfoil is used at which station
+af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]</code></pre></div><p>We can now define the rotor geometry.  We will use the broadcasting syntax to create all the sections at once.</p><div><pre><code class="language-julia">sections = Section.(r, chord, theta, aftypes[af_idx])</code></pre></div><p>Next, we need to specify the inflow conditions.  At a basic level the inflow conditions need to be defined as a struct defined by Inflow.  The parameters <code>mu</code> and <code>asound</code> are optional if Reynolds number and Mach number respectively are used in the airfoil functions.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.Inflow" href="#CCBlade.Inflow"><code>CCBlade.Inflow</code></a> — <span class="docstring-category">Type</span>.</div><div><div><pre><code class="language-none">Inflow(Vx, Vy, rho, mu=1.0, asound=1.0)</code></pre><p>Operation point for a rotor.  The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  See Documentation for more detail on coordinate systems.</p><p><strong>Arguments</strong></p><ul><li><code>Vx::Float64</code>: velocity in x-direction</li><li><code>Vy::Float64</code>: velocity in y-direction</li><li><code>rho::Float64</code>: fluid density</li><li><code>mu::Float64</code>: fluid dynamic viscosity (unused if Re not included in airfoil data)</li><li><code>asound::Float64</code>: fluid speed of sound (unused if Mach not included in airfoil data)</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L81-L92">source</a></section><p>The coordinate system for Vx and Vy is shown at the top of <a href="#Wind-Turbine-1">Wind Turbine</a>.  In general, different inflow conditions will exist at every location along the blade. The above type allows one to specify an arbitrary input definition, however, convenience methods exist for a few typical inflow conditions.  For a typical wind turbine inflow you can use the <code>windturbineinflow</code> function, which is based on the angles and equations shown below.</p><p><img src="../angles.png" alt/></p><p>To account for the velocity change across the hub face we compute the height of each blade location relative to the hub using coordinate transformations (where <span>$\Phi$</span> is the precone angle):</p><div>\[  z_h = r \cos\Phi \cos\psi \cos\Theta + r \sin\Phi\sin\Theta\]</div><p>then apply the shear exponent (<span>$\alpha$</span>):</p><div>\[  V_{shear} = V_{hub} \left(1 + \frac{z_h}{H_{hub}} \right)^\alpha\]</div><p>where <span>$H_{hub}$</span> is the hub height.  Finally, we can compute the x- and y-components of velocity with additional coordinate transformations:</p><div>\[\begin{aligned}
+V_x &amp;= V_{shear} ((\cos \gamma \sin \Theta \cos \psi + \sin \gamma \sin \psi)\sin \Phi + \cos \gamma \cos \Theta \cos \Phi)\\
+V_y &amp;= V_{shear} (\cos \gamma \sin \Theta\sin \psi - \sin \gamma \cos \psi) + \Omega r \cos\Phi
+\end{aligned}\]</div><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.windturbineinflow" href="#CCBlade.windturbineinflow"><code>CCBlade.windturbineinflow</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)</code></pre><p>Compute relative wind velocity components along blade accounting for inflow conditions and orientation of turbine.  See Documentation for angle definitions.</p><p><strong>Arguments</strong></p><ul><li><code>Vhub::Float64</code>: freestream speed at hub (m/s)</li><li><code>Omega::Float64</code>: rotation speed (rad/s)</li><li><code>r::Array{Float64, 1}</code>: radial locations where inflow is computed (m)</li><li><code>precone::Float64</code>: precone angle (rad)</li><li><code>yaw::Float64</code>: yaw angle (rad)</li><li><code>tilt::Float64</code>: tilt angle (rad)</li><li><code>azimuth::Float64</code>: azimuth angle (rad)</li><li><code>hubHt::Float64</code>: hub height (m) - used for shear</li><li><code>shearExp::Float64</code>: power law shear exponent</li><li><code>rho::Float64</code>: air density (kg/m^3)</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L564-L581">source</a></section><p>We will use this function for this example, at a tip-speed ratio of 7.55.  Again we use a broadcasting syntax to initialize inflow conditions across the entire blade.</p><div><pre><code class="language-julia">yaw = 0.0*pi/180
+tilt = 5.0*pi/180
+hubHt = 90.0
+shearExp = 0.2
+
+# operating point for the turbine/propeller
+Vinf = 10.0
+tsr = 7.55
+rotorR = Rtip*cos(precone)
+Omega = Vinf*tsr/rotorR
+azimuth = 0.0*pi/180
+rho = 1.225
+
+inflows = windturbineinflow.(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)</code></pre></div><p>We have now defined the requisite inputs and can start using the BEM methodology.  The solve function is the core of the BEM.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.solve" href="#CCBlade.solve"><code>CCBlade.solve</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">solve(section, inflow, rotor)</code></pre><p>Solve the BEM equations for one section, with given inflow conditions, and rotor properties. If multiple sections are to be solved (typical usage) then one can use broadcasting: <code>solve.(sections, inflows, rotor)</code> where sections and inflows are arrays.</p><p><strong>Arguments</strong></p><ul><li><code>rotor::Rotor</code>: rotor properties</li><li><code>section::Section</code>: section properties</li><li><code>inflow::Inflow</code>: inflow conditions</li></ul><p><strong>Returns</strong></p><ul><li><code>outputs::Outputs</code>: BEM output data including loads, induction factors, etc.</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L398-L412">source</a></section><p>The output result is a struct defined below. The positive directions for the normal and tangential forces, and the induced velocities are shown at the top of <a href="#Wind-Turbine-1">Wind Turbine</a>.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.Outputs" href="#CCBlade.Outputs"><code>CCBlade.Outputs</code></a> — <span class="docstring-category">Type</span>.</div><div><div><pre><code class="language-none">Outputs(Np, Tp, a, ap, u, v, phi, W, cl, cd, F)</code></pre><p>Outputs from the BEM solver.</p><p><strong>Arguments</strong></p><ul><li><code>Np::Float64</code>: normal force per unit length</li><li><code>Tp::Float64</code>: tangential force per unit length</li><li><code>a::Float64</code>: axial induction factor</li><li><code>ap::Float64</code>: tangential induction factor</li><li><code>u::Float64</code>: axial induced velocity</li><li><code>v::Float64</code>: tangential induced velocity</li><li><code>phi::Float64</code>: inflow angle</li><li><code>W::Float64</code>: inflow velocity</li><li><code>cl::Float64</code>: lift coefficient</li><li><code>cd::Float64</code>: drag coefficient</li><li><code>F::Float64</code>: hub/tip loss correction</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L105-L122">source</a></section><p>Note that we use broadcasting to solve all sections in one call.  </p><div><pre><code class="language-julia">outputs = solve.(rotor, sections, inflows)</code></pre></div><p>There are various convenience methods to post-process the output data.  A common one is to extract the loads as arrays using the <code>loads</code> function:</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.loads" href="#CCBlade.loads"><code>CCBlade.loads</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">loads(outputs)</code></pre><p>Extract arrays for Np and Tp from the outputs.</p><p>This does not do any calculations.  It is simply a syntax shorthand as loads are usually what we mostly care about from the outputs.</p></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L638-L644">source</a></section><div><pre><code class="language-julia">Np, Tp = loads(outputs)
+
+# plot distributed loads
+figure()
+plot(r/Rtip, Np/1e3)
+plot(r/Rtip, Tp/1e3)
+xlabel(&quot;r/Rtip&quot;)
+ylabel(&quot;distributed loads (kN/m)&quot;)
+legend([&quot;flapwise&quot;, &quot;lead-lag&quot;])</code></pre></div><p><img src="../loads-turbine.svg" alt/></p><p>We are likely also interested in integrated loads, like thrust and torque, which are provided by the function <code>thrusttorque</code>.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.thrusttorque" href="#CCBlade.thrusttorque"><code>CCBlade.thrusttorque</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">thrusttorque(rotor, sections, outputs)</code></pre><p>integrate the thrust/torque across the blade,  including 0 loads at hub/tip, using a trapezoidal rule.</p><p><strong>Arguments</strong></p><ul><li><code>rotor::Rotor</code>: rotor object</li><li><code>sections::Array{Section, 1}</code>: section data along blade</li><li><code>outputs::Array{Outputs, 1}</code>: output data along blade</li></ul><p><strong>Returns</strong></p><ul><li><code>T::Float64</code>: thrust (along x-dir see Documentation)</li><li><code>Q::Float64</code>: torque (along x-dir see Documentation)</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L684-L698">source</a></section><div><pre><code class="language-julia">T, Q = thrusttorque(rotor, sections, outputs)</code></pre><pre><code class="language-none">(653171.7946659301, 3.8033413768407363e6)</code></pre></div><p>As used in the above example, this would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you can just compute multiple inflow conditions with different azimuth angles and then average the resulting forces as shown below.</p><div><pre><code class="language-julia">azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
+azinflows = windturbineinflow_az(Vinf, Omega, r, precone, yaw, tilt, azangles, hubHt, shearExp, rho)
+T, Q = thrusttorque_azavg(rotor, sections, azinflows)</code></pre><pre><code class="language-none">(584071.6090564275, 2.9598293643747694e6)</code></pre></div><p>One final convenience function is to nondimensionalize the outputs.  The nondimensionalization uses different conventions depending on the application.  For a wind turbine the nondimensionalization is:</p><div>\[\begin{aligned}
+C_T &amp;= \frac{T}{q A}\\
+C_Q &amp;= \frac{Q}{q R_{disk} A}\\
+C_P &amp;= \frac{P}{q A V_{hub}}\\
+\end{aligned}\]</div><p>where</p><div>\[\begin{aligned}
+R_{disk} &amp;= R_{tip} \cos(\text{precone})\\
+A &amp;= \pi R_{disk}^2\\
+q &amp;= \frac{1}{2}\rho V_{hub}^2\\
+\end{aligned}\]</div><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.nondim" href="#CCBlade.nondim"><code>CCBlade.nondim</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">nondim(T, Q, Vhub, Omega, rho, rotor)</code></pre><p>Nondimensionalize the outputs.</p><p><strong>Arguments</strong></p><ul><li><code>T::Float64</code>: thrust (N)</li><li><code>Q::Float64</code>: torque (N-m)</li><li><code>Vhub::Float64</code>: hub speed used in turbine normalization (m/s)</li><li><code>Omega::Float64</code>: rotation speed used in propeller normalization (rad/s)</li><li><code>rho::Float64</code>: air density (kg/m^3)</li><li><code>rotor::Rotor</code>: rotor object</li></ul><p><strong>Returns</strong></p><p>if windturbine</p><ul><li><code>CP::Float64</code>: power coefficient</li><li><code>CT::Float64</code>: thrust coefficient</li><li><code>CQ::Float64</code>: torque coefficient</li></ul><p>if propeller</p><ul><li><code>eff::Float64</code>: efficiency</li><li><code>CT::Float64</code>: thrust coefficient</li><li><code>CQ::Float64</code>: torque coefficient</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L754-L778">source</a></section><div><pre><code class="language-julia">CP, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)</code></pre><pre><code class="language-none">(0.465775519477373, 0.7662246678173171, 0.06169212178508251)</code></pre></div><p>As a final example, let&#39;s create a nondimensional power curve for this turbine (power coefficient vs tip-speed-ratio):</p><div><pre><code class="language-julia">ntsr = 20  # number of tip-speed ratios
+tsrvec = range(2, 15, length=ntsr)
+cpvec = zeros(ntsr)  # initialize arrays
+ctvec = zeros(ntsr)
+
+azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
+
+for i = 1:ntsr
+    Omega = Vinf*tsrvec[i]/rotorR
+
+    azinflows = windturbineinflow_az(Vinf, Omega, r, precone, yaw, tilt, azangles, hubHt, shearExp, rho)
+    T, Q = thrusttorque_azavg(rotor, sections, azinflows)
+
+    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor)
+end
+
+figure()
+plot(tsrvec, cpvec)
+plot(tsrvec, ctvec)
+xlabel(&quot;tip speed ratio&quot;)
+legend([L&quot;C_P&quot;, L&quot;C_T&quot;])</code></pre></div><p><img src="../cpct-turbine.svg" alt/></p><h2><a class="nav-anchor" id="Propellers-1" href="#Propellers-1">Propellers</a></h2><p>The propeller analysis follows a very similar format.  The areas that are in common will not be repeated, only differences will be highlighted.</p><div></div><p>Again, we first define the geometry, including the airfoils (which are the same along the blade in this case).  The positive conventions for a propeller (<code>turbine=false</code>) are shown in the figure below.  The underlying theory is unified across the two methods, but the input/output conventions differ to match common usage in the respective domains.</p><p><img src="../propeller.png" alt/></p><div><pre><code class="language-julia"># rotor definition
+Rhub = 0.0254*.5
+Rtip = 0.0254*3.0
+B = 2  # number of blades
+turbine = false
+
+rotor = Rotor(Rhub, Rtip, B, turbine)
+
+# section definition
+
+r = .0254*[0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332,
+     1.1128, 1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911,
+     1.6708, 1.7505, 1.8302, 1.9099, 1.9896, 2.0693, 2.1490, 2.2287,
+     2.3084, 2.3881, 2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]
+chord = .0254*[0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973, 0.5887,
+          0.5794, 0.5695, 0.5590, 0.5479, 0.5362, 0.5240, 0.5111, 0.4977,
+          0.4836, 0.4689, 0.4537, 0.4379, 0.4214, 0.4044, 0.3867, 0.3685,
+          0.3497, 0.3303, 0.3103, 0.2897, 0.2618, 0.1920]
+theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
+                   29.7730, 28.0952, 26.5833, 25.2155, 23.9736, 22.8421, 21.8075,
+                   20.8586, 19.9855, 19.1800, 18.4347, 17.7434, 17.1005, 16.5013,
+                   15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
+                   12.8685, 12.5233, 12.2138]
+
+af = af_from_file(&quot;airfoils/NACA64_A17.dat&quot;)
+
+sections = Section.(r, chord, theta, af)</code></pre></div><p>Next, we define the inflow.  For a propeller, it typically doesn&#39;t operate with tilt, yaw, and shear like a wind turbine does, so we have defined another convenience function for simple uniform inflow.  Like before, you can always define your own arbitrary inflow object.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.simpleinflow" href="#CCBlade.simpleinflow"><code>CCBlade.simpleinflow</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">simpleinflow(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)</code></pre><p>Uniform inflow through rotor.  Returns an Inflow object.</p><p><strong>Arguments</strong></p><ul><li><code>Vinf::Float64</code>: freestream speed (m/s)</li><li><code>Omega::Float64</code>: rotation speed (rad/s)</li><li><code>r::Float64</code>: radial location where inflow is computed (m)</li><li><code>precone::Float64</code>: precone angle (rad)</li><li><code>rho::Float64</code>: air density (kg/m^3)</li></ul></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L537-L548">source</a></section><p>In this example, we assume simple inflow.  Again, note the broadcast syntax to get inflows at all sections.</p><div><pre><code class="language-julia">rho = 1.225
+
+Vinf = 10.0
+Omega = 8000.0*pi/30.0
+
+inflows = simpleinflow.(Vinf, Omega, r, rho)</code></pre></div><p>We can now computed distributed loads and induced velocities.  </p><div><pre><code class="language-julia">outputs = solve.(rotor, sections, inflows)
+Np, Tp = loads(outputs)
+
+figure()
+plot(r/Rtip, Np)
+plot(r/Rtip, Tp)
+xlabel(&quot;r/Rtip&quot;)
+ylabel(&quot;distributed loads (N/m)&quot;)
+legend([&quot;flapwise&quot;, &quot;lead-lag&quot;])</code></pre></div><p><img src="../loads-prop.svg" alt/></p><p>This time we will also look at the induced velocities.  This is usually not of interest for wind turbines, but for propellers can be useful to assess, for example, prop-on-wing interactions.</p><section class="docstring"><div class="docstring-header"><a class="docstring-binding" id="CCBlade.effectivewake" href="#CCBlade.effectivewake"><code>CCBlade.effectivewake</code></a> — <span class="docstring-category">Function</span>.</div><div><div><pre><code class="language-none">effectivewake(outputs)</code></pre><p>Computes rotor wake velocities.</p><p>Note that the BEM methodology applies hub/tip losses to the loads rather than to the velocities.   This is the most common way to implement a BEM, but it means that the raw velocities are misleading  as they do not contain any hub/tip loss corrections. To fix this we compute the effective hub/tip losses that would produce the same thrust/torque. In other words:</p><p>CT = 4 a (1 - a) F = 4 a G (1 - a G)</p><p>This is solved for G, then multiplied against the wake velocities.</p></div></div><a class="source-link" target="_blank" href="https://github.com/byuflowlab/CCBlade.jl/blob/9294fe4db4f31784d1badb2db9ad5415be520c85/src/CCBlade.jl#L653-L667">source</a></section><div><pre><code class="language-julia">u, v = effectivewake(outputs)
+
+figure()
+plot(r/Rtip, u/Vinf)
+plot(r/Rtip, v/Vinf)
+xlabel(&quot;r/Rtip&quot;)
+ylabel(&quot;(normalized) induced velocity at rotor disk&quot;)
+legend([&quot;axial velocity&quot;, &quot;swirl velocity&quot;])</code></pre></div><p><img src="../velocity-prop.svg" alt/></p><p>As before, we&#39;d like to evaluate integrated quantities at multiple conditions in a for loop (advance ratios as is convention for propellers instead of tip-speed ratios).  The normalization conventions for a propeller are:</p><div>\[\begin{aligned}
+C_T &amp;= \frac{T}{\rho n^2 D^4}\\
+C_Q &amp;= \frac{Q}{\rho n^2 D^5}\\
+C_P &amp;= \frac{P}{\rho n^3 D^5} = \frac{C_Q}{2 \pi}\\
+\eta &amp;= \frac{C_T J}{C_P}
+\end{aligned}\]</div><p>where</p><div>\[\begin{aligned}
+n &amp;= \frac{\Omega}{2\pi} \text{ rev per sec}\\
+D &amp;= 2 R_{tip} \cos(\text{precone})\\
+J &amp;= \frac{V}{n D}
+\end{aligned}\]</div><div class="admonition note"><div class="admonition-title">Note</div><div class="admonition-text"><p>Efficiency is set to zero if the thrust is negative (producing drag).  </p></div></div><p>The code below performs this analysis then plots thrust coefficient, power coefficient, and efficiency as a function of advance ratio.</p><div><pre><code class="language-julia">nJ = 20  # number of advance ratios
+
+J = range(0.1, 0.9, length=nJ)  # advance ratio
+
+Omega = 8000.0*pi/30
+n = Omega/(2*pi)
+D = 2*Rtip
+
+eff = zeros(nJ)
+CT = zeros(nJ)
+CQ = zeros(nJ)
+
+for i = 1:nJ
+    Vinf = J[i] * D * n
+
+    inflows = simpleinflow.(Vinf, Omega, r, rho)
+    outputs = solve.(rotor, sections, inflows)
+    T, Q = thrusttorque(rotor, sections, outputs)
+    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor)
+
+end
+
+figure()
+plot(J, CT)
+plot(J, CQ*2*pi)
+xlabel(L&quot;J&quot;)
+legend([L&quot;C_T&quot;, L&quot;C_P&quot;])
+
+figure()
+plot(J, eff)
+xlabel(L&quot;J&quot;)
+ylabel(L&quot;\eta&quot;)</code></pre></div><p><img src="../ctcp-prop.svg" alt/> <img src="../eta-prop.svg" alt/></p><footer><hr/><a class="previous" href="../"><span class="direction">Previous</span><span class="title">CCBlade Documentation</span></a></footer></article></body></html>
