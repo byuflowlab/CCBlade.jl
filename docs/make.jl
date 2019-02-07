@@ -12,6 +12,5 @@ makedocs(
 
 
 # deploydocs(
-#     repo = "github.com/byuflowlab/CCBlade.jl.git",
-#     julia = "0.6"
+#     repo = "github.com/byuflowlab/CCBlade.jl.git"
 # )

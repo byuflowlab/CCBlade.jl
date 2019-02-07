@@ -340,6 +340,7 @@ function residual(phi, section, inflow, rotor)
 
         ap = kp/(1 - kp)
         v = ap * Vy
+
     end
 
 

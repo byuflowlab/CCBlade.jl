@@ -1,9 +1,10 @@
-authors = ["Andrew Ning <aning@byu.edu>"]
 name = "CCBlade"
 uuid = "e1828068-15df-11e9-03e4-ef195ea46fa4"
+authors = ["Andrew Ning <aning@byu.edu>"]
 version = "0.1.0"
 
 [deps]
 Dierckx = "39dd38d3-220a-591b-8e3c-4c3a8c710a94"
 Roots = "f2b01f46-fcfa-551c-844a-d8ac1e96c665"
 Parameters = "d96e819e-fc66-5662-9728-84c9c7592b0a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
