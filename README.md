@@ -25,4 +25,4 @@ pkg> test
 
 ### Develop
 
-See theory manual under theory/bem.pdf.
+See [theory manual](https://byu.box.com/s/ewaj1apa6e6lzku0hb4e30qbumiffmiu).
