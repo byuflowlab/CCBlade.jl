@@ -23,7 +23,7 @@ pkg> activate .
 pkg> test
 ```
 
-## Get Started
+### Get Started
 
 Read the [Guide](https://flow.byu.edu/CCBlade.jl) for examples.
 
