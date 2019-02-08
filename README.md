@@ -23,6 +23,10 @@ pkg> activate .
 pkg> test
 ```
 
+## Get Started
+
+Read the [Guide](https://flow.byu.edu/CCBlade.jl) for examples.
+
 ### Develop
 
 See [theory manual](https://byu.box.com/s/ewaj1apa6e6lzku0hb4e30qbumiffmiu).
