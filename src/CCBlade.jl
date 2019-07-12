@@ -17,6 +17,7 @@ module CCBlade
 import Dierckx  # cubic b-spline for airfoil data
 import Roots  # solve residual equation
 import Parameters: @unpack
+import Interpolations
 
 
 export Section, Rotor, Inflow, Outputs
@@ -206,8 +207,8 @@ Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M a
 function af_from_data(alpha, cl, cd, spl_k=3)
 
     # # TODO: update once smoothing is implemented: https://github.com/JuliaMath/Interpolations.jl/issues/254
-    # afcl = CubicSplineInterpolation(alpha, cl)
-    # afcd = CubicSplineInterpolation(alpha, cd)
+    # afcl_1d = Interpolations.CubicSplineInterpolation(alpha, cl)
+    # afcd_1d = Interpolations.CubicSplineInterpolation(alpha, cd)
     # af = AirfoilData(afcl, afcd)
 
     k = min(length(alpha)-1, spl_k)  # can't use cubic spline is number of entries in alpha is small
