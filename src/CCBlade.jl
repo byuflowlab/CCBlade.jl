@@ -396,7 +396,7 @@ end
 
 
 """
-    solve(section, inflow, rotor)
+    solve(rotor, section, inflow)
 
 Solve the BEM equations for one section, with given inflow conditions, and rotor properties.
 If multiple sections are to be solved (typical usage) then one can use broadcasting:
@@ -621,8 +621,9 @@ end
 
 function windturbineinflow_az(Vhub, Omega, r, precone, yaw, tilt, azimuth_array, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
-    azinflows = Array{Array{Inflow}}(undef, 4)
-    for i = 1:4
+    naz = length(azimuth_array)
+    azinflows = Array{Array{Inflow}}(undef, naz)
+    for i = 1:naz
         azinflows[i] = windturbineinflow.(Vhub, Omega, r, precone, yaw, tilt, azimuth_array[i], hubHt, shearExp, rho)
     end
 
