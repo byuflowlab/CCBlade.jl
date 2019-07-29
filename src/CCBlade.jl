@@ -18,6 +18,7 @@ import Dierckx  # cubic b-spline for airfoil data
 import Roots  # solve residual equation
 import Parameters: @unpack
 import Interpolations
+import ForwardDiff
 
 
 export Section, Rotor, Inflow, Outputs
@@ -140,6 +141,22 @@ end
 # constructor for case with no solution found
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
+struct ResidualPartials{TF}
+    phi::TF
+    r::TF
+    chord::TF
+    theta::TF
+    Vx::TF
+    Vy::TF
+    rho::TF
+    mu::TF
+    asound::TF
+    Rhub::TF
+    Rtip::TF
+    precone::TF
+end
+    
+
 
 # -------------------------------
 
@@ -166,7 +183,7 @@ alpha3 cl3 cd3\n
 
 Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M are currently ignored.
 """
-function af_from_file(filename)
+function af_from_file(filename; use_interpolations_jl=false)
 
     alpha = Float64[]
     cl = Float64[]
@@ -186,7 +203,7 @@ function af_from_file(filename)
 
     end
 
-    return af_from_data(alpha*pi/180.0, cl, cd)
+    return af_from_data(alpha*pi/180.0, cl, cd; use_interpolations_jl=use_interpolations_jl)
 end
 
 
@@ -204,11 +221,11 @@ for gradient-based optimization.
 
 Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M are currently ignored.
 """
-function af_from_data(alpha, cl, cd, spl_k=3)
+function af_from_data(alpha, cl, cd, spl_k=3; use_interpolations_jl=false)
 
     # # TODO: update once smoothing is implemented: https://github.com/JuliaMath/Interpolations.jl/issues/254
-    # afcl_1d = Interpolations.CubicSplineInterpolation(alpha, cl)
-    # afcd_1d = Interpolations.CubicSplineInterpolation(alpha, cd)
+    # afcl = CubicSplineInterpolation(alpha, cl)
+    # afcd = CubicSplineInterpolation(alpha, cd)
     # af = AirfoilData(afcl, afcd)
 
     k = min(length(alpha)-1, spl_k)  # can't use cubic spline is number of entries in alpha is small
@@ -216,6 +233,20 @@ function af_from_data(alpha, cl, cd, spl_k=3)
     # 1D interpolations for now.  ignoring Re dependence (which is very minor)
     afcl_1d = Dierckx.Spline1D(alpha, cl; k=k, s=0.1)
     afcd_1d = Dierckx.Spline1D(alpha, cd; k=k, s=0.001)
+
+    if use_interpolations_jl
+
+        # Evaluate the Dierckx interpolation object on a uniform grid.
+        alpha_uniform = LinRange(minimum(alpha), maximum(alpha), 2*length(alpha))
+        cl_uniform = afcl_1d(alpha_uniform)
+        cd_uniform = afcd_1d(alpha_uniform)
+
+        # Use the uniform data to create a new interpolations objects using
+        # Interpolations.jl.
+        afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl_uniform, extrapolation_bc=Interpolations.Periodic())
+        afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd_uniform, extrapolation_bc=Interpolations.Periodic())
+
+    end
 
     afeval(alpha, Re, M) = afcl_1d(alpha), afcd_1d(alpha)  # ignore Re, M 
 
@@ -362,7 +393,72 @@ function residual(phi, section, inflow, rotor)
 
 end
 
+function residual(B, af, turbine, inputs::AbstractArray)
+    phi = inputs[1]
+    r = inputs[2]
+    chord = inputs[3]
+    theta = inputs[4]
+    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
 
+    section = Section(r, chord, theta, af)
+    inflow = Inflow(Vx, Vy, rho, mu, asound)
+    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+
+    R, outputs = residual(phi, section, inflow, rotor)
+
+    return R
+end
+
+function residual_outputs(B, af, turbine, inputs::AbstractArray)
+    phi = inputs[1]
+    r = inputs[2]
+    chord = inputs[3]
+    theta = inputs[4]
+    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
+
+    section = Section(r, chord, theta, af)
+    inflow = Inflow(Vx, Vy, rho, mu, asound)
+    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+
+    R, outputs = residual(phi, section, inflow, rotor)
+
+    return [getfield(outputs, i) for i in fieldnames(Outputs)]
+end
+
+function residual_partials(phi, section, inflow, rotor)
+    # unpack inputs
+    @unpack r, chord, theta, af = section
+    @unpack Vx, Vy, rho, mu, asound = inflow
+    @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+    # Get a version of the residual function that's compatible with ForwardDiff.
+    function R(inputs)
+        return residual(B, af, turbine, inputs)
+    end
+
+    # Do it.
+    x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+    return ResidualPartials(ForwardDiff.gradient(R, x)...)
+
+end
+
+function output_partials(phi, section, inflow, rotor)
+    # unpack inputs
+    @unpack r, chord, theta, af = section
+    @unpack Vx, Vy, rho, mu, asound = inflow
+    @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+    # Get a version of the residual function that's compatible with ForwardDiff.
+    function R(inputs)
+        return residual_outputs(B, af, turbine, inputs)
+    end
+
+    # Do it.
+    x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+    return ForwardDiff.jacobian(R, x)
+end
 
 """
 (private) Find a bracket for the root closest to xmin by subdividing
@@ -715,6 +811,60 @@ function thrusttorque(rotor, sections, outputs)
     Q = rotor.B * trapz(rfull, torque)
 
     return T, Q
+end
+
+function thrusttorque(B, inputs::AbstractArray)
+
+    num_radial = div(length(inputs)-3, 3)
+
+    r = inputs[1:num_radial]
+    Np = inputs[num_radial+1:2*num_radial]
+    Tp = inputs[2*num_radial+1:3*num_radial]
+
+    Rhub = inputs[3*num_radial+1]
+    Rtip = inputs[3*num_radial+2]
+    precone = inputs[3*num_radial+3]
+
+    # Dummy values for stuff we don't need for the integrated loads. I guess I
+    # could just reuse r, but whatever.
+    array_dummy = similar(r)
+    af_dummy = 0.
+
+    rotor = Rotor(Rhub, Rtip, B, false, precone)
+    sections = Section.(r, array_dummy, array_dummy, af_dummy)
+    outputs = Outputs.(Np, Tp,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy)
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T, Q]
+    
+end
+
+function thrusttorque_partials(rotor, sections, Np, Tp)
+
+    B = rotor.B
+    function R(inputs)
+        return thrusttorque(B, inputs)
+    end
+
+    num_radial = length(sections)
+    x = zeros(typeof(sections[1].r), 3*num_radial+3)
+    @. x[1:num_radial] = getfield(sections, :r)
+    @. x[num_radial+1:2*num_radial] = Np
+    @. x[2*num_radial+1:3*num_radial] = Tp
+    x[3*num_radial+1] = rotor.Rhub
+    x[3*num_radial+2] = rotor.Rtip
+    x[3*num_radial+3] = rotor.precone
+
+    return ForwardDiff.jacobian(R, x)
 end
 
 

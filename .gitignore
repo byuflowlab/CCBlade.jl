@@ -55,3 +55,7 @@ velocity-deficit.pdf
 
 docs/build/
 docs/site/
+
+# Should this be ignored?
+# https://discourse.julialang.org/t/does-manifest-toml-belong-in-the-repository/12029/3
+Manifest.toml
