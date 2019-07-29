@@ -492,27 +492,7 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 end
 
 
-"""
-    solve(section, inflow, rotor)
-
-Solve the BEM equations for one section, with given inflow conditions, and rotor properties.
-If multiple sections are to be solved (typical usage) then one can use broadcasting:
-`solve.(sections, inflows, rotor)` where sections and inflows are arrays.
-
-**Arguments**
-- `rotor::Rotor`: rotor properties
-- `section::Section`: section properties
-- `inflow::Inflow`: inflow conditions
-
-**Returns**
-- `outputs::Outputs`: BEM output data including loads, induction factors, etc.
-"""
-function solve(rotor, section, inflow)
-
-    # error handling
-    if typeof(section) <: Array
-        error("You passed in an array for section, but this funciton does not accept an array.\nProbably you intended to use broadcasting (notice the dot): solve.(sections, inflows, rotor)")
-    end
+function firstbracket(rotor::Rotor, section::Section, inflow::Inflow)
 
     # parameters
     npts = 20  # number of discretization points to find bracket in residual solve
@@ -533,6 +513,13 @@ function solve(rotor, section, inflow)
     q2 = [-pi/2, -epsilon]
     q3 = [pi/2, pi-epsilon]
     q4 = [-pi+epsilon, -pi/2]
+
+    # wrapper to residual function to accomodate format required by the
+    # firstbracket routine above.
+    function R(phi)
+        zero, _ = residual(phi, section, inflow, rotor)
+        return zero
+    end
 
     if Vx_is_zero && Vy_is_zero
         return Outputs()
@@ -581,14 +568,6 @@ function solve(rotor, section, inflow)
 
     end
 
-    # ----- solve residual function ------
-
-    # wrapper to residual function to accomodate format required by fzero
-    function R(phi)
-        zero, _ = residual(phi, section, inflow, rotor)
-        return zero
-    end
-
     success = false
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
@@ -608,23 +587,64 @@ function solve(rotor, section, inflow)
         # find bracket
         success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
 
-        # once bracket is found, solve root finding problem and compute loads
+        # once bracket is found, return it.
         if success
-
-            phistar = Roots.fzero(R, phiL, phiU)
-            _, outputs = residual(phistar, section, inflow, rotor)
-
-            return outputs
+            return success, phiL, phiU
         end        
     end
 
-    # it shouldn't get to this point.  if it does it means no solution was found
-    # it will return empty outputs
-    # alternatively, one could increase npts and try again
-    
-    return Outputs()
+    # If we get to this point, we've failed to find a bracket.
+    return success, phiL, phiU
 end
 
+
+"""
+    solve(section, inflow, rotor)
+
+Solve the BEM equations for one section, with given inflow conditions, and rotor properties.
+If multiple sections are to be solved (typical usage) then one can use broadcasting:
+`solve.(sections, inflows, rotor)` where sections and inflows are arrays.
+
+**Arguments**
+- `rotor::Rotor`: rotor properties
+- `section::Section`: section properties
+- `inflow::Inflow`: inflow conditions
+
+**Returns**
+- `outputs::Outputs`: BEM output data including loads, induction factors, etc.
+"""
+function solve(rotor, section, inflow)
+
+    # error handling
+    if typeof(section) <: Array
+        error("You passed in an array for section, but this funciton does not accept an array.\nProbably you intended to use broadcasting (notice the dot): solve.(sections, inflows, rotor)")
+    end
+
+    # ----- solve residual function ------
+
+    # wrapper to residual function to accomodate format required by fzero
+    function R(phi)
+        zero, _ = residual(phi, section, inflow, rotor)
+        return zero
+    end
+
+    # Attempt to bracket the solution.
+    success, phiL, phiU = firstbracket(R, rotor, section, inflow)
+
+    if success
+
+        phistar = Roots.fzero(R, phiL, phiU)
+        _, outputs = residual(phistar, section, inflow, rotor)
+
+        return outputs
+    else
+        # it shouldn't get to this point.  if it does it means no solution was found
+        # it will return empty outputs
+        # alternatively, one could increase npts and try again
+    
+        return Outpus()
+    end        
+end
 
 
 # ------------ inflow ------------------

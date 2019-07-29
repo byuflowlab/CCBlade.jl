@@ -221,9 +221,61 @@ class CCBladeResidualComp(ImplicitComponent):
                 PyDict{String, PyArray}, # outputs
                 PyDict{Tuple{String, String}, PyArray}) # partials
 
+            function guess_nonlinear_kernel!(options, inputs, phi_1, phi_2)
+                # Airfoil interpolation object.
+                af = options["af"]
+
+                # Rotor parameters.
+                B = options["B"]
+                Rhub = inputs["hub_radius"][1]
+                Rtip = inputs["prop_radius"][1]
+                precone = inputs["precone"][1]
+                turbine = options["turbine"]
+                rotor = Rotor(Rhub, Rtip, B, turbine)
+
+                # Blade section parameters.
+                r = inputs["radii"]
+                chord = inputs["chord"]
+                theta = inputs["theta"]
+                sections = Section.(r, chord, theta, af)
+
+                # Inflow parameters.
+                Vx = inputs["Vx"]
+                Vy = inputs["Vy"]
+                rho = inputs["rho"]
+                mu = inputs["mu"]
+                asound = inputs["asound"]
+                inflows = Inflow.(Vx, Vy, rho, mu, asound)
+
+                # Find an interval for each section that brackets the root
+                # (hopefully). This will return a 2D array of Bool, Float64,
+                # Float64 tuples.
+                out = CCBlade.firstbracket.(rotor, sections, inflows)
+
+                # Check that we bracketed the root for each section.
+                success = @. getindex(out, 1)
+                if ! all(success)
+                    error("Bracketing failed")
+                end
+
+                # Copy the left and right value of each interval.
+                @. phi_1 = getindex(out, 2)
+                @. phi_2 = getindex(out, 3)
+
+            end
+
+            guess_nonlinear! = pyfunction(
+                guess_nonlinear_kernel!,
+                PyDict{String, PyAny}, # options
+                PyDict{String, PyArray}, # inputs
+                PyArray, # phi_1
+                PyArray) # phi_2
+
+
         """)
         self._julia_apply_nonlinear = jlmain.residuals_b
         self._julia_linearize = jlmain.residual_partials_b
+        self._julia_guess_nonlinear = jlmain.guess_nonlinear_b
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -354,51 +406,33 @@ class CCBladeResidualComp(ImplicitComponent):
         self._apply_nonlinear()
 
     def guess_nonlinear(self, inputs, outputs, residuals):
-        # Vx, Vy = inputs['Vx'], inputs['Vy']
-        # outputs['phi'][:, :] = -np.arctan2(Vx, Vy)
-        # return
-
+        # I think this steps though and runs compute/apply_nonlinear to any
+        # sub-components.
         self.recurse_solve()
 
+        # If the residual norm is small, we're close enough, so return.
         GUESS_TOL = 1e-4
-
         res_norm = residuals.get_norm()
         if res_norm < GUESS_TOL:
             return
 
+        options_d = {
+            'B': self.options['B'],
+            'af': self._airfoil_interp,
+            'turbine': self.options['turbine']}
+        inputs_d = dict(inputs)
+
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
-        eps = 1e-4
+        phi_1 = np.zeros((num_nodes, num_radial))
+        phi_2 = np.zeros((num_nodes, num_radial))
 
-        # check that there is an answer in between -pi/2 and 0.
-        phi_1 = np.ones((num_nodes, num_radial)) * (-np.pi / 2. + eps)
-        phi_2 = np.zeros((num_nodes, num_radial)) - eps
+        # Get an interval that brackets each root.
+        self._julia_guess_nonlinear(options_d, inputs_d, phi_1, phi_2)
 
-        outputs['phi'][:] = phi_1
-        self.recurse_solve()
-
-        res_1 = residuals['phi'].copy()
-
-        outputs['phi'][:] = phi_2
-        self.recurse_solve()
-        res_2 = residuals['phi'].copy()
-
-        mult = res_1 * res_2
-
-        if np.any(np.isnan(mult)):
-            print('NAN!')
-
-        mask = mult < 0
-
-        if not np.all(mask):
-
-            print('CCBlade: bracketing failed')
-            raise AnalysisError('CCBlade: bracketing failed for {}'.format(self.pathname))
-
-        # now initialize the phi_1 and phi_2 vectors so they represent the correct brackets
-        mask = res_1 > 0
-        phi_1[mask], phi_2[mask] = phi_2[mask], phi_1[mask]
+        res_1 = np.zeros_like(phi_1)
+        res_2 = np.zeros_like(phi_1)
 
         for i in range(100):
             outputs['phi'][:] = 0.5 * (phi_1 + phi_2)
