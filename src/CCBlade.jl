@@ -236,15 +236,31 @@ function af_from_data(alpha, cl, cd, spl_k=3; use_interpolations_jl=false)
 
     if use_interpolations_jl
 
-        # Evaluate the Dierckx interpolation object on a uniform grid.
-        alpha_uniform = LinRange(minimum(alpha), maximum(alpha), 2*length(alpha))
-        cl_uniform = afcl_1d(alpha_uniform)
-        cd_uniform = afcd_1d(alpha_uniform)
+        # Check if the original alpha is uniformly distributed.
+        dalpha = alpha[2:end] - alpha[1:end-1]
+        tol = 1e-8
+        if all(@. abs(dalpha - dalpha[1]) < tol)
+            # Uniform spacing, so no need to reinterpolate the Dierckx
+            # interpolation onto a uniform grid.
 
-        # Use the uniform data to create a new interpolations objects using
-        # Interpolations.jl.
-        afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl_uniform, extrapolation_bc=Interpolations.Periodic())
-        afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd_uniform, extrapolation_bc=Interpolations.Periodic())
+            # println("detected uniform angle of attack sampling.")
+            n_uniform = length(alpha)
+            alpha_uniform = LinRange(minimum(alpha), maximum(alpha), n_uniform)
+            afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl, extrapolation_bc=Interpolations.Periodic())
+            afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd, extrapolation_bc=Interpolations.Periodic())
+
+        else
+            # Evaluate the Dierckx interpolation object on a uniform grid.
+            n_uniform = 2*length(alpha)
+            alpha_uniform = LinRange(minimum(alpha), maximum(alpha), n_uniform)
+            cl_uniform = afcl_1d(alpha_uniform)
+            cd_uniform = afcd_1d(alpha_uniform)
+
+            # Use the uniform data to create a new interpolations objects using
+            # Interpolations.jl.
+            afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl_uniform, extrapolation_bc=Interpolations.Periodic())
+            afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd_uniform, extrapolation_bc=Interpolations.Periodic())
+        end
 
     end
 
@@ -594,7 +610,7 @@ function firstbracket(rotor::Rotor, section::Section, inflow::Inflow)
     end
 
     # If we get to this point, we've failed to find a bracket.
-    return success, phiL, phiU
+    return success, zero(rotor.Rhub), zero(rotor.Rhub)
 end
 
 
