@@ -85,6 +85,7 @@ class CCBladeResidualComp(ImplicitComponent):
         self.options.declare('B', types=int)
         self.options.declare('af_fname', types=str)
         self.options.declare('turbine', types=bool)
+        self.options.declare('debug_print', types=bool, default=False)
 
         jlmain.eval("""
             using CCBlade
@@ -255,7 +256,9 @@ class CCBladeResidualComp(ImplicitComponent):
                 # Check that we bracketed the root for each section.
                 success = @. getindex(out, 1)
                 if ! all(success)
-                    error("Bracketing failed")
+                    # error("Bracketing failed")
+                    println("CCBlade bracketing failed")
+                    @warn "CCBlade bracketing failed"
                 end
 
                 # Copy the left and right value of each interval.
@@ -302,8 +305,7 @@ class CCBladeResidualComp(ImplicitComponent):
         self.add_input('prop_radius', shape=(1, 1), units='m')
         self.add_input('precone', shape=(1, 1), units='rad')
 
-        self.add_output('phi', lower=-0.5*np.pi, upper=0.0,
-                        shape=(num_nodes, num_radial), units='rad')
+        self.add_output('phi', shape=(num_nodes, num_radial), units='rad')
         self.add_output('Np', shape=(num_nodes, num_radial), units='N/m')
         self.add_output('Tp', shape=(num_nodes, num_radial), units='N/m')
         self.add_output('a', shape=(num_nodes, num_radial))
@@ -365,7 +367,6 @@ class CCBladeResidualComp(ImplicitComponent):
         inputs_d = dict(inputs)
         outputs_d = dict(outputs)
         residuals_d = dict(residuals)
-        # print(f"phi =\n{outputs['phi']}")
         self._julia_apply_nonlinear(
             options_d, inputs_d, outputs_d, residuals_d)
 
@@ -399,13 +400,14 @@ class CCBladeResidualComp(ImplicitComponent):
 
     def recurse_solve(self):
         for ind, sub in enumerate(self._subsystems_myproc):
-                # print('test', sub.pathname)
                 isub = self._subsystems_myproc_inds[ind]
                 self._transfer('nonlinear', 'fwd', isub)
                 sub._solve_nonlinear()
         self._apply_nonlinear()
 
     def guess_nonlinear(self, inputs, outputs, residuals):
+        DEBUG_PRINT = self.options['debug_print']
+
         # I think this steps though and runs compute/apply_nonlinear to any
         # sub-components.
         self.recurse_solve()
@@ -414,6 +416,13 @@ class CCBladeResidualComp(ImplicitComponent):
         GUESS_TOL = 1e-4
         res_norm = residuals.get_norm()
         if res_norm < GUESS_TOL:
+            out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+            for name in out_names:
+                if np.all(np.logical_not(np.isnan(residuals[name]))):
+                    outputs[name] -= residuals[name]
+            if DEBUG_PRINT:
+                print(
+                    f"guess_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
             return
 
         options_d = {
@@ -431,8 +440,24 @@ class CCBladeResidualComp(ImplicitComponent):
         # Get an interval that brackets each root.
         self._julia_guess_nonlinear(options_d, inputs_d, phi_1, phi_2)
 
+        # Initialize the residuals.
         res_1 = np.zeros_like(phi_1)
+        outputs['phi'][:, :] = phi_1
+        self.recurse_solve()
+        res_1[:, :] = residuals['phi']
+
         res_2 = np.zeros_like(phi_1)
+        outputs['phi'][:, :] = phi_2
+        self.recurse_solve()
+        res_2[:, :] = residuals['phi']
+
+        # now initialize the phi_1 and phi_2 vectors so they represent the correct brackets
+        mask = res_1 > 0.
+        phi_1[mask], phi_2[mask] = phi_2[mask], phi_1[mask]
+        res_1[mask], res_2[mask] = res_2[mask], res_1[mask]
+
+        if DEBUG_PRINT:
+            print("0 Still bracking a root?", np.all(res_1*res_2 < 0.))
 
         for i in range(100):
             outputs['phi'][:] = 0.5 * (phi_1 + phi_2)
@@ -441,7 +466,16 @@ class CCBladeResidualComp(ImplicitComponent):
             # print('iter', i, np.linalg.norm(new_res))
 
             # only need to do this to get into the ballpark
-            if np.linalg.norm(new_res) < GUESS_TOL:
+            res_norm = np.linalg.norm(new_res)
+            if res_norm < GUESS_TOL:
+                out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd',
+                             'F')
+                for name in out_names:
+                    if np.all(np.logical_not(np.isnan(residuals[name]))):
+                        outputs[name] -= residuals[name]
+                if DEBUG_PRINT:
+                    print(
+                        f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
                 break
 
             mask_1 = new_res < 0
@@ -452,6 +486,17 @@ class CCBladeResidualComp(ImplicitComponent):
 
             phi_2[mask_2] = outputs['phi'][mask_2]
             res_2[mask_2] = new_res[mask_2]
+
+            if DEBUG_PRINT:
+                print(f"{i+1} Still bracking a root?", np.all(res_1*res_2 < 0.))
+
+        else:
+            out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+            for name in out_names:
+                if np.all(np.logical_not(np.isnan(residuals[name]))):
+                    outputs[name] -= residuals[name]
+            if DEBUG_PRINT:
+                print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
 
 
 class CCBladeThrustTorqueComp(ExplicitComponent):
@@ -586,7 +631,9 @@ class CCBladeGroup(Group):
         comp.nonlinear_solver.options['iprint'] = 2
         comp.nonlinear_solver.options['maxiter'] = 100
         comp.nonlinear_solver.options['err_on_non_converge'] = True
-        comp.nonlinear_solver.linesearch = BoundsEnforceLS()
+        comp.nonlinear_solver.options['atol'] = 1e-9
+        # comp.nonlinear_solver.options['rtol'] = 1e-8
+        # comp.nonlinear_solver.linesearch = BoundsEnforceLS()
         comp.linear_solver = DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=['radii', 'chord', 'theta', 'Vx',
