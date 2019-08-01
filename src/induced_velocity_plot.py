@@ -97,7 +97,7 @@ def main():
     balance_group.add_subsystem('thrust_balance_comp', comp, promotes=['*'])
 
     balance_group.linear_solver = DirectSolver(assemble_jac=True)
-    balance_group.nonlinear_solver = NewtonSolver(maxiter=100, iprint=2)
+    balance_group.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
     balance_group.nonlinear_solver.options['solve_subsystems'] = True
     balance_group.nonlinear_solver.options['atol'] = 1e-9
 

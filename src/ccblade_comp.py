@@ -625,11 +625,11 @@ class CCBladeGroup(Group):
 
         comp = CCBladeResidualComp(num_nodes=num_nodes, num_radial=num_radial,
                                    B=num_blades, turbine=False,
-                                   af_fname=af_filename)
+                                   af_fname=af_filename, debug_print=True)
         comp.nonlinear_solver = NewtonSolver()
         comp.nonlinear_solver.options['solve_subsystems'] = True
         comp.nonlinear_solver.options['iprint'] = 2
-        comp.nonlinear_solver.options['maxiter'] = 100
+        comp.nonlinear_solver.options['maxiter'] = 20
         comp.nonlinear_solver.options['err_on_non_converge'] = True
         comp.nonlinear_solver.options['atol'] = 1e-9
         # comp.nonlinear_solver.options['rtol'] = 1e-8
