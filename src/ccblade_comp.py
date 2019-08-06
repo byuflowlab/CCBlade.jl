@@ -476,6 +476,7 @@ class CCBladeResidualComp(ImplicitComponent):
                 if DEBUG_PRINT:
                     print(
                         f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
+                    print(f"Vy/r = {inputs['Vy']/inputs['radii']}")
                 break
 
             mask_1 = new_res < 0
@@ -488,7 +489,7 @@ class CCBladeResidualComp(ImplicitComponent):
             res_2[mask_2] = new_res[mask_2]
 
             if DEBUG_PRINT:
-                print(f"{i+1} Still bracking a root?", np.all(res_1*res_2 < 0.))
+                print(f"{i+1} res_norm = {res_norm}, Still bracking a root?", np.all(res_1*res_2 < 0.))
 
         else:
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
@@ -629,11 +630,11 @@ class CCBladeGroup(Group):
         comp.nonlinear_solver = NewtonSolver()
         comp.nonlinear_solver.options['solve_subsystems'] = True
         comp.nonlinear_solver.options['iprint'] = 2
-        comp.nonlinear_solver.options['maxiter'] = 20
+        comp.nonlinear_solver.options['maxiter'] = 30
         comp.nonlinear_solver.options['err_on_non_converge'] = True
-        comp.nonlinear_solver.options['atol'] = 1e-9
-        # comp.nonlinear_solver.options['rtol'] = 1e-8
-        # comp.nonlinear_solver.linesearch = BoundsEnforceLS()
+        comp.nonlinear_solver.options['atol'] = 1e-5
+        comp.nonlinear_solver.options['rtol'] = 1e-8
+        comp.nonlinear_solver.linesearch = BoundsEnforceLS()
         comp.linear_solver = DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=['radii', 'chord', 'theta', 'Vx',

@@ -148,8 +148,10 @@ def main():
         -0.5*climb_velocity_nondim + np.sqrt((0.5*climb_velocity_nondim)**2 + 1.))
 
     fig, ax = plt.subplots()
-    ax.plot(climb_velocity_nondim, -induced_velocity_nondim, label='CCBlade.jl')
-    ax.plot(climb_velocity_nondim, induced_velocity_mt, label='Momentum Theory')
+    ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
+            label='CCBlade.jl (climb)')
+    ax.plot(climb_velocity_nondim, induced_velocity_mt,
+            label='Momentum Theory (climb)')
 
     # Descent:
     climb_velocity_nondim = np.linspace(-4., -2., 10)
@@ -182,8 +184,46 @@ def main():
     induced_velocity_mt = (
         -0.5*climb_velocity_nondim - np.sqrt((0.5*climb_velocity_nondim)**2 - 1.))
 
-    ax.plot(climb_velocity_nondim, -induced_velocity_nondim, label='CCBlade.jl')
-    ax.plot(climb_velocity_nondim, induced_velocity_mt, label='Momentum Theory')
+    # Plot the induced velocity for descent.
+    ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
+            label='CCBlade.jl (descent)')
+    ax.plot(climb_velocity_nondim, induced_velocity_mt,
+            label='Momentum Theory (descent)')
+
+    # # Empirical region:
+    # climb_velocity_nondim = np.linspace(-1.9, -1.1, 1)
+    # induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
+    # for vc, vi in np.nditer(
+    #         [climb_velocity_nondim, induced_velocity_nondim],
+    #         op_flags=[['readonly'], ['writeonly']]):
+
+    #     # Run the model with the requested climb velocity.
+    #     prob.set_val('v', vc*v_h, units='m/s')
+    #     print(f"vc = {vc}, v = {prob.get_val('v', units='m/s')}")
+    #     prob.run_model()
+
+    #     # Calculate the area-weighted average induced velocity at the rotor.
+    #     # Need the area of each blade section.
+    #     radii = prob.get_val('ccblade_group.radii',
+    #                          units='m')
+    #     dradii = prob.get_val('ccblade_group.dradii',
+    #                           units='m')
+    #     dArea = 2*np.pi*radii*dradii
+
+    #     # Get the induced velocity at the rotor plane for each blade section.
+    #     Vx = prob.get_val('ccblade_group.Vx', units='m/s')
+    #     a = prob.get_val('ccblade_group.ccblade_comp.a')
+
+    #     # Get the area-weighted average of the induced velocity.
+    #     vi[...] = np.sum(a*Vx*dArea/A_rotor)/v_h
+
+    # # Plot the induced velocity for the empirical region.
+    # ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
+    #         label='CCBlade.jl (empirical region)')
+
+    ax.set_xlabel('Vc/vh')
+    ax.set_ylabel('Vi/vh')
+    ax.legend()
     fig.savefig('induced_velocity.png')
 
 
