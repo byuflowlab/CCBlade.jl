@@ -61,6 +61,7 @@ Np, Tp = loads(outputs)
 avec = getfield.(outputs, :a)
 apvec = getfield.(outputs, :ap)
 phivec = getfield.(outputs, :phi)
+@show phivec
 
 ivec = phivec*180/pi .- theta*180/pi
 betavec = 90 .- phivec*180/pi
