@@ -1,3 +1,4 @@
+import time
 import numpy as np
 
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
@@ -96,7 +97,9 @@ def main():
 
     prob.setup()
     prob.final_setup()
+    st = time.time()
     prob.run_driver()
+    print(f"time = {time.time() - st}")
     thrust = prob.get_val('thrust', units='N')
     torque = prob.get_val('torque', units='N*m')
     efficiency = prob.get_val('efficiency')
