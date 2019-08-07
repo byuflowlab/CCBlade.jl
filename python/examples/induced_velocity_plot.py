@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 
 from openmdao.api import (IndepVarComp, Problem, Group, BalanceComp,
                           DirectSolver, NewtonSolver)
-from ccblade_comp import CCBladeGroup
+from ccblade.geometry import GeometryGroup
+from ccblade.ccblade import CCBladeGroup
 
 
 def make_plots(prob):
@@ -12,7 +13,7 @@ def make_plots(prob):
     node = 0
     num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
     radii = prob.get_val(
-        'ccblade_group.radii', units='m')[node, :]
+        'radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
     ccblade_circum_load = prob.get_val(
@@ -77,16 +78,23 @@ def main():
     comp.add_output('thrust_vtol', val=thrust_vtol, shape=num_nodes, units='N')
     prob.model.add_subsystem('indep_var_comp', comp, promotes=['*'])
 
+    comp = GeometryGroup(num_nodes=num_nodes, num_cp=num_cp,
+                         num_radial=num_radial)
+    prob.model.add_subsystem(
+        'geometry_group', comp,
+        promotes_inputs=['hub_diameter', 'prop_diameter', 'chord_dv',
+                         'theta_dv', 'pitch'],
+        promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
+
     balance_group = Group()
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        num_cp=num_cp, num_blades=num_blades,
-                        af_filename=af_filename)
+                        num_blades=num_blades, af_filename=af_filename)
     balance_group.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['chord_dv', 'theta_dv', 'rho', 'mu', 'asound', 'v',
-                         'precone', 'omega', 'hub_diameter', 'prop_diameter',
-                         'pitch'],
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
+                         'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
     comp = BalanceComp()
@@ -97,13 +105,16 @@ def main():
     balance_group.add_subsystem('thrust_balance_comp', comp, promotes=['*'])
 
     balance_group.linear_solver = DirectSolver(assemble_jac=True)
-    balance_group.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
-    balance_group.nonlinear_solver.options['solve_subsystems'] = True
-    balance_group.nonlinear_solver.options['atol'] = 1e-9
+    # balance_group.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
+    # balance_group.nonlinear_solver.options['solve_subsystems'] = True
+    # balance_group.nonlinear_solver.options['atol'] = 1e-9
 
     prob.model.add_subsystem('thrust_balance_group', balance_group,
                              promotes=['*'])
 
+    prob.model.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
+    prob.model.nonlinear_solver.options['solve_subsystems'] = True
+    prob.model.nonlinear_solver.options['atol'] = 1e-9
     prob.setup()
     prob.final_setup()
 
@@ -130,9 +141,9 @@ def main():
 
         # Calculate the area-weighted average induced velocity at the rotor.
         # Need the area of each blade section.
-        radii = prob.get_val('ccblade_group.radii',
+        radii = prob.get_val('radii',
                              units='m')
-        dradii = prob.get_val('ccblade_group.dradii',
+        dradii = prob.get_val('dradii',
                               units='m')
         dArea = 2*np.pi*radii*dradii
 
@@ -167,9 +178,9 @@ def main():
 
         # Calculate the area-weighted average induced velocity at the rotor.
         # Need the area of each blade section.
-        radii = prob.get_val('ccblade_group.radii',
+        radii = prob.get_val('radii',
                              units='m')
-        dradii = prob.get_val('ccblade_group.dradii',
+        dradii = prob.get_val('dradii',
                               units='m')
         dArea = 2*np.pi*radii*dradii
 
@@ -204,9 +215,9 @@ def main():
 
     #     # Calculate the area-weighted average induced velocity at the rotor.
     #     # Need the area of each blade section.
-    #     radii = prob.get_val('ccblade_group.radii',
+    #     radii = prob.get_val('radii',
     #                          units='m')
-    #     dradii = prob.get_val('ccblade_group.dradii',
+    #     dradii = prob.get_val('dradii',
     #                           units='m')
     #     dArea = 2*np.pi*radii*dradii
 

@@ -1,9 +1,7 @@
 import numpy as np
-from openmdao.api import ImplicitComponent, ExplicitComponent, AnalysisError
-from openmdao.api import (Group, AkimaSplineComp, ExecComp, NewtonSolver,
+from openmdao.api import (ImplicitComponent, ExplicitComponent, Group,
+                          AkimaSplineComp, ExecComp, NewtonSolver,
                           DirectSolver, BoundsEnforceLS)
-from openbemt.bemt.components.preprocess.mesh_comp import BEMTMeshComp
-from openbemt.bemt.components.preprocess.theta_comp import BEMTThetaComp
 import julia.Main as jlmain
 
 
@@ -36,45 +34,6 @@ def get_rows_cols(of_shape, of_ss, wrt_shape, wrt_ss):
     cols = np.einsum(ss, a, b).flatten()
 
     return rows, cols
-
-
-class BladeSectionPreprocessGroup(Group):
-
-    def initialize(self):
-        self.options.declare('num_nodes', types=int)
-        self.options.declare('num_cp', types=int)
-        self.options.declare('num_radial', types=int)
-
-    def setup(self):
-        num_nodes = self.options['num_nodes']
-        num_cp = self.options['num_cp']
-        num_radial = self.options['num_radial']
-
-        comp = BEMTMeshComp(num_nodes=num_nodes, num_radial=num_radial)
-        self.add_subsystem('mesh_comp', comp, promotes=['*'])
-
-        comp = BEMTThetaComp(num_nodes=num_nodes, num_cp=num_cp)
-        self.add_subsystem('theta_cp_comp', comp,
-                           promotes_inputs=[('theta_cp_unpitched', 'theta_dv'),
-                                            ('pitch_cp', 'pitch')],
-                           promotes_outputs=['theta_cp'])
-
-        comp = AkimaSplineComp(vec_size=1, num_control_points=num_cp,
-                               num_points=num_radial, name='chord', units='cm',
-                               eval_at='cell_center')
-
-        self.add_subsystem('chord_bspline_comp', comp,
-                           promotes_inputs=[('chord:y_cp', 'chord_dv')],
-                           promotes_outputs=[('chord:y', 'chord')])
-
-        comp = AkimaSplineComp(vec_size=num_nodes, num_control_points=num_cp,
-                               num_points=num_radial,
-                               name='theta', units='rad',
-                               eval_at='cell_center')
-
-        self.add_subsystem('theta_bspline_comp', comp,
-                           promotes_inputs=[('theta:y_cp', 'theta_cp')],
-                           promotes_outputs=[('theta:y', 'theta')])
 
 
 class CCBladeResidualComp(ImplicitComponent):
@@ -581,31 +540,25 @@ class CCBladeGroup(Group):
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
-        self.options.declare('num_cp', types=int)
+        # self.options.declare('num_cp', types=int)
         self.options.declare('num_blades', types=int)
         self.options.declare('af_filename', types=str)
+        # self.options.declare('turbine', types=bool)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
-        num_cp = self.options['num_cp']
+        # num_cp = self.options['num_cp']
         num_radial = self.options['num_radial']
         num_blades = self.options['num_blades']
         af_filename = self.options['af_filename']
 
-        comp = BladeSectionPreprocessGroup(num_nodes=num_nodes, num_cp=num_cp,
-                                           num_radial=num_radial)
-        self.add_subsystem('blade_preproc_group', comp,
-                           promotes_inputs=['hub_diameter', 'prop_diameter',
-                                            'chord_dv', 'theta_dv', 'pitch'],
-                           promotes_outputs=['chord', 'theta', 'radii',
-                                             'dradii'])
         comp = ExecComp('hub_radius = 0.5*hub_diameter',
-                        hub_radius={'units': 'm'},
+                        hub_radius={'value': 0.1, 'units': 'm'},
                         hub_diameter={'units': 'm'})
         self.add_subsystem('hub_radius_comp', comp, promotes=['*'])
 
         comp = ExecComp('prop_radius = 0.5*prop_diameter',
-                        prop_radius={'units': 'm'},
+                        prop_radius={'value': 1.0, 'units': 'm'},
                         prop_diameter={'units': 'm'})
         self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
 
@@ -660,3 +613,4 @@ class CCBladeGroup(Group):
                            promotes_outputs=['*'])
 
         self.linear_solver = DirectSolver(assemble_jac=True)
+

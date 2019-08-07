@@ -1,7 +1,8 @@
 import numpy as np
 
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
-from ccblade_comp import CCBladeGroup
+from ccblade.geometry import GeometryGroup
+from ccblade.ccblade import CCBladeGroup
 
 
 def make_plots(prob):
@@ -9,7 +10,7 @@ def make_plots(prob):
 
     node = 0
     num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    radii = prob.get_val('ccblade_group.radii', units='m')[node, :]
+    radii = prob.get_val('radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
     ccblade_circum_load = prob.get_val(
@@ -65,14 +66,21 @@ def main():
     comp.add_output('theta_dv', val=theta, shape=num_cp, units='rad')
     prob.model.add_subsystem('indep_var_comp', comp, promotes=['*'])
 
+    comp = GeometryGroup(num_nodes=num_nodes, num_cp=num_cp,
+                         num_radial=num_radial)
+    prob.model.add_subsystem(
+        'geometry_group', comp,
+        promotes_inputs=['hub_diameter', 'prop_diameter', 'chord_dv',
+                         'theta_dv', 'pitch'],
+        promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        num_cp=num_cp, num_blades=num_blades,
-                        af_filename=af_filename)
+                        num_blades=num_blades, af_filename=af_filename)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['chord_dv', 'theta_dv', 'rho', 'mu', 'asound', 'v',
-                         'precone', 'omega', 'hub_diameter', 'prop_diameter',
-                         'pitch'],
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
+                         'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
     prob.model.add_design_var('chord_dv', lower=1., upper=20.,
