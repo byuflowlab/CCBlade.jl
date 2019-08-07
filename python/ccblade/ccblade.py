@@ -465,12 +465,10 @@ class CCBladeThrustTorqueComp(ExplicitComponent):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
         self.options.declare('B', types=int)
-        self.options.declare('dynamic_coloring', types=bool, default=False)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
-        dynamic_coloring = self.options['dynamic_coloring']
 
         self.add_input('radii', shape=num_radial, units='m')
         self.add_input('dradii', shape=num_radial, units='m')
@@ -481,26 +479,15 @@ class CCBladeThrustTorqueComp(ExplicitComponent):
         self.add_output('thrust', shape=num_nodes, units='N')
         self.add_output('torque', shape=num_nodes, units='N*m')
 
-        if dynamic_coloring:
-            self.declare_partials('thrust', 'dradii')
-            self.declare_partials('torque', 'dradii')
-            self.declare_partials('torque', 'radii')
-            self.declare_partials('thrust', 'Np')
-            self.declare_partials('torque', 'Tp')
-            # turn on dynamic partial coloring
-            self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
-                                  num_full_jacs=2, tol=1e-20, orders=20,
-                                  show_summary=True, show_sparsity=False)
-        else:
-            rows, cols = get_rows_cols(
-                of_shape=(num_nodes,), of_ss='i',
-                wrt_shape=(num_radial,), wrt_ss='j')
-            self.declare_partials('thrust', 'dradii', rows=rows, cols=cols)
-            self.declare_partials('torque', 'dradii', rows=rows, cols=cols)
-            self.declare_partials('torque', 'radii', rows=rows, cols=cols)
-
-            self.declare_partials('thrust', 'Np', rows=rows, cols=cols)
-            self.declare_partials('torque', 'Tp', rows=rows, cols=cols)
+        self.declare_partials('thrust', 'dradii')
+        self.declare_partials('torque', 'dradii')
+        self.declare_partials('torque', 'radii')
+        self.declare_partials('thrust', 'Np')
+        self.declare_partials('torque', 'Tp')
+        # turn on dynamic partial coloring
+        self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
+                              num_full_jacs=2, tol=1e-20, orders=20,
+                              show_summary=True, show_sparsity=False)
 
     def compute(self, inputs, outputs):
         B = self.options['B']
@@ -513,8 +500,6 @@ class CCBladeThrustTorqueComp(ExplicitComponent):
         outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
 
     def compute_partials(self, inputs, partials):
-        if self.options['dynamic_coloring']:
-            pass
         B = self.options['B']
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
@@ -611,9 +596,8 @@ class CCBladeGroup(Group):
                                             'precone'],
                            promotes_outputs=['Np', 'Tp'])
 
-        comp = CCBladeThrustTorqueComp(
-            num_nodes=num_nodes, num_radial=num_radial, B=num_blades,
-            dynamic_coloring=False)
+        comp = CCBladeThrustTorqueComp(num_nodes=num_nodes,
+                                       num_radial=num_radial, B=num_blades)
         self.add_subsystem('ccblade_torquethrust_comp', comp,
                            promotes_inputs=['radii', 'dradii', 'Np', 'Tp'],
                            promotes_outputs=['thrust', 'torque'])
