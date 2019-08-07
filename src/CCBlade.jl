@@ -324,6 +324,7 @@ function residual(phi, section, inflow, rotor)
     factorhub = B/2.0*(r - Rhub)/(Rhub*abs(sphi))
     Fhub = 2.0/pi*acos(exp(-factorhub))
     F = Ftip * Fhub
+    # F::typeof(Ftip) = 1.0
 
     # sec parameters
     k = cn*sigma_p/(4.0*F*sphi*sphi)
