@@ -1,6 +1,6 @@
 import numpy as np
 
-from openmdao.api import ImplicitComponent
+import openmdao.api as om
 
 
 def dummy_airfoil(alpha, Re, Mach):
@@ -10,7 +10,7 @@ def dummy_airfoil(alpha, Re, Mach):
     return cl, cd
 
 
-class CCBladeResidualComp(ImplicitComponent):
+class CCBladeResidualComp(om.ImplicitComponent):
 
     def initialize(self):
         self.options.declare('num_nodes', types=int)
@@ -18,6 +18,7 @@ class CCBladeResidualComp(ImplicitComponent):
         self.options.declare('airfoil_interp')
         self.options.declare('turbine', types=bool)
         self.options.declare('debug_print', types=bool, default=False)
+        self.options.declare('solve_nonlinear', types=bool, default=True)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -56,6 +57,7 @@ class CCBladeResidualComp(ImplicitComponent):
 
     def apply_nonlinear(self, inputs, outputs, residuals,
                         discrete_inputs, discrete_outputs):
+
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
         turbine = self.options['turbine']
@@ -78,8 +80,11 @@ class CCBladeResidualComp(ImplicitComponent):
         # check if turbine or propeller and change input sign if necessary
         # swapsign = turbine ? 1 : -1
         swapsign = 1 if turbine else -1
-        theta *= swapsign
-        Vx *= swapsign
+        # Bad idea:
+        # theta *= swapsign
+        # Vx *= swapsign
+        theta = swapsign * inputs['theta']
+        Vx = swapsign * inputs['Vx']
 
         # constants
         sigma_p = B*chord/(2.0*np.pi*r)
@@ -104,10 +109,10 @@ class CCBladeResidualComp(ImplicitComponent):
         ct = cl*sphi - cd*cphi
 
         # Prandtl's tip and hub loss factor
-        print(f"Rtip = {Rtip}")
-        print(f"r = {r}")
+        # print(f"Rtip = {Rtip}")
+        # print(f"r = {r}")
         factortip = B/2.0*(Rtip - r)/(r*np.abs(sphi))  # Not complex safe.
-        print(f"factortip = {factortip}")
+        # print(f"factortip = {factortip}")
         Ftip = 2.0/np.pi*np.arccos(np.exp(-factortip))
         factorhub = B/2.0*(r - Rhub)/(Rhub*np.abs(sphi))
         Fhub = 2.0/np.pi*np.arccos(np.exp(-factorhub))
@@ -148,9 +153,9 @@ class CCBladeResidualComp(ImplicitComponent):
                     else:
                         a[i, j] = (g1 - np.sqrt(g2)) / g3
 
-                print(f"a[{i}, {j}] = {a[i, j]}")
-                print(f"F[{i}, {j}] = {F[i, j]}")
-                print(f"k[{i}, {j}] = {k[i, j]}")
+                # print(f"a[{i}, {j}] = {a[i, j]}")
+                # print(f"F[{i}, {j}] = {F[i, j]}")
+                # print(f"k[{i}, {j}] = {k[i, j]}")
 
         # mom_mask = k <= 2./3.
         # a[mom_mask] = k[mom_mask]/(1 + k[mom_mask])
@@ -210,6 +215,10 @@ class CCBladeResidualComp(ImplicitComponent):
 
     def solve_nonlinear(self, inputs, outputs,
                         discrete_inputs, discrete_outputs):
+        if not self.options['solve_nonlinear']:
+            return
+
+        turbine = self.options['turbine']
         DEBUG_PRINT = self.options['debug_print']
         residuals = self._residuals
 
@@ -232,11 +241,14 @@ class CCBladeResidualComp(ImplicitComponent):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
-        # phi_1 = -0.5*np.pi*np.ones((num_nodes, num_radial))
-        # phi_2 = np.zeros((num_nodes, num_radial))
-
-        phi_1 = np.zeros((num_nodes, num_radial))
-        phi_2 = 0.5*np.pi*np.ones((num_nodes, num_radial))
+        # This needs to be fixed—need to check the sign of Vx and Vy, I think.
+        eps = 1.0*np.pi/180.0
+        if turbine:
+            phi_1 = np.zeros((num_nodes, num_radial)) + eps
+            phi_2 = 0.5*np.pi*np.ones((num_nodes, num_radial)) - eps
+        else:
+            phi_1 = -0.5*np.pi*np.ones((num_nodes, num_radial)) + eps
+            phi_2 = np.zeros((num_nodes, num_radial)) - eps
 
         # Initialize the residuals.
         res_1 = np.zeros_like(phi_1)
@@ -289,9 +301,6 @@ class CCBladeResidualComp(ImplicitComponent):
             phi_2[mask_2] = outputs['phi'][mask_2]
             res_2[mask_2] = new_res[mask_2]
 
-            if DEBUG_PRINT:
-                print(f"{i+1} res_norm = {res_norm}, Still bracking a root?", np.all(res_1*res_2 < 0.))
-
         else:
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
             for name in out_names:
@@ -301,9 +310,133 @@ class CCBladeResidualComp(ImplicitComponent):
                 print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
 
 
-def complicated():
-    from openmdao.api import Problem
+class CCBladeThrustTorqueComp(om.ExplicitComponent):
 
+    def initialize(self):
+        self.options.declare('num_nodes', types=int)
+        self.options.declare('num_radial', types=int)
+
+    def setup(self):
+        num_nodes = self.options['num_nodes']
+        num_radial = self.options['num_radial']
+
+        self.add_discrete_input('B', val=3)
+        self.add_input('radii', shape=num_radial, units='m')
+        self.add_input('dradii', shape=num_radial, units='m')
+        self.add_input('Np',
+                       shape=(num_nodes, num_radial), units='N/m')
+        self.add_input('Tp',
+                       shape=(num_nodes, num_radial), units='N/m')
+        self.add_output('thrust', shape=num_nodes, units='N')
+        self.add_output('torque', shape=num_nodes, units='N*m')
+
+        self.declare_partials('thrust', 'dradii')
+        self.declare_partials('torque', 'dradii')
+        self.declare_partials('torque', 'radii')
+        self.declare_partials('thrust', 'Np')
+        self.declare_partials('torque', 'Tp')
+
+        # turn on dynamic partial coloring
+        self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
+                              num_full_jacs=2, tol=1e-20, orders=20,
+                              show_summary=True, show_sparsity=False)
+
+    def compute(self, inputs, outputs, discrete_inputs, discrete_outputs):
+        B = discrete_inputs['B']
+        radii = inputs['radii'][np.newaxis, :]
+        dradii = inputs['dradii'][np.newaxis, :]
+        Np = inputs['Np']
+        Tp = inputs['Tp']
+
+        outputs['thrust'][:] = B*np.sum(Np * dradii, axis=1)
+        outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
+
+
+class CCBladeGroup(om.Group):
+
+    def initialize(self):
+        self.options.declare('num_nodes', types=int)
+        self.options.declare('num_radial', types=int)
+        self.options.declare('airfoil_interp')
+        self.options.declare('turbine', types=bool)
+        self.options.declare('phi_residual_solve_nonlinear', types=bool,
+                             default=True)
+
+    def setup(self):
+        num_nodes = self.options['num_nodes']
+        num_radial = self.options['num_radial']
+        airfoil_interp = self.options['airfoil_interp']
+        turbine = self.options['turbine']
+        solve_nonlinear = self.options['phi_residual_solve_nonlinear']
+
+        comp = om.ExecComp('hub_radius = 0.5*hub_diameter',
+                           hub_radius={'value': 0.1, 'units': 'm'},
+                           hub_diameter={'units': 'm'})
+        self.add_subsystem('hub_radius_comp', comp, promotes=['*'])
+
+        comp = om.ExecComp('prop_radius = 0.5*prop_diameter',
+                           prop_radius={'value': 1.0, 'units': 'm'},
+                           prop_diameter={'units': 'm'})
+        self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
+
+        src_indices = np.zeros((num_nodes, num_radial, 1), dtype=int)
+        comp = om.ExecComp(
+            'Vx = v*cos(precone)',
+            v={'units': 'm/s', 'shape': (num_nodes, num_radial),
+               'src_indices': src_indices},
+            precone={'units': 'rad'},
+            Vx={'units': 'm/s', 'shape': (num_nodes, num_radial)})
+        self.add_subsystem('Vx_comp', comp, promotes=['*'])
+
+        comp = om.ExecComp('Vy = omega*radii*cos(precone)',
+                           omega={'units': 'rad/s',
+                                  'shape': (num_nodes, 1),
+                                  'flat_src_indices': [0]},
+                           radii={'units': 'm', 'shape': (1, num_radial)},
+                           precone={'units': 'rad'},
+                           Vy={'units': 'm/s', 'shape': (num_nodes, num_radial)})
+        self.add_subsystem('Vy_comp', comp, promotes=['*'])
+
+        comp = CCBladeResidualComp(
+            num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
+            airfoil_interp=airfoil_interp, debug_print=True,
+            solve_nonlinear=solve_nonlinear)
+        # comp.nonlinear_solver = om.NewtonSolver()
+        # comp.nonlinear_solver.options['solve_subsystems'] = True
+        # comp.nonlinear_solver.options['iprint'] = 2
+        # comp.nonlinear_solver.options['maxiter'] = 30
+        # comp.nonlinear_solver.options['err_on_non_converge'] = True
+        # comp.nonlinear_solver.options['atol'] = 1e-5
+        # comp.nonlinear_solver.options['rtol'] = 1e-8
+        # comp.nonlinear_solver.linesearch = om.BoundsEnforceLS()
+        comp.linear_solver = om.DirectSolver(assemble_jac=True)
+        self.add_subsystem('ccblade_comp', comp,
+                           promotes_inputs=['B', 'radii', 'chord', 'theta',
+                                            'Vx', 'Vy', 'rho', 'mu', 'asound',
+                                            'hub_radius', 'prop_radius',
+                                            'precone'],
+                           promotes_outputs=['Np', 'Tp'])
+
+        comp = CCBladeThrustTorqueComp(num_nodes=num_nodes,
+                                       num_radial=num_radial)
+        self.add_subsystem('ccblade_torquethrust_comp', comp,
+                           promotes_inputs=['radii', 'dradii', 'Np', 'Tp'],
+                           promotes_outputs=['thrust', 'torque'])
+
+        comp = om.ExecComp('efficiency = (thrust*v)/(torque*omega)',
+                           thrust={'units': 'N', 'shape': num_nodes},
+                           v={'units': 'm/s', 'shape': num_nodes},
+                           torque={'units': 'N*m', 'shape': num_nodes},
+                           omega={'units': 'rad/s', 'shape': num_nodes},
+                           efficiency={'shape': num_nodes})
+        self.add_subsystem('efficiency_comp', comp,
+                           promotes_inputs=['*'],
+                           promotes_outputs=['*'])
+
+        self.linear_solver = om.DirectSolver(assemble_jac=True)
+
+
+def complicated():
     num_nodes = 1
     B = 2  # number of blades
     af = dummy_airfoil
@@ -346,7 +479,7 @@ def complicated():
     mu = np.array([1.]).reshape((num_nodes, 1))
     asound = np.array([1.]).reshape((num_nodes, 1))
 
-    prob = Problem()
+    prob = om.Problem()
 
     comp = CCBladeResidualComp(num_nodes=num_nodes,
                                num_radial=num_radial,
@@ -378,8 +511,6 @@ def complicated():
 
 
 def simple():
-    from openmdao.api import Problem
-
     num_nodes = 1
     # B = 3  # number of blades
     precone = 0.
@@ -404,7 +535,7 @@ def simple():
     Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
     Vy = omega*r*np.cos(precone)
 
-    prob = Problem()
+    prob = om.Problem()
 
     comp = CCBladeResidualComp(num_nodes=num_nodes,
                                num_radial=num_radial,
