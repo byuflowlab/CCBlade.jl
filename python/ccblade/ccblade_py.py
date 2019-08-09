@@ -10,6 +10,10 @@ def dummy_airfoil(alpha, Re, Mach):
     return cl, cd
 
 
+def abs_cs(x):
+    return np.sqrt(x*x)
+
+
 class CCBladeResidualComp(om.ImplicitComponent):
 
     def initialize(self):
@@ -51,7 +55,8 @@ class CCBladeResidualComp(om.ImplicitComponent):
 
         self.declare_partials('*', '*')
 
-        self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
+        deriv_method = 'fd'
+        self.declare_coloring(wrt='*', method=deriv_method, perturb_size=1e-5,
                               num_full_jacs=2, tol=1e-20, orders=20,
                               show_summary=True, show_sparsity=False)
 
@@ -109,12 +114,9 @@ class CCBladeResidualComp(om.ImplicitComponent):
         ct = cl*sphi - cd*cphi
 
         # Prandtl's tip and hub loss factor
-        # print(f"Rtip = {Rtip}")
-        # print(f"r = {r}")
-        factortip = B/2.0*(Rtip - r)/(r*np.abs(sphi))  # Not complex safe.
-        # print(f"factortip = {factortip}")
+        factortip = B/2.0*(Rtip - r)/(r*abs_cs(sphi))
         Ftip = 2.0/np.pi*np.arccos(np.exp(-factortip))
-        factorhub = B/2.0*(r - Rhub)/(Rhub*np.abs(sphi))
+        factorhub = B/2.0*(r - Rhub)/(Rhub*abs_cs(sphi))
         Fhub = 2.0/np.pi*np.arccos(np.exp(-factorhub))
         F = Ftip * Fhub
 
@@ -152,10 +154,6 @@ class CCBladeResidualComp(om.ImplicitComponent):
                         a[i, j] = 1.0 - 1.0/(2.0*np.sqrt(g2))
                     else:
                         a[i, j] = (g1 - np.sqrt(g2)) / g3
-
-                # print(f"a[{i}, {j}] = {a[i, j]}")
-                # print(f"F[{i}, {j}] = {F[i, j]}")
-                # print(f"k[{i}, {j}] = {k[i, j]}")
 
         # mom_mask = k <= 2./3.
         # a[mom_mask] = k[mom_mask]/(1 + k[mom_mask])
@@ -211,7 +209,7 @@ class CCBladeResidualComp(om.ImplicitComponent):
         residuals['W'] = np.sqrt(W2) - outputs['W']
         residuals['cl'] = cl - outputs['cl']
         residuals['cd'] = cl - outputs['cd']
-        residuals['F'] = F - outputs['cd']
+        residuals['F'] = F - outputs['F']
 
     def solve_nonlinear(self, inputs, outputs,
                         discrete_inputs, discrete_outputs):
@@ -289,7 +287,6 @@ class CCBladeResidualComp(om.ImplicitComponent):
                 if DEBUG_PRINT:
                     print(
                         f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
-                    print(f"Vy/r = {inputs['Vy']/inputs['radii']}")
                 break
 
             mask_1 = new_res < 0

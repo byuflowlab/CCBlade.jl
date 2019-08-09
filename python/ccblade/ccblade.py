@@ -86,7 +86,6 @@ class CCBladeResidualComp(ImplicitComponent):
 
                 # Store the residual.
                 @. residuals["phi"] = getindex(out, 1)
-                # @show residuals["phi"]
 
                 # Get the other outputs.
                 @. residuals["Np"] = outputs["Np"] - getfield(getindex(out, 2), :Np)
