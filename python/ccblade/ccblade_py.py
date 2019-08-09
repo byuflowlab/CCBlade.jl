@@ -9,12 +9,11 @@ def dummy_airfoil(alpha, Re, Mach):
 
     return cl, cd
 
-
 def abs_cs(x):
     return np.sqrt(x*x)
 
 
-class CCBladeResidualComp(om.ImplicitComponent):
+class LocalInflowAngleComp(om.ImplicitComponent):
 
     def initialize(self):
         self.options.declare('num_nodes', types=int)
@@ -124,13 +123,15 @@ class CCBladeResidualComp(om.ImplicitComponent):
         k = cn*sigma_p/(4.0*F*sphi*sphi)
         kp = ct*sigma_p/(4.0*F*sphi*cphi)
 
-        # if phi < 0:
-        #     k = -k
+
         k[phi < 0.] *= -1.
 
+
+        ####################################
+        # Original Julia Code 
+        ####################################
         # if k <= 2.0/3:  # momentum region
         #     a = k/(1 + k)
-
         # else:  # empirical region
         #     g1 = 2.0*F*k - (10.0/9-F)
         #     g2 = 2.0*F*k - (4.0/3-F)*F
@@ -141,6 +142,10 @@ class CCBladeResidualComp(om.ImplicitComponent):
         #     else:
         #         a = (g1 - np.sqrt(g2)) / g3
 
+
+        ####################################
+        # Slow Pythonized Code 
+        ####################################
         a = np.zeros_like(phi)
         for i in range(num_nodes):
             for j in range(num_radial):
@@ -155,6 +160,10 @@ class CCBladeResidualComp(om.ImplicitComponent):
                     else:
                         a[i, j] = (g1 - np.sqrt(g2)) / g3
 
+
+        ####################################
+        # Fast Pythonized Code 
+        ####################################
         # mom_mask = k <= 2./3.
         # a[mom_mask] = k[mom_mask]/(1 + k[mom_mask])
         # print(f"a (1) = {a}")
@@ -232,8 +241,7 @@ class CCBladeResidualComp(om.ImplicitComponent):
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
                     outputs[name] += residuals[name]
             if DEBUG_PRINT:
-                print(
-                    f"guess_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
+                print(f"solve_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
             return
 
         num_nodes = self.options['num_nodes']
@@ -279,14 +287,9 @@ class CCBladeResidualComp(om.ImplicitComponent):
             # only need to do this to get into the ballpark
             res_norm = np.linalg.norm(new_res)
             if res_norm < GUESS_TOL:
-                out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd',
-                             'F')
-                for name in out_names:
-                    if np.all(np.logical_not(np.isnan(residuals[name]))):
-                        outputs[name] += residuals[name]
                 if DEBUG_PRINT:
                     print(
-                        f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
+                        f"solve_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
                 break
 
             mask_1 = new_res < 0
@@ -299,15 +302,17 @@ class CCBladeResidualComp(om.ImplicitComponent):
             res_2[mask_2] = new_res[mask_2]
 
         else:
-            out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
-            for name in out_names:
-                if np.all(np.logical_not(np.isnan(residuals[name]))):
-                    outputs[name] += residuals[name]
             if DEBUG_PRINT:
-                print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
+                print(f"solve_nonlinear res_norm = {res_norm} > GUESS_TOL")
+
+        # set the rest of the outputs to correct values to keep residual norm well behaved
+        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+        for name in out_names:
+            if np.all(np.logical_not(np.isnan(residuals[name]))):
+                outputs[name] += residuals[name]
 
 
-class CCBladeThrustTorqueComp(om.ExplicitComponent):
+class ThrustTorqueEffComp(om.ExplicitComponent):
 
     def initialize(self):
         self.options.declare('num_nodes', types=int)
@@ -324,8 +329,12 @@ class CCBladeThrustTorqueComp(om.ExplicitComponent):
                        shape=(num_nodes, num_radial), units='N/m')
         self.add_input('Tp',
                        shape=(num_nodes, num_radial), units='N/m')
+        self.add_input('omega', shape=num_nodes, units='rad/s')
+        self.add_input('v', shape=num_nodes, units='m/s')
+        
         self.add_output('thrust', shape=num_nodes, units='N')
         self.add_output('torque', shape=num_nodes, units='N*m')
+        self.add_output('efficiency', shape=num_nodes)
 
         self.declare_partials('thrust', 'dradii')
         self.declare_partials('torque', 'dradii')
@@ -345,9 +354,10 @@ class CCBladeThrustTorqueComp(om.ExplicitComponent):
         Np = inputs['Np']
         Tp = inputs['Tp']
 
-        outputs['thrust'][:] = B*np.sum(Np * dradii, axis=1)
-        outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
+        thrust = outputs['thrust'][:] = B*np.sum(Np * dradii, axis=1)
+        torque = outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
 
+        efficiency = (thrust*inputs['v'])/(torque*inputs['omega'])
 
 class CCBladeGroup(om.Group):
 
@@ -394,10 +404,11 @@ class CCBladeGroup(om.Group):
                            Vy={'units': 'm/s', 'shape': (num_nodes, num_radial)})
         self.add_subsystem('Vy_comp', comp, promotes=['*'])
 
-        comp = CCBladeResidualComp(
+        comp = LocalInflowAngleComp(
             num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
             airfoil_interp=airfoil_interp, debug_print=True,
             solve_nonlinear=solve_nonlinear)
+        
         # comp.nonlinear_solver = om.NewtonSolver()
         # comp.nonlinear_solver.options['solve_subsystems'] = True
         # comp.nonlinear_solver.options['iprint'] = 2
@@ -406,7 +417,8 @@ class CCBladeGroup(om.Group):
         # comp.nonlinear_solver.options['atol'] = 1e-5
         # comp.nonlinear_solver.options['rtol'] = 1e-8
         # comp.nonlinear_solver.linesearch = om.BoundsEnforceLS()
-        comp.linear_solver = om.DirectSolver(assemble_jac=True)
+        # comp.linear_solver = om.DirectSolver(assemble_jac=True)
+        
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=['B', 'radii', 'chord', 'theta',
                                             'Vx', 'Vy', 'rho', 'mu', 'asound',
@@ -414,155 +426,92 @@ class CCBladeGroup(om.Group):
                                             'precone'],
                            promotes_outputs=['Np', 'Tp'])
 
-        comp = CCBladeThrustTorqueComp(num_nodes=num_nodes,
-                                       num_radial=num_radial)
+        comp = ThrustTorqueEffComp(num_nodes=num_nodes,
+                                   num_radial=num_radial)
         self.add_subsystem('ccblade_torquethrust_comp', comp,
-                           promotes_inputs=['radii', 'dradii', 'Np', 'Tp'],
+                           promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
                            promotes_outputs=['thrust', 'torque'])
 
-        comp = om.ExecComp('efficiency = (thrust*v)/(torque*omega)',
-                           thrust={'units': 'N', 'shape': num_nodes},
-                           v={'units': 'm/s', 'shape': num_nodes},
-                           torque={'units': 'N*m', 'shape': num_nodes},
-                           omega={'units': 'rad/s', 'shape': num_nodes},
-                           efficiency={'shape': num_nodes})
-        self.add_subsystem('efficiency_comp', comp,
-                           promotes_inputs=['*'],
-                           promotes_outputs=['*'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)
 
 
-def complicated():
-    num_nodes = 1
-    B = 2  # number of blades
-    af = dummy_airfoil
-    turbine = False
-
-    Rhub = np.array([0.5 * 0.0254]).reshape((1, 1))
-    Rtip = np.array([3.0 * 0.0254]).reshape((1, 1))
-    precone = np.array([0.0]).reshape((1, 1))
-
-    r = 0.0254*np.array(
-        [0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332, 1.1128,
-         1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911, 1.6708, 1.7505,
-         1.8302, 1.9099, 1.9896, 2.0693, 2.1490, 2.2287, 2.3084, 2.3881,
-         2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]).reshape(
-             1, -1)
-    num_radial = r.shape[-1]
-    r = np.array(r).reshape((1, num_radial))
-
-    chord = 0.0254*np.array(
-        [0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973,
-         0.5887, 0.5794, 0.5695, 0.5590, 0.5479, 0.5362, 0.5240, 0.5111,
-         0.4977, 0.4836, 0.4689, 0.4537, 0.4379, 0.4214, 0.4044, 0.3867,
-         0.3685, 0.3497, 0.3303, 0.3103, 0.2897, 0.2618, 0.1920]).reshape(
-             (1, num_radial))
-
-    theta = np.pi/180.0*np.array(
-        [40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
-         29.7730, 28.0952, 26.5833, 25.2155, 23.9736, 22.8421, 21.8075,
-         20.8586, 19.9855, 19.1800, 18.4347, 17.7434, 17.1005, 16.5013,
-         15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
-         12.8685, 12.5233, 12.2138]).reshape((1, num_radial))
-
-    omega = np.array([8000.0*(2*np.pi/60.0)]).reshape((num_nodes, 1))
-
-    Vinf = np.array([10.0]).reshape((num_nodes, 1))
-    Vy = omega*r*np.cos(precone)
-    Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
-
-    rho = np.array([1.125]).reshape((num_nodes, 1))
-    mu = np.array([1.]).reshape((num_nodes, 1))
-    asound = np.array([1.]).reshape((num_nodes, 1))
-
-    prob = om.Problem()
-
-    comp = CCBladeResidualComp(num_nodes=num_nodes,
-                               num_radial=num_radial,
-                               airfoil_interp=af,
-                               turbine=turbine,
-                               debug_print=True)
-
-    prob.model.add_subsystem('ccblade', comp)
-
-    prob.setup()
-    prob.final_setup()
-
-    prob['ccblade.phi'] = -1.
-    prob['ccblade.radii'] = r
-    prob['ccblade.chord'] = chord
-    prob['ccblade.theta'] = theta
-    prob['ccblade.Vx'] = Vx
-    prob['ccblade.Vy'] = Vy
-    prob['ccblade.rho'] = rho
-    prob['ccblade.mu'] = mu
-    prob['ccblade.asound'] = asound
-    prob['ccblade.hub_radius'] = Rhub
-    prob['ccblade.prop_radius'] = Rtip
-    prob['ccblade.precone'] = precone
-
-    prob.run_model()
-    # prob.model.run_apply_nonlinear()
-    prob.model.list_outputs(residuals=True, print_arrays=True)
-
-
-def simple():
-    num_nodes = 1
-    # B = 3  # number of blades
-    precone = 0.
-    af = dummy_airfoil
-    turbine = True
-    hub_radius = 0.01
-    prop_radius = 500.0
-    r = np.array([0.2, 1, 2, 3, 4, 5])[np.newaxis, :]
-    num_radial = r.size
-
-    gamma = np.array([61.0, 74.31002131, 84.89805553, 89.07195504, 91.25038415,
-                      92.58003871])
-    theta = ((90.0 - gamma)*np.pi/180)[np.newaxis, :]
-    chord = np.array([0.7, 0.706025153, 0.436187551, 0.304517933, 0.232257636,
-                      0.187279622])[np.newaxis, :]
-
-    Vinf = np.array([7.0]).reshape((num_nodes, 1))
-    tsr = 8
-    omega = tsr*Vinf/5.0
-    rho = 1.0
-
-    Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
-    Vy = omega*r*np.cos(precone)
-
-    prob = om.Problem()
-
-    comp = CCBladeResidualComp(num_nodes=num_nodes,
-                               num_radial=num_radial,
-                               airfoil_interp=af,
-                               turbine=turbine,
-                               debug_print=True)
-
-    prob.model.add_subsystem('ccblade', comp)
-
-    prob.setup()
-    prob.final_setup()
-
-    prob['ccblade.phi'] = np.array([0.706307, 0.416522, 0.226373, 0.153094,
-                                    0.115256, 0.092305])[np.newaxis, :]
-    prob['ccblade.radii'] = r
-    prob['ccblade.chord'] = chord
-    prob['ccblade.theta'] = theta
-    prob['ccblade.Vx'] = Vx
-    prob['ccblade.Vy'] = Vy
-    prob['ccblade.rho'] = rho
-    prob['ccblade.mu'] = 1.
-    prob['ccblade.asound'] = 1.
-    prob['ccblade.hub_radius'] = hub_radius
-    prob['ccblade.prop_radius'] = prop_radius
-    prob['ccblade.precone'] = precone
-
-    prob.run_model()
-    # prob.model.run_apply_nonlinear()
-    prob.model.list_outputs(residuals=True, print_arrays=True)
-
 
 if __name__ == "__main__":
-    simple()
+
+    def complicated():
+        num_nodes = 1
+        B = 2  # number of blades
+        af = dummy_airfoil
+        turbine = False
+
+        Rhub = np.array([0.5 * 0.0254]).reshape((1, 1))
+        Rtip = np.array([3.0 * 0.0254]).reshape((1, 1))
+        precone = np.array([0.0]).reshape((1, 1))
+
+        r = 0.0254*np.array(
+            [0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332, 1.1128,
+             1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911, 1.6708, 1.7505,
+             1.8302, 1.9099, 1.9896, 2.0693, 2.1490, 2.2287, 2.3084, 2.3881,
+             2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]).reshape(
+                 1, -1)
+        num_radial = r.shape[-1]
+        r = np.array(r).reshape((1, num_radial))
+
+        chord = 0.0254*np.array(
+            [0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973,
+             0.5887, 0.5794, 0.5695, 0.5590, 0.5479, 0.5362, 0.5240, 0.5111,
+             0.4977, 0.4836, 0.4689, 0.4537, 0.4379, 0.4214, 0.4044, 0.3867,
+             0.3685, 0.3497, 0.3303, 0.3103, 0.2897, 0.2618, 0.1920]).reshape(
+                 (1, num_radial))
+
+        theta = np.pi/180.0*np.array(
+            [40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
+             29.7730, 28.0952, 26.5833, 25.2155, 23.9736, 22.8421, 21.8075,
+             20.8586, 19.9855, 19.1800, 18.4347, 17.7434, 17.1005, 16.5013,
+             15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
+             12.8685, 12.5233, 12.2138]).reshape((1, num_radial))
+
+        omega = np.array([8000.0*(2*np.pi/60.0)]).reshape((num_nodes, 1))
+
+        Vinf = np.array([10.0]).reshape((num_nodes, 1))
+        Vy = omega*r*np.cos(precone)
+        Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
+
+        rho = np.array([1.125]).reshape((num_nodes, 1))
+        mu = np.array([1.]).reshape((num_nodes, 1))
+        asound = np.array([1.]).reshape((num_nodes, 1))
+
+        prob = om.Problem()
+
+        comp = LocalInflowAngleComp(num_nodes=num_nodes,
+                                    num_radial=num_radial,
+                                    airfoil_interp=af,
+                                    turbine=turbine,
+                                    debug_print=True)
+
+        prob.model.add_subsystem('ccblade', comp)
+
+        prob.setup()
+        prob.final_setup()
+
+        prob['ccblade.phi'] = -1.
+        prob['ccblade.radii'] = r
+        prob['ccblade.chord'] = chord
+        prob['ccblade.theta'] = theta
+        prob['ccblade.Vx'] = Vx
+        prob['ccblade.Vy'] = Vy
+        prob['ccblade.rho'] = rho
+        prob['ccblade.mu'] = mu
+        prob['ccblade.asound'] = asound
+        prob['ccblade.hub_radius'] = Rhub
+        prob['ccblade.prop_radius'] = Rtip
+        prob['ccblade.precone'] = precone
+
+        prob.run_model()
+        # prob.model.run_apply_nonlinear()
+        prob.model.list_outputs(residuals=True, print_arrays=True)
+
+
+if __name__ == "__main__": 
+    complicated()
