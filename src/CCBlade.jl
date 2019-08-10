@@ -14,9 +14,10 @@ Some unique features:
 module CCBlade
 
 
-import Dierckx  # cubic b-spline for airfoil data
-import Roots  # solve residual equation
 
+import Dierckx  # cubic b-spline for airfoil data
+# import Roots  # solve residual equation
+import PyCall
 
 export Rotor, OperatingPoint, Outputs
 export af_from_file, af_from_data
@@ -448,7 +449,7 @@ Solve the BEM equations for given rotor geometry and operating point.
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor::Rotor, op::OperatingPoint)
+function solve(rotor, op)
 
     # parameters
     npts = 20  # number of discretization points to find bracket in residual solve
@@ -554,7 +555,10 @@ function solve(rotor::Rotor, op::OperatingPoint)
             # once bracket is found, solve root finding problem and compute loads
             if success
 
-                phistar = Roots.fzero(R, phiL, phiU)
+                # phistar = Roots.fzero(R, phiL, phiU)
+                
+                so = PyCall.pyimport("scipy.optimize")
+                phistar = so.brentq(R, phiL, phiU)
                 residual!(phistar, rotor, op, outputs, i, true)  # call once more to set outputs
                 break
             end    
