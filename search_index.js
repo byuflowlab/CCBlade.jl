@@ -61,7 +61,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.OperatingPoint",
     "category": "type",
-    "text": "OperatingPoint(Vx, Vy, pitch, rho, mu=1.0, asound=1.0)\n\nOperation point for a rotor.   The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.   See Documentation for more detail on coordinate systems. Vx and Vy can vary both radially and in time (matrix of size [nr, nt]).  nr must match length(rotor.r) whereas the fluid properties don\'t vary radially but can vary in time\n\nArguments\n\nVx::Array{Float64, 1}: velocity in x-direction along blade\nVy::Array{Float64, 1}: velocity in y-direction along blade\npitch::Float64: pitch angle (rad).  defined same direction as twist.\nrho::Float64: fluid density\nmu::Float64: fluid dynamic viscosity (unused if Re not included in airfoil data)\nasound::Float64: fluid speed of sound (unused if Mach not included in airfoil data)\n\n\n\n\n\n"
+    "text": "OperatingPoint(Vx, Vy, pitch, rho, mu=1.0, asound=1.0)\n\nOperation point for a rotor.   The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.   See Documentation for more detail on coordinate systems. Vx and Vy vary radially at same locations as r in the rotor definition.\n\nArguments\n\nVx::Array{Float64, 1}: velocity in x-direction along blade\nVy::Array{Float64, 1}: velocity in y-direction along blade\npitch::Float64: pitch angle (rad).  defined same direction as twist.\nrho::Float64: fluid density\nmu::Float64: fluid dynamic viscosity (unused if Re not included in airfoil data)\nasound::Float64: fluid speed of sound (unused if Mach not included in airfoil data)\n\n\n\n\n\n"
 },
 
 {
@@ -69,7 +69,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.windturbine_op",
     "category": "function",
-    "text": "windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)\n\nCompute relative wind velocity components along blade accounting for inflow conditions and orientation of turbine.  See Documentation for angle definitions.\n\nArguments\n\nVhub::Float64: freestream speed at hub (m/s)\nOmega::Float64: rotation speed (rad/s)\npitch::Float64: pitch angle (rad)\nr::Array{Float64, 1}: radial locations where inflow is computed (m)\nprecone::Float64: precone angle (rad)\nyaw::Float64: yaw angle (rad)\ntilt::Float64: tilt angle (rad)\nazimuth::Float64: azimuth angle to evaluate at (rad)\nhubHt::Float64: hub height (m) - used for shear\nshearExp::Float64: power law shear exponent\nrho::Float64: air density (kg/m^3)\n\n\n\n\n\n"
+    "text": "windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)\n\nCompute relative wind velocity components along blade accounting for inflow conditions and orientation of turbine.  See Documentation for angle definitions.\n\nArguments\n\nVhub::Float64: freestream speed at hub (m/s)\nOmega::Float64: rotation speed (rad/s)\npitch::Float64: pitch angle (rad)\nr::Array{Float64, 1}: radial locations where inflow is computed (m)\nprecone::Float64: precone angle (rad)\nyaw::Float64: yaw angle (rad)\ntilt::Float64: tilt angle (rad)\nazimuth::Float64: azimuth angle to evaluate at (rad)\nhubHt::Float64: hub height (m) - used for shear\nshearExp::Float64: power law shear exponent\nrho::Float64: air density (kg/m^3)\nmu::Float: air viscosity (Pa * s)\nasounnd::Float: air speed of sound (m/s)\n\n\n\n\n\n"
 },
 
 {
@@ -77,7 +77,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.solve",
     "category": "function",
-    "text": "solve(rotor, section, inflow)\n\nSolve the BEM equations for one section, with given inflow conditions, and rotor properties. If multiple sections are to be solved (typical usage) then one can use broadcasting: solve.(sections, inflows, rotor) where sections and inflows are arrays.\n\nArguments\n\nrotor::Rotor: rotor properties\nop::OperatingPoint: operating point\n\nReturns\n\noutputs::Outputs: BEM output data including loads, induction factors, etc.\n\n\n\n\n\n"
+    "text": "solve(rotor::Rotor, op::OperatingPoint)\n\nSolve the BEM equations for given rotor geometry and operating point.\n\nArguments\n\nrotor::Rotor: rotor properties\nop::OperatingPoint: operating point\n\nReturns\n\noutputs::Outputs: BEM output data including loads, induction factors, etc.\n\n\n\n\n\n"
 },
 
 {
@@ -85,7 +85,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.Outputs",
     "category": "type",
-    "text": "Outputs(Np, Tp, a, ap, u, v, phi, W, cl, cd, F)\n\nOutputs from the BEM solver along the radius.\n\nArguments\n\nNp::Array{Float64, 1}: normal force per unit length\nTp::Array{Float64, 1}: tangential force per unit length\na::Array{Float64, 1}: axial induction factor\nap::Array{Float64, 1}: tangential induction factor\nu::Array{Float64, 1}: axial induced velocity\nv::Array{Float64, 1}: tangential induced velocity\nphi::Array{Float64, 1}: inflow angle\nalpha::Array{Float64, 1}: angle of attack\nW::Array{Float64, 1}: inflow velocity\ncl::Array{Float64, 1}: lift coefficient\ncd::Array{Float64, 1}: drag coefficient\nF::Array{Float64, 1}: hub/tip loss correction\n\n\n\n\n\n"
+    "text": "Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)\n\nOutputs from the BEM solver along the radius.\n\nArguments\n\nNp::Array{Float64, 1}: normal force per unit length\nTp::Array{Float64, 1}: tangential force per unit length\na::Array{Float64, 1}: axial induction factor\nap::Array{Float64, 1}: tangential induction factor\nu::Array{Float64, 1}: axial induced velocity\nv::Array{Float64, 1}: tangential induced velocity\nphi::Array{Float64, 1}: inflow angle\nalpha::Array{Float64, 1}: angle of attack\nW::Array{Float64, 1}: inflow velocity\ncl::Array{Float64, 1}: lift coefficient\ncd::Array{Float64, 1}: drag coefficient\ncn::Array{Float64, 1}: normal force coefficient\nct::Array{Float64, 1}: tangential force coefficient\nF::Array{Float64, 1}: hub/tip loss correction\nG::Array{Float64, 1}: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G\n\n\n\n\n\n"
 },
 
 {
@@ -93,7 +93,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.thrusttorque",
     "category": "function",
-    "text": "thrusttorque(rotor, sections, outputs)\n\nintegrate the thrust/torque across the blade,  including 0 loads at hub/tip, using a trapezoidal rule.\n\nArguments\n\nrotor::Rotor: rotor object\noutputs::Outputs: output data along blade\n\nReturns\n\nT::Array{Float64, 1}: thrust (along x-dir see Documentation). one for each time step\nQ::Array{Float64, 1}: torque (along x-dir see Documentation). one for each time step\n\n\n\n\n\n"
+    "text": "thrusttorque(rotor::Rotor, outputs::Outputs)\n\nintegrate the thrust/torque across the blade,  including 0 loads at hub/tip, using a trapezoidal rule.\n\nArguments\n\nrotor::Rotor: rotor object\noutputs::Outputs: output data along blade\n\nReturns\n\nT::Array{Float64, 1}: thrust (along x-dir see Documentation).\nQ::Array{Float64, 1}: torque (along x-dir see Documentation).\n\n\n\n\n\nthrusttorque(rotor::Rotor, outputs::AbstractArray{Outputs{TF}, 1}) where TF <: Number\n\nIntegrate the thrust/torque across the blade given an array of output data. Generally used for azimuthal averaging of thrust/torque.\n\n\n\n\n\n"
 },
 
 {
@@ -117,7 +117,7 @@ var documenterSearchIndex = {"docs": [
     "page": "Guide",
     "title": "CCBlade.simple_op",
     "category": "function",
-    "text": "simple_op(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)\n\nUniform inflow through rotor.  Returns an Inflow object.\n\nArguments\n\nVinf::Float: freestream speed (m/s)\nOmega::Float: rotation speed (rad/s)\nr::Float{Float64, 1}: radial location where inflow is computed (m)\nprecone::Float64: precone angle (rad)\nrho::Float: air density (kg/m^3)\npitch::Float: pitch (rad)\nmu::Float: air viscosity (Pa * s)\nasounnd::Float: air speed of sound (m/s)\n\n\n\n\n\n"
+    "text": "simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)\n\nUniform inflow through rotor.  Returns an Inflow object.\n\nArguments\n\nVinf::Float: freestream speed (m/s)\nOmega::Float: rotation speed (rad/s)\nr::Float{Float64, 1}: radial location where inflow is computed (m)\nrho::Float: air density (kg/m^3)\npitch::Float: pitch (rad)\nmu::Float: air viscosity (Pa * s)\nasounnd::Float: air speed of sound (m/s)\nprecone::Float64: precone angle (rad)\n\n\n\n\n\n"
 },
 
 {
