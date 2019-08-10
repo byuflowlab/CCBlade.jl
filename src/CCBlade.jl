@@ -67,8 +67,7 @@ Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine) = Rotor(r, chord, theta, af, 
 Operation point for a rotor.  
 The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
 See Documentation for more detail on coordinate systems.
-Vx and Vy can vary both radially and in time (matrix of size [nr, nt]).  nr must match length(rotor.r)
-whereas the fluid properties don't vary radially but can vary in time
+Vx and Vy vary radially at same locations as `r` in the rotor definition.
 
 **Arguments**
 - `Vx::Array{Float64, 1}`: velocity in x-direction along blade
@@ -92,7 +91,7 @@ OperatingPoint(Vx, Vy, pitch, rho) = OperatingPoint(Vx, Vy, pitch, rho, 1.0, 1.0
 
 
 """
-    Outputs(Np, Tp, a, ap, u, v, phi, W, cl, cd, F)
+    Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
 
 Outputs from the BEM solver along the radius.
 
@@ -108,7 +107,10 @@ Outputs from the BEM solver along the radius.
 - `W::Array{Float64, 1}`: inflow velocity
 - `cl::Array{Float64, 1}`: lift coefficient
 - `cd::Array{Float64, 1}`: drag coefficient
+- `cn::Array{Float64, 1}`: normal force coefficient
+- `ct::Array{Float64, 1}`: tangential force coefficient
 - `F::Array{Float64, 1}`: hub/tip loss correction
+- `G::Array{Float64, 1}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
 """
 struct Outputs{TF}
 
@@ -130,7 +132,7 @@ struct Outputs{TF}
 
 end
 
-# convenience constructor
+# convenience constructor to initialize
 function Outputs(etype, nr)
     return Outputs(
         zeros(etype, nr), zeros(etype, nr), zeros(etype, nr), zeros(etype, nr),
@@ -435,11 +437,9 @@ end
 
 
 """
-    solve(rotor, section, inflow)
+    solve(rotor::Rotor, op::OperatingPoint)
 
-Solve the BEM equations for one section, with given inflow conditions, and rotor properties.
-If multiple sections are to be solved (typical usage) then one can use broadcasting:
-`solve.(sections, inflows, rotor)` where sections and inflows are arrays.
+Solve the BEM equations for given rotor geometry and operating point.
 
 **Arguments**
 - `rotor::Rotor`: rotor properties
@@ -584,7 +584,7 @@ end
 
 
 """
-    simple_op(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+    simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
 
 Uniform inflow through rotor.  Returns an Inflow object.
 
@@ -592,11 +592,11 @@ Uniform inflow through rotor.  Returns an Inflow object.
 - `Vinf::Float`: freestream speed (m/s)
 - `Omega::Float`: rotation speed (rad/s)
 - `r::Float{Float64, 1}`: radial location where inflow is computed (m)
-- `precone::Float64`: precone angle (rad)
 - `rho::Float`: air density (kg/m^3)
 - `pitch::Float`: pitch (rad)
 - `mu::Float`: air viscosity (Pa * s)
 - `asounnd::Float`: air speed of sound (m/s)
+- `precone::Float64`: precone angle (rad)
 """
 function simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
 
@@ -609,7 +609,7 @@ end
 
 
 """
-    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+    windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
 Compute relative wind velocity components along blade accounting for inflow conditions
 and orientation of turbine.  See Documentation for angle definitions.
@@ -626,6 +626,8 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `hubHt::Float64`: hub height (m) - used for shear
 - `shearExp::Float64`: power law shear exponent
 - `rho::Float64`: air density (kg/m^3)
+- `mu::Float`: air viscosity (Pa * s)
+- `asounnd::Float`: air speed of sound (m/s)
 """
 function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
@@ -666,28 +668,13 @@ function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubH
 
 end
 
-# """
-# Convenience method for generating multiple windturbineinflow objects across multiple azimuth angles for later integration
-# """
-# function windturbineinflow_az(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth_array, hubHt, shearExp, rho, mu=1.0, asound=1.0)
-
-#     naz = length(azimuth_array)
-#     azinflows = Array{OperatingPoint}(undef, naz)
-#     for i = 1:naz
-#         azinflows[i] = windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth_array[i], hubHt, shearExp, rho)
-#     end
-
-#     return azinflows
-# end
-
-
 # -------------------------------------
 
 
 # -------- convenience methods ------------
 
 """
-    thrusttorque(rotor, sections, outputs)
+    thrusttorque(rotor::Rotor, outputs::Outputs)
 
 integrate the thrust/torque across the blade, 
 including 0 loads at hub/tip, using a trapezoidal rule.
@@ -697,8 +684,8 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `outputs::Outputs`: output data along blade
 
 **Returns**
-- `T::Array{Float64, 1}`: thrust (along x-dir see Documentation). one for each time step
-- `Q::Array{Float64, 1}`: torque (along x-dir see Documentation). one for each time step
+- `T::Array{Float64, 1}`: thrust (along x-dir see Documentation).
+- `Q::Array{Float64, 1}`: torque (along x-dir see Documentation).
 """
 function thrusttorque(rotor::Rotor, outputs::Outputs)
 
@@ -717,6 +704,13 @@ function thrusttorque(rotor::Rotor, outputs::Outputs)
     return T, Q
 end
 
+
+"""
+    thrusttorque(rotor::Rotor, outputs::AbstractArray{Outputs{TF}, 1}) where TF <: Number
+
+Integrate the thrust/torque across the blade given an array of output data.
+Generally used for azimuthal averaging of thrust/torque.
+"""
 function thrusttorque(rotor::Rotor, outputs::AbstractArray{Outputs{TF}, 1}) where TF <: Number
 
     T = 0.0
