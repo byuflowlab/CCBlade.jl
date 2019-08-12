@@ -138,7 +138,7 @@ B = 2  # number of blades
 # --- section definitions ---
 
 R = D/2.0
-r = range(R/10, stop=R, length=11)
+r = collect(range(R/10, stop=R, length=11))
 theta = atan.(pitch./(2*pi*r))
 
 

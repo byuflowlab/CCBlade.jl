@@ -44,12 +44,12 @@ Define rotor geometry
 - `turbine::Bool`: true if turbine, false if propeller
 - `precone::Float64`: precone angle
 """
-struct Rotor{TF, TAF, TI, TB}
+struct Rotor{TF, TAF, TI, TB, TA<:AbstractArray{TF, 1}, TAAF<:AbstractArray{TAF, 1}}
     
-    r::AbstractArray{TF, 1}
-    chord::AbstractArray{TF, 1}
-    theta::AbstractArray{TF, 1}
-    af::AbstractArray{TAF, 1}
+    r::TA
+    chord::TA
+    theta::TA
+    af::TAAF
     Rhub::TF
     Rtip::TF
     B::TI
@@ -78,9 +78,9 @@ Vx and Vy vary radially at same locations as `r` in the rotor definition.
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct OperatingPoint{TF}
-    Vx::AbstractArray{TF, 1}
-    Vy::AbstractArray{TF, 1}
+struct OperatingPoint{TF, TA<:AbstractArray{TF, 1}}
+    Vx::TA
+    Vy::TA
     pitch::TF
     rho::TF
     mu::TF
