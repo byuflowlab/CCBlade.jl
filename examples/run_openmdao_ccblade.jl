@@ -3,6 +3,7 @@ using PyCall
 using CCBlade
 using LinearAlgebra: norm
 using PyPlot
+import Base.convert
 
 julia_comps = pyimport("omjl.julia_comps")
 om = pyimport("openmdao.api")
@@ -10,17 +11,29 @@ pyccblade = pyimport("ccblade.ccblade")
 pyccblade_geom = pyimport("ccblade.geometry")
 get_rows_cols = pyccblade.get_rows_cols
 
+struct CCBladeResidualComp
+    num_nodes
+    num_radial
+    af
+    B
+    turbine
+    debug_print
+end
+
+convert(::Type{CCBladeResidualComp}, po::PyObject) = CCBladeResidualComp(
+    po.num_nodes, po.num_radial, po.af, po.B, po.turbine, po.debug_print)
+
 # Need to create a CCBlade component.
-function ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
+function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
     # Airfoil interpolation object.
-    af = options["af"]
+    af = self.af
 
     # Rotor parameters.
-    B = options["B"]
+    B = self.B
     Rhub = inputs["hub_radius"][1]
     Rtip = inputs["prop_radius"][1]
     precone = inputs["precone"][1]
-    turbine = options["turbine"]
+    turbine = self.turbine
     rotor = Rotor(Rhub, Rtip, B, turbine)
 
     # Blade section parameters.
@@ -61,24 +74,18 @@ function ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
     @. residuals["F"] = outputs["F"] - getfield(getindex(out, 2), :F)
 end
 
-ccblade_residual_apply_nonlinear2! = pyfunction(ccblade_residual_apply_nonlinear!,
-                                                PyDict{String, PyAny},
-                                                PyDict{String, PyArray},
-                                                PyDict{String, PyArray},
-                                                PyDict{String, PyArray})
-
-function ccblade_residual_linearize!(options, inputs, outputs, partials)
-    num_nodes = options["num_nodes"]
-    num_radial = options["num_radial"]
+function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
+    num_nodes = self.num_nodes
+    num_radial = self.num_radial
     # Airfoil interpolation object.
-    af = options["af"]
+    af = self.af
 
     # Rotor parameters.
     Rhub = inputs["hub_radius"][1]
     Rtip = inputs["prop_radius"][1]
     precone = inputs["precone"][1]
-    B = options["B"]
-    turbine = options["turbine"]
+    B = self.B
+    turbine = self.turbine
     rotor = Rotor(Rhub, Rtip, B, turbine)
 
     # Blade section parameters.
@@ -150,22 +157,15 @@ function ccblade_residual_linearize!(options, inputs, outputs, partials)
 
 end
 
-ccblade_residual_linearize2! = pyfunction(
-    ccblade_residual_linearize!,
-    PyDict{String, PyAny}, # options
-    PyDict{String, PyArray}, # inputs
-    PyDict{String, PyArray}, # outputs
-    PyDict{Tuple{String, String}, PyArray}) # partials
-
-function ccblade_residual_guess_nonlinear!(options, inputs, outputs, residuals)
-    DEBUG_PRINT = options["debug_print"]
+function OpenMDAO.guess_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
+    DEBUG_PRINT = self.debug_print
 
     # These are all the explicit output names.
     out_names = ["Np", "Tp", "a", "ap", "u", "v", "W", "cl", "cd", "F"]
 
     # If the residual norm is small, we're close enough, so return.
     GUESS_TOL = 1e-4
-    ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
+    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
     res_norm = norm(residuals["phi"])
     if res_norm < GUESS_TOL
         for name in out_names
@@ -181,14 +181,14 @@ function ccblade_residual_guess_nonlinear!(options, inputs, outputs, residuals)
     end
 
     # Airfoil interpolation object.
-    af = options["af"]
+    af = self.af
 
     # Rotor parameters.
-    B = options["B"]
+    B = self.B
     Rhub = inputs["hub_radius"][1]
     Rtip = inputs["prop_radius"][1]
     precone = inputs["precone"][1]
-    turbine = options["turbine"]
+    turbine = self.turbine
     rotor = Rotor(Rhub, Rtip, B, turbine)
 
     # Blade section parameters.
@@ -227,12 +227,12 @@ function ccblade_residual_guess_nonlinear!(options, inputs, outputs, residuals)
 
     # Evaluate the residual for phi_1.
     @. outputs["phi"] = phi_1
-    ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
+    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
     @. res_1 = residuals["phi"]
 
     # Evaluate the residual for phi_2.
     @. outputs["phi"] = phi_2
-    ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
+    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
     @. res_2 = residuals["phi"]
 
     # Sort the phi_1, phi_2 values by whether they give a negative or positive
@@ -250,7 +250,7 @@ function ccblade_residual_guess_nonlinear!(options, inputs, outputs, residuals)
     for i in 1:100
         # Evaulate the residual at a new phi value.
         @. outputs["phi"] = 0.5 * (phi_1 + phi_2)
-        ccblade_residual_apply_nonlinear!(options, inputs, outputs, residuals)
+        OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
         new_res = residuals["phi"]
 
         # Check if the residual satisfies the tolerance.
@@ -297,27 +297,12 @@ function ccblade_residual_guess_nonlinear!(options, inputs, outputs, residuals)
 
 end
 
-ccblade_residual_guess_nonlinear2! = pyfunction(
-    ccblade_residual_guess_nonlinear!,
-    PyDict{String, PyAny}, # options
-    PyDict{String, PyArray}, # inputs
-    PyDict{String, PyArray}, # outputs
-    PyDict{String, PyArray}) # residuals)
-
 num_nodes = 1
 num_blades = 3
 num_radial = 15
 
 af_filename = "airfoils/mh117.dat"
 af = af_from_file(af_filename, use_interpolations_jl=true)
-
-ccblade_residual_options_data = [
-    OptionsData("num_nodes", Int, num_nodes),
-    OptionsData("num_radial", Int, num_radial),
-    OptionsData("B", Int, num_blades),
-    OptionsData("af", nothing, af),
-    OptionsData("turbine", Bool, false),
-    OptionsData("debug_print", Bool, true)]
 
 ccblade_residual_input_data = [
     VarData("radii", [1, num_radial], 1., "m")
@@ -388,14 +373,13 @@ for name in ["Np", "Tp", "a", "ap", "u", "v", "W", "cl", "cd", "F"]
     push!(ccblade_residual_partials_data, PartialsData(name, name, rows=rows, cols=cols, val=1.0))
 end
 
+turbine = false
+debug_print = true
 ccblade_residual_comp_data = ICompData(
+    CCBladeResidualComp(num_nodes, num_radial, af, num_blades, turbine, debug_print),
     ccblade_residual_input_data,
     ccblade_residual_output_data,
-    options=ccblade_residual_options_data,
-    partials=ccblade_residual_partials_data,
-    apply_nonlinear=ccblade_residual_apply_nonlinear2!,
-    linearize=ccblade_residual_linearize2!,
-    guess_nonlinear=ccblade_residual_guess_nonlinear2!)
+    partials=ccblade_residual_partials_data)
 
 num_cp = 6
 chord = 10.0
@@ -502,11 +486,6 @@ prob.model.add_design_var("theta_dv",
 prob.model.add_objective("efficiency", scaler=-1.,)
 prob.model.add_constraint("thrust", equals=700.0, scaler=1e-3,
                           indices=collect(0:num_nodes-1))
-# This doesn't work. Not sure why. Looks like it doesn't get copied to the
-# Python side of things, so OpenMDAO uses the default driver (SLSQP).
-prob.driver = om.pyOptSparseDriver()
-# prob.driver.options["optimizer"] = "SNOPT"
-# This does work.
 prob.driver = om.pyOptSparseDriver(optimizer="SNOPT")
 
 prob.setup()
