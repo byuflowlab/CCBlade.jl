@@ -88,17 +88,16 @@ class CCBladeResidualComp(ImplicitComponent):
                 @. residuals["phi"] = getindex(out, 1)
 
                 # Get the other outputs.
-                @. residuals["Np"] = outputs["Np"] - getfield(getindex(out, 2), :Np)
-                @. residuals["Tp"] = outputs["Tp"] - getfield(getindex(out, 2), :Tp)
-                @. residuals["a"] = outputs["a"] - getfield(getindex(out, 2), :a)
-                @. residuals["ap"] = outputs["ap"] - getfield(getindex(out, 2), :ap)
-                @. residuals["u"] = outputs["u"] - getfield(getindex(out, 2), :u)
-                @. residuals["v"] = outputs["v"] - getfield(getindex(out, 2), :v)
-                @. residuals["W"] = outputs["W"] - getfield(getindex(out, 2), :W)
-                @. residuals["cl"] = outputs["cl"] - getfield(getindex(out, 2), :cl)
-                @. residuals["cd"] = outputs["cd"] - getfield(getindex(out, 2), :cd)
-                @. residuals["F"] = outputs["F"] - getfield(getindex(out, 2), :F)
-
+                @. residuals["Np"] = getfield(getindex(out, 2), :Np) - outputs["Np"]
+                @. residuals["Tp"] =  getfield(getindex(out, 2), :Tp) - outputs["Tp"]
+                @. residuals["a"] =  getfield(getindex(out, 2), :a) - outputs["a"]
+                @. residuals["ap"] =  getfield(getindex(out, 2), :ap) - outputs["ap"]
+                @. residuals["u"] =  getfield(getindex(out, 2), :u) - outputs["u"]
+                @. residuals["v"] =  getfield(getindex(out, 2), :v) - outputs["v"]
+                @. residuals["W"] =  getfield(getindex(out, 2), :W) - outputs["W"]
+                @. residuals["cl"] =  getfield(getindex(out, 2), :cl) - outputs["cl"]
+                @. residuals["cd"] =  getfield(getindex(out, 2), :cd) - outputs["cd"]
+                @. residuals["F"] =  getfield(getindex(out, 2), :F) - outputs["F"]
             end
 
             residuals! = pyfunction(residuals_kernel!,
@@ -166,7 +165,7 @@ class CCBladeResidualComp(ImplicitComponent):
                         continue
                     else
                         for (wrt_idx, wrt_name) in enumerate(wrt_names)
-                            @. partials[of_name, wrt_name] = -getindex(output_derivs, of_idx, wrt_idx)
+                            @. partials[of_name, wrt_name] = getindex(output_derivs, of_idx, wrt_idx)
                         end
                     end
                 end
@@ -314,7 +313,7 @@ class CCBladeResidualComp(ImplicitComponent):
         # For the explicit outputs, the derivatives wrt themselves are
         # constant.
         for name in ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F'):
-            self.declare_partials(name, name, rows=rows, cols=cols, val=1.)
+            self.declare_partials(name, name, rows=rows, cols=cols, val=-1.)
 
     def apply_nonlinear(self, inputs, outputs, residuals):
         # options_d = dict(self.options)
@@ -377,7 +376,7 @@ class CCBladeResidualComp(ImplicitComponent):
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
-                    outputs[name] -= residuals[name]
+                    outputs[name] += residuals[name]
             if DEBUG_PRINT:
                 print(
                     f"guess_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
@@ -430,7 +429,7 @@ class CCBladeResidualComp(ImplicitComponent):
                              'F')
                 for name in out_names:
                     if np.all(np.logical_not(np.isnan(residuals[name]))):
-                        outputs[name] -= residuals[name]
+                        outputs[name] += residuals[name]
                 if DEBUG_PRINT:
                     print(
                         f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
@@ -453,7 +452,7 @@ class CCBladeResidualComp(ImplicitComponent):
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
-                    outputs[name] -= residuals[name]
+                    outputs[name] += residuals[name]
             if DEBUG_PRINT:
                 print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
 
@@ -581,7 +580,7 @@ class CCBladeGroup(Group):
                                    af_fname=af_filename, debug_print=False)
         comp.nonlinear_solver = NewtonSolver()
         comp.nonlinear_solver.options['solve_subsystems'] = True
-        comp.nonlinear_solver.options['iprint'] = 2
+        comp.nonlinear_solver.options['iprint'] = 0
         comp.nonlinear_solver.options['maxiter'] = 30
         comp.nonlinear_solver.options['err_on_non_converge'] = True
         comp.nonlinear_solver.options['atol'] = 1e-5

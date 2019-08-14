@@ -22,14 +22,18 @@ def make_plots(prob):
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('normal load, N/m')
     ax.legend()
-    fig.savefig('ccblade_normal_load.png')
+    fname = 'ccblade_normal_load.png'
+    print(fname)
+    fig.savefig(fname)
 
     fig, ax = plt.subplots()
     ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('circumferential load, N/m')
     ax.legend()
-    fig.savefig('ccblade_circum_load.png')
+    fname = 'ccblade_circum_load.png'
+    print(fname)
+    fig.savefig(fname)
 
 
 def main():
@@ -99,16 +103,15 @@ def main():
     prob.final_setup()
     st = time.time()
     prob.run_driver()
-    print(f"time = {time.time() - st}")
-    thrust = prob.get_val('thrust', units='N')
-    torque = prob.get_val('torque', units='N*m')
-    efficiency = prob.get_val('efficiency')
-    print(f"thrust = {thrust}")
-    print(f"torque = {torque}")
-    print(f"efficiency = {efficiency}")
+    elapsed_time = time.time() - st
 
     make_plots(prob)
 
+    return elapsed_time
+
 
 if __name__ == "__main__":
+    # Ignore the first run to remove the Julia JIT from the timing.
     main()
+    times = np.array([main() for _ in range(20)])
+    print(f"average walltime = {np.mean(times)} s, stddev = {np.std(times)} s")

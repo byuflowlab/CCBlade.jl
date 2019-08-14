@@ -85,9 +85,6 @@ class CCBladeResidualComp(om.ImplicitComponent):
         # check if turbine or propeller and change input sign if necessary
         # swapsign = turbine ? 1 : -1
         swapsign = 1 if turbine else -1
-        # Bad idea:
-        # theta *= swapsign
-        # Vx *= swapsign
         theta = swapsign * inputs['theta']
         Vx = swapsign * inputs['Vx']
 
@@ -157,25 +154,19 @@ class CCBladeResidualComp(om.ImplicitComponent):
 
         # mom_mask = k <= 2./3.
         # a[mom_mask] = k[mom_mask]/(1 + k[mom_mask])
-        # print(f"a (1) = {a}")
 
         # emp_mask = np.logical_not(mom_mask)
         # g1 = 2.0*F*k - (10.0/9-F)
         # g2 = 2.0*F*k - (4.0/3-F)*F
         # g3 = 2.0*F*k - (25.0/9-2*F)
 
-        # # print(f"k = {k}")
-        # # print(f"F = {F}")
-        # # print(f"g2 = {g2}")
         # # sing_mask = np.logical_and(emp_mask, np.isclose(g3, 0.0, atol=1e-6))
         # sing_mask = np.isclose(g3, 0.0, atol=1e-6)
         # mask_mask = np.logical_and(emp_mask, sing_mask)
         # a[mask_mask] = 1.0 - 1.0/(2.0*np.sqrt(g2[sing_mask]))
-        # # print(f"a (2) = {a}")
 
         # mask_mask = np.logical_and(emp_mask, np.logical_not(sing_mask))
         # a[mask_mask] = (g1[mask_mask] - np.sqrt(g2[mask_mask])) / g3[mask_mask]
-        # # print(f"a (3} = {a}")
 
         u = a * Vx
 
@@ -220,20 +211,24 @@ class CCBladeResidualComp(om.ImplicitComponent):
         DEBUG_PRINT = self.options['debug_print']
         residuals = self._residuals
 
-        self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
-                             discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals,
+                             discrete_inputs, discrete_outputs)
 
         # If the residual norm is small, we're close enough, so return.
-        GUESS_TOL = 1e-6
-        res_norm = residuals.get_norm()
-        if res_norm < GUESS_TOL:
+        SOLVE_TOL = 1e-10
+        res_norm = np.linalg.norm(residuals['phi'])
+        if res_norm < SOLVE_TOL:
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
                     outputs[name] += residuals[name]
+
+                self.apply_nonlinear(inputs, outputs, residuals,
+                                     discrete_inputs, discrete_outputs)
+
             if DEBUG_PRINT:
                 print(
-                    f"guess_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
+                    f"solve_nonlinear res_norm: {res_norm} (skipping solve_nonlinear)")
             return
 
         num_nodes = self.options['num_nodes']
@@ -251,8 +246,8 @@ class CCBladeResidualComp(om.ImplicitComponent):
         # Initialize the residuals.
         res_1 = np.zeros_like(phi_1)
         outputs['phi'][:, :] = phi_1
-        self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
-                             discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals,
+                             discrete_inputs, discrete_outputs)
         res_1[:, :] = residuals['phi']
 
         res_2 = np.zeros_like(phi_1)
@@ -274,19 +269,24 @@ class CCBladeResidualComp(om.ImplicitComponent):
             self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
                                  discrete_outputs)
             new_res = residuals['phi']
-            # print('iter', i, np.linalg.norm(new_res))
 
             # only need to do this to get into the ballpark
             res_norm = np.linalg.norm(new_res)
-            if res_norm < GUESS_TOL:
+            if DEBUG_PRINT:
+                print(f"{i} solve_nonlinear res_norm: {res_norm}")
+            if res_norm < SOLVE_TOL:
                 out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd',
                              'F')
                 for name in out_names:
                     if np.all(np.logical_not(np.isnan(residuals[name]))):
                         outputs[name] += residuals[name]
+
+                self.apply_nonlinear(inputs, outputs, residuals,
+                                     discrete_inputs, discrete_outputs)
+
                 if DEBUG_PRINT:
                     print(
-                        f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
+                        f"solve_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
                 break
 
             mask_1 = new_res < 0
@@ -303,8 +303,23 @@ class CCBladeResidualComp(om.ImplicitComponent):
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
                     outputs[name] += residuals[name]
+
+            self.apply_nonlinear(inputs, outputs, residuals,
+                                 discrete_inputs, discrete_outputs)
+
             if DEBUG_PRINT:
-                print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
+                print(f"solve_nonlinear res_norm = {res_norm} > GUESS_TOL")
+
+    def guess_nonlinear(self, inputs, outputs, residuals,
+                        discrete_inputs, discrete_outputs):
+        # res_norm always ends up being zero. No idea why.
+        # GUESS_TOL = 1e-4
+        # res_norm = np.linalg.norm(residuals['phi'])
+        # print(f"guess_nonlinear res_norm = {res_norm}")
+        # if res_norm > GUESS_TOL:
+        #     outputs['phi'][:, :] = -np.arctan2(inputs['Vx'], inputs['Vy'])
+
+        outputs['phi'][:, :] = -np.arctan2(inputs['Vx'], inputs['Vy'])
 
 
 class CCBladeThrustTorqueComp(om.ExplicitComponent):
@@ -376,42 +391,25 @@ class CCBladeGroup(om.Group):
                            prop_diameter={'units': 'm'})
         self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
 
-        # src_indices = np.zeros((num_nodes, num_radial, 1), dtype=int)
-        # comp = om.ExecComp(
-        #     'Vx = v*cos(precone)',
-        #     v={'units': 'm/s', 'shape': (num_nodes, num_radial),
-        #        'src_indices': src_indices},
-        #     precone={'units': 'rad'},
-        #     Vx={'units': 'm/s', 'shape': (num_nodes, num_radial)})
-        # self.add_subsystem('Vx_comp', comp, promotes=['*'])
-
-        # comp = om.ExecComp('Vy = omega*radii*cos(precone)',
-        #                    omega={'units': 'rad/s',
-        #                           'shape': (num_nodes, 1),
-        #                           'flat_src_indices': [0]},
-        #                    radii={'units': 'm', 'shape': (1, num_radial)},
-        #                    precone={'units': 'rad'},
-        #                    Vy={'units': 'm/s', 'shape': (num_nodes, num_radial)})
-        # self.add_subsystem('Vy_comp', comp, promotes=['*'])
-
         comp = CCBladeResidualComp(
             num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
-            airfoil_interp=airfoil_interp, debug_print=True,
+            airfoil_interp=airfoil_interp, debug_print=False,
             solve_nonlinear=solve_nonlinear)
-        # comp.nonlinear_solver = om.NewtonSolver()
-        # comp.nonlinear_solver.options['solve_subsystems'] = True
-        # comp.nonlinear_solver.options['iprint'] = 2
-        # comp.nonlinear_solver.options['maxiter'] = 30
-        # comp.nonlinear_solver.options['err_on_non_converge'] = True
-        # comp.nonlinear_solver.options['atol'] = 1e-5
-        # comp.nonlinear_solver.options['rtol'] = 1e-8
-        # comp.nonlinear_solver.linesearch = om.BoundsEnforceLS()
+        if not solve_nonlinear:
+            comp.nonlinear_solver = om.NewtonSolver()
+            comp.nonlinear_solver.options['solve_subsystems'] = True
+            comp.nonlinear_solver.options['iprint'] = 2
+            comp.nonlinear_solver.options['maxiter'] = 30
+            comp.nonlinear_solver.options['err_on_non_converge'] = True
+            comp.nonlinear_solver.options['atol'] = 1e-5
+            comp.nonlinear_solver.options['rtol'] = 1e-8
+            comp.nonlinear_solver.linesearch = om.BoundsEnforceLS()
         comp.linear_solver = om.DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
-                           promotes_inputs=['B', 'radii', 'chord', 'theta',
-                                            'Vx', 'Vy', 'rho', 'mu', 'asound',
-                                            'hub_radius', 'prop_radius',
-                                            'precone'],
+                           promotes_inputs=[
+                               'B', 'radii', 'chord', 'theta', 'Vx', 'Vy',
+                               'rho', 'mu', 'asound', 'hub_radius',
+                               'prop_radius', 'precone'],
                            promotes_outputs=['Np', 'Tp'])
 
         comp = CCBladeThrustTorqueComp(num_nodes=num_nodes,

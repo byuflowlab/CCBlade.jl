@@ -1,4 +1,6 @@
+import time
 import numpy as np
+
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
 from openbemt.airfoils.process_airfoils import ViternaAirfoil
 from ccblade.geometry import GeometryGroup
@@ -24,14 +26,18 @@ def make_plots(prob):
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('normal load, N/m')
     ax.legend()
-    fig.savefig('ccblade_normal_load.png')
+    fname = 'pyccblade_normal_load.png'
+    print(fname)
+    fig.savefig(fname)
 
     fig, ax = plt.subplots()
     ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('circumferential load, N/m')
     ax.legend()
-    fig.savefig('ccblade_circum_load.png')
+    fname = 'pyccblade_circum_load.png'
+    print(fname)
+    fig.savefig(fname)
 
 
 def main():
@@ -97,11 +103,12 @@ def main():
         promotes_outputs=['Vx', 'Vy'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        airfoil_interp=ccblade_interp, turbine=False)
+                        airfoil_interp=ccblade_interp, turbine=False,
+                        phi_residual_solve_nonlinear=True)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'omega', 'Vx', 'Vy', 'precone',
+        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
+                         'mu', 'asound', 'v', 'omega', 'Vx', 'Vy', 'precone',
                          'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
@@ -118,11 +125,16 @@ def main():
 
     prob.setup()
     prob.final_setup()
-    prob.run_model()
-    # prob.run_driver()
+    st = time.time()
+    prob.run_driver()
+    elapsed_time = time.time() - st
 
     make_plots(prob)
+
+    return elapsed_time
 
 
 if __name__ == "__main__":
     main()
+    times = np.array([main() for _ in range(20)])
+    print(f"average walltime = {np.mean(times)} s, stddev = {np.std(times)} s")
