@@ -1,8 +1,8 @@
-import time
 import numpy as np
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
 from openbemt.airfoils.process_airfoils import ViternaAirfoil
 from ccblade.geometry import GeometryGroup
+from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_py import CCBladeGroup
 
 
@@ -11,7 +11,8 @@ def make_plots(prob):
 
     node = 0
     # num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    num_blades = prob.get_val('inputs_comp.B')
+    # num_blades = prob.get_val('inputs_comp.B')
+    num_blades = prob.get_val('indep_var_comp.B')
     radii = prob.get_val('radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
@@ -89,13 +90,19 @@ def main():
                          'theta_dv', 'pitch'],
         promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
 
+    comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
+    prob.model.add_subsystem(
+        'inflow_comp', comp,
+        promotes_inputs=['v', 'omega', 'radii', 'precone'],
+        promotes_outputs=['Vx', 'Vy'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         airfoil_interp=ccblade_interp, turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
-                         'prop_diameter'],
+                         'asound', 'v', 'omega', 'Vx', 'Vy', 'precone',
+                         'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
     prob.model.add_design_var('chord_dv', lower=1., upper=20.,
@@ -111,20 +118,10 @@ def main():
 
     prob.setup()
     prob.final_setup()
-    # prob.run_model()
-    # prob.check_partials(includes=['ccblade_group.ccblade_comp'],
-    #                     compact_print=True)
-    # st = time.time()
-    prob.run_driver()
-    # print(f"time = {time.time() - st}")
-    # thrust = prob.get_val('thrust', units='N')
-    # torque = prob.get_val('torque', units='N*m')
-    # efficiency = prob.get_val('efficiency')
-    # print(f"thrust = {thrust}")
-    # print(f"torque = {torque}")
-    # print(f"efficiency = {efficiency}")
+    prob.run_model()
+    # prob.run_driver()
 
-    # make_plots(prob)
+    make_plots(prob)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ from openmdao.api import IndepVarComp, Problem
 from openbemt.airfoils.process_airfoils import ViternaAirfoil
 from openbemt.bemt.groups.bemt_group import BEMTGroup
 from ccblade.geometry import GeometryGroup
+from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_py import CCBladeGroup
 
 
@@ -116,14 +117,20 @@ def main():
                          'theta_dv', 'pitch'],
         promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
 
+    comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
+    prob.model.add_subsystem(
+        'inflow_comp', comp,
+        promotes_inputs=['v', 'omega', 'radii', 'precone'],
+        promotes_outputs=['Vx', 'Vy'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         airfoil_interp=ccblade_interp,
                         turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
-                         'prop_diameter'],
+                         'asound', 'Vx', 'Vy', 'v', 'precone', 'omega',
+                         'hub_diameter', 'prop_diameter'],
         promotes_outputs=[('Np', 'ccblade_normal_load'),
                           ('Tp', 'ccblade_circum_load')])
 
