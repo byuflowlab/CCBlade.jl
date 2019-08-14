@@ -1,7 +1,7 @@
 import numpy as np
 from openmdao.api import (ImplicitComponent, ExplicitComponent, Group,
-                          AkimaSplineComp, ExecComp, NewtonSolver,
-                          DirectSolver, BoundsEnforceLS)
+                          ExecComp, NewtonSolver, DirectSolver,
+                          BoundsEnforceLS)
 import julia.Main as jlmain
 
 
