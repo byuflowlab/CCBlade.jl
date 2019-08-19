@@ -9,6 +9,7 @@ def dummy_airfoil(alpha, Re, Mach):
 
     return cl, cd
 
+
 def abs_cs(x):
     return np.sqrt(x*x)
 
