@@ -646,7 +646,7 @@ function solve(rotor, section, inflow)
     end
 
     # Attempt to bracket the solution.
-    success, phiL, phiU = firstbracket(R, rotor, section, inflow)
+    success, phiL, phiU = firstbracket(rotor, section, inflow)
 
     if success
 

@@ -202,7 +202,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         residuals['v'] = v*swapsign - outputs['v']
         residuals['W'] = np.sqrt(W2) - outputs['W']
         residuals['cl'] = cl - outputs['cl']
-        residuals['cd'] = cl - outputs['cd']
+        residuals['cd'] = cd - outputs['cd']
         residuals['F'] = F - outputs['F']
 
     def solve_nonlinear(self, inputs, outputs,
@@ -235,7 +235,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         bracket_found, phi_1, phi_2 = self._first_bracket(
             inputs, outputs, residuals, discrete_inputs, discrete_outputs)
         if not np.all(bracket_found):
-            print(bracket_found)
             raise om.AnalysisError("CCBlade bracketing failed")
 
         # Initialize the residuals.
@@ -403,7 +402,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                     if success[i, j]:
                         break
 
-            return success, phi_1, phi_2
+        return success, phi_1, phi_2
 
     def _first_bracket_search(self, inputs, outputs, residuals,
                               discrete_inputs, discrete_outputs, i, j,
@@ -445,8 +444,8 @@ class FunctionalsComp(om.ExplicitComponent):
         num_radial = self.options['num_radial']
 
         self.add_discrete_input('B', val=3)
-        self.add_input('radii', shape=num_radial, units='m')
-        self.add_input('dradii', shape=num_radial, units='m')
+        self.add_input('radii', shape=(num_nodes, num_radial), units='m')
+        self.add_input('dradii', shape=(num_nodes, num_radial), units='m')
         self.add_input('Np',
                        shape=(num_nodes, num_radial), units='N/m')
         self.add_input('Tp',
@@ -484,16 +483,19 @@ class FunctionalsComp(om.ExplicitComponent):
 
     def compute(self, inputs, outputs, discrete_inputs, discrete_outputs):
         B = discrete_inputs['B']
-        radii = inputs['radii'][np.newaxis, :]
-        dradii = inputs['dradii'][np.newaxis, :]
+        radii = inputs['radii']
+        dradii = inputs['dradii']
         Np = inputs['Np']
         Tp = inputs['Tp']
+        v = inputs['v'][:, np.newaxis]
+        omega = inputs['omega'][:, np.newaxis]
 
         thrust = outputs['thrust'][:] = B*np.sum(Np * dradii, axis=1)
         torque = outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
-        outputs['power'] = outputs['torque']*inputs['omega']
+        outputs['power'][:] = outputs['torque']*inputs['omega']
 
-        outputs['efficiency'] = (thrust*inputs['v'])/(torque*inputs['omega'])
+        outputs['efficiency'] = (thrust*v[:, 0])/(torque*omega[:, 0])
+
 
 class CCBladeGroup(om.Group):
 

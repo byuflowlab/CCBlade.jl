@@ -14,7 +14,7 @@ class SimpleInflow(om.ExplicitComponent):
 
         self.add_input('v', shape=num_nodes, units='m/s')
         self.add_input('omega', shape=num_nodes, units='rad/s')
-        self.add_input('radii', shape=num_radial, units='m')
+        self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('precone', units='rad')
 
         self.add_output('Vx', shape=(num_nodes, num_radial), units='m/s')
@@ -53,7 +53,7 @@ class WindTurbineInflow(om.ExplicitComponent):
 
         self.add_input('vhub', shape=num_nodes, units='m/s')
         self.add_input('omega', shape=num_nodes, units='rad/s')
-        self.add_input('radii', shape=num_radial, units='m')
+        self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('precone', units='rad')
 
         # Should yaw, tilt, shear_exp have length num_nodes?
@@ -100,12 +100,12 @@ class WindTurbineInflow(om.ExplicitComponent):
         cc = np.cos(precone)
 
         # coordinate in azimuthal coordinate system
-        x_az = -radii*np.sin(precone)  # (num_radii,)
-        z_az = radii*np.cos(precone)  # (num_radii,)
+        x_az = -radii*np.sin(precone)  # (num_nodes, num_radii)
+        z_az = radii*np.cos(precone)  # (num_nodes, num_radii)
         y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero)
 
         # get section heights in wind-aligned coordinate system
-        height_from_hub = (y_az*sa + z_az*ca)*ct - x_az*st  # (num_radii,)
+        height_from_hub = (y_az*sa + z_az*ca)*ct - x_az*st  # (num_nodes, num_radii)
 
         # velocity with shear
         V = vhub[:, np.newaxis]*(1 + height_from_hub/hub_height)**shear_exp  # (num_nodes, num_radial)
