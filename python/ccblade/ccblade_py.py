@@ -71,8 +71,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
         r = inputs['radii']
         chord = inputs['chord']
-        theta = inputs['theta']
-        Vx = inputs['Vx']
         Vy = inputs['Vy']
         rho = inputs['rho']
         mu = inputs['mu']
@@ -120,7 +118,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # sec parameters
         k = cn*sigma_p/(4.0*F*sphi*sphi)
         kp = ct*sigma_p/(4.0*F*sphi*cphi)
-
         k[phi < 0.] *= -1.
 
         ####################################
@@ -213,7 +210,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         if not self.options['solve_nonlinear']:
             return
 
-        turbine = self.options['turbine']
         DEBUG_PRINT = self.options['debug_print']
         residuals = self._residuals
 
@@ -236,17 +232,11 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 print(f"solve_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
             return
 
-        num_nodes = self.options['num_nodes']
-        num_radial = self.options['num_radial']
-
-        # This needs to be fixed—need to check the sign of Vx and Vy, I think.
-        eps = 1.0*np.pi/180.0
-        if turbine:
-            phi_1 = np.zeros((num_nodes, num_radial)) + eps
-            phi_2 = 0.5*np.pi*np.ones((num_nodes, num_radial)) - eps
-        else:
-            phi_1 = -0.5*np.pi*np.ones((num_nodes, num_radial)) + eps
-            phi_2 = np.zeros((num_nodes, num_radial)) - eps
+        bracket_found, phi_1, phi_2 = self._first_bracket(
+            inputs, outputs, residuals, discrete_inputs, discrete_outputs)
+        if not np.all(bracket_found):
+            print(bracket_found)
+            raise om.AnalysisError("CCBlade bracketing failed")
 
         # Initialize the residuals.
         res_1 = np.zeros_like(phi_1)
@@ -315,16 +305,133 @@ class LocalInflowAngleComp(om.ImplicitComponent):
             if DEBUG_PRINT:
                 print(f"solve_nonlinear res_norm = {res_norm} > SOLVE_TOL")
 
-    def guess_nonlinear(self, inputs, outputs, residuals,
-                        discrete_inputs, discrete_outputs):
-        # res_norm always ends up being zero. No idea why.
-        # GUESS_TOL = 1e-4
-        # res_norm = np.linalg.norm(residuals['phi'])
-        # print(f"guess_nonlinear res_norm = {res_norm}")
-        # if res_norm > GUESS_TOL:
-        #     outputs['phi'][:, :] = -np.arctan2(inputs['Vx'], inputs['Vy'])
+    def _first_bracket(self, inputs, outputs, residuals, discrete_inputs,
+                       discrete_outputs):
+        num_nodes = self.options['num_nodes']
+        num_radial = self.options['num_radial']
+        turbine = self.options['turbine']
 
-        outputs['phi'][:, :] = -np.arctan2(inputs['Vx'], inputs['Vy'])
+        # parameters
+        npts = 10  # number of discretization points to find bracket in residual solve
+
+        swapsign = 1 if turbine else -1
+        Vx = inputs['Vx'] * swapsign
+        theta = inputs['theta'] * swapsign
+        Vy = inputs['Vy']
+
+        # quadrants
+        epsilon = 1e-6
+        q1 = [epsilon, np.pi/2]
+        q2 = [-np.pi/2, -epsilon]
+        q3 = [np.pi/2, np.pi-epsilon]
+        q4 = [-np.pi+epsilon, -np.pi/2]
+
+        # ---- determine quadrants based on case -----
+        Vx_is_zero = np.isclose(Vx, 0.0, atol=1e-6)
+        Vy_is_zero = np.isclose(Vy, 0.0, atol=1e-6)
+
+        # I'll just be lame for now and use loops.
+        phi_1 = np.zeros((num_nodes, num_radial))
+        phi_2 = np.zeros((num_nodes, num_radial))
+        success = np.tile(False, (num_nodes, num_radial))
+        for i in range(num_nodes):
+            for j in range(num_radial):
+
+                if Vx_is_zero[i, j] and Vy_is_zero[i, j]:
+                    success[i, j] = False
+                    continue
+
+                elif Vx_is_zero[i, j]:
+
+                    startfrom90 = False  # start bracket search from 90 deg instead of 0 deg.
+
+                    if Vy[i, j] > 0 and theta[i, j] > 0:
+                        order = (q1, q2)
+                    elif Vy[i, j] > 0 and theta[i, j] < 0:
+                        order = (q2, q1)
+                    elif Vy[i, j] < 0 and theta[i, j] > 0:
+                        order = (q3, q4)
+                    else:  # Vy < 0 and theta < 0
+                        order = (q4, q3)
+
+                elif Vy_is_zero[i, j]:
+
+                    startfrom90 = True  # start bracket search from 90 deg
+
+                    if Vx[i, j] > 0 and abs(theta[i, j]) < np.pi/2:
+                        order = (q1, q3)
+                    elif Vx[i, j] < 0 and abs(theta[i, j]) < np.pi/2:
+                        order = (q2, q4)
+                    elif Vx[i, j] > 0 and abs(theta[i, j]) > np.pi/2:
+                        order = (q3, q1)
+                    else:  # Vx[i, j] < 0 and abs(theta[i, j]) > np.pi/2
+                        order = (q4, q2)
+
+                else:  # normal case
+
+                    startfrom90 = False
+
+                    if Vx[i, j] > 0 and Vy[i, j] > 0:
+                        order = (q1, q2, q3, q4)
+                    elif Vx[i, j] < 0 and Vy[i, j] > 0:
+                        order = (q2, q1, q4, q3)
+                    elif Vx[i, j] > 0 and Vy[i, j] < 0:
+                        order = (q3, q4, q1, q2)
+                    else:  # Vx < 0 and Vy < 0
+                        order = (q4, q3, q2, q1)
+
+                for (phimin, phimax) in order:  # quadrant orders.  In most cases it should find root in first quadrant searched.
+
+                    # check to see if it would be faster to reverse the bracket search direction
+                    backwardsearch = False
+                    if not startfrom90:
+                        # if phimin == -pi/2 || phimax == -pi/2:  # q2 or q4
+                        if np.isclose(phimin, -np.pi/2) or np.isclose(phimax, -np.pi/2):  # q2 or q4
+                            backwardsearch = True
+                    else:
+                        if np.isclose(phimax, np.pi/2):  # q1
+                            backwardsearch = True
+
+                    # find bracket
+                    found, p1, p2 = self._first_bracket_search(
+                        inputs, outputs, residuals,
+                        discrete_inputs, discrete_outputs, i, j,
+                        phimin, phimax, npts, backwardsearch)
+                    success[i, j], phi_1[i, j], phi_2[i, j] = found, p1, p2
+
+                    # once bracket is found, return it.
+                    if success[i, j]:
+                        break
+
+            return success, phi_1, phi_2
+
+    def _first_bracket_search(self, inputs, outputs, residuals,
+                              discrete_inputs, discrete_outputs, i, j,
+                              xmin, xmax, n, backwardsearch):
+
+        xvec = np.linspace(xmin, xmax, n)
+        if backwardsearch:  # start from xmax and work backwards
+            xvec = xvec[::-1]
+
+        # fprev = f(xvec[1])
+        outputs['phi'][i, j] = xvec[0]
+        self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
+                             discrete_outputs)
+        fprev = residuals['phi'][i, j]
+        for k in range(1, n):
+            # fnext = f(xvec[i])
+            outputs['phi'][i, j] = xvec[k]
+            self.apply_nonlinear(inputs, outputs, residuals,
+                                 discrete_inputs, discrete_outputs)
+            fnext = residuals['phi'][i, j]
+            if fprev*fnext < 0:  # bracket found
+                if backwardsearch:
+                    return True, xvec[k], xvec[k-1]
+                else:
+                    return True, xvec[k-1], xvec[k]
+            fprev = fnext
+
+        return False, 0.0, 0.0
 
 
 class FunctionalsComp(om.ExplicitComponent):
