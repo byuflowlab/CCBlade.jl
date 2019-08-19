@@ -415,24 +415,6 @@ class CCBladeGroup(om.Group):
                            prop_diameter={'units': 'm'})
         self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
 
-        src_indices = np.zeros((num_nodes, num_radial, 1), dtype=int)
-        comp = om.ExecComp(
-            'Vx = v*cos(precone)',
-            v={'units': 'm/s', 'shape': (num_nodes, num_radial),
-               'src_indices': src_indices},
-            precone={'units': 'rad'},
-            Vx={'units': 'm/s', 'shape': (num_nodes, num_radial)})
-        self.add_subsystem('Vx_comp', comp, promotes=['*'])
-
-        comp = om.ExecComp('Vy = omega*radii*cos(precone)',
-                           omega={'units': 'rad/s',
-                                  'shape': (num_nodes, 1),
-                                  'flat_src_indices': [0]},
-                           radii={'units': 'm', 'shape': (num_nodes, num_radial)},
-                           precone={'units': 'rad'},
-                           Vy={'units': 'm/s', 'shape': (num_nodes, num_radial)})
-        self.add_subsystem('Vy_comp', comp, promotes=['*'])
-
         comp = LocalInflowAngleComp(
             num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
             airfoil_interp=airfoil_interp, debug_print=False,
@@ -461,4 +443,3 @@ class CCBladeGroup(om.Group):
                            promotes_outputs=['thrust', 'torque','efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)
-
