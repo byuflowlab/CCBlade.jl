@@ -3,7 +3,7 @@ import numpy as np
 
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
 from ccblade.geometry import GeometryGroup
-from ccblade.ccblade import CCBladeGroup
+from ccblade.ccblade_jl import CCBladeGroup
 
 
 def make_plots(prob):
@@ -80,7 +80,8 @@ def main():
         promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        num_blades=num_blades, af_filename=af_filename)
+                        num_blades=num_blades, af_filename=af_filename,
+                        turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',

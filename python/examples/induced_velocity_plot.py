@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from openmdao.api import (IndepVarComp, Problem, Group, BalanceComp,
-                          DirectSolver, NewtonSolver)
+                          DirectSolver, NewtonSolver, BoundsEnforceLS)
 from ccblade.geometry import GeometryGroup
-from ccblade.ccblade import CCBladeGroup
+from ccblade.ccblade_jl import CCBladeGroup
 
 
 def make_plots(prob):
@@ -89,7 +89,8 @@ def main():
     balance_group = Group()
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        num_blades=num_blades, af_filename=af_filename)
+                        num_blades=num_blades, af_filename=af_filename,
+                        turbine=False)
     balance_group.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
@@ -101,7 +102,8 @@ def main():
     comp.add_balance(
         name='omega',
         eq_units='N', lhs_name='thrust', rhs_name='thrust_vtol',
-        val=omega, units='rad/s')
+        val=omega, units='rad/s',
+        lower=0.)
     balance_group.add_subsystem('thrust_balance_comp', comp, promotes=['*'])
 
     balance_group.linear_solver = DirectSolver(assemble_jac=True)
@@ -115,6 +117,8 @@ def main():
     prob.model.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
     prob.model.nonlinear_solver.options['solve_subsystems'] = True
     prob.model.nonlinear_solver.options['atol'] = 1e-9
+    prob.model.nonlinear_solver.linesearch = BoundsEnforceLS()
+    prob.model.nonlinear_solver.linesearch.options['iprint'] = 2
     prob.setup()
     prob.final_setup()
 
@@ -165,7 +169,7 @@ def main():
             label='Momentum Theory (climb)')
 
     # Descent:
-    climb_velocity_nondim = np.linspace(-4., -2., 10)
+    climb_velocity_nondim = np.linspace(-4., -2.5, 10)
     induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
     for vc, vi in np.nditer(
             [climb_velocity_nondim, induced_velocity_nondim],
@@ -202,7 +206,7 @@ def main():
             label='Momentum Theory (descent)')
 
     # # Empirical region:
-    # climb_velocity_nondim = np.linspace(-1.9, -1.1, 1)
+    # climb_velocity_nondim = np.linspace(-1.9, -1.5, 5)
     # induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
     # for vc, vi in np.nditer(
     #         [climb_velocity_nondim, induced_velocity_nondim],

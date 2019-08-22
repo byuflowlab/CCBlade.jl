@@ -362,24 +362,30 @@ class CCBladeResidualComp(ImplicitComponent):
                 sub._solve_nonlinear()
         self._apply_nonlinear()
 
-    def guess_nonlinear(self, inputs, outputs, residuals):
+    def solve_nonlinear(self, inputs, outputs):
         DEBUG_PRINT = self.options['debug_print']
+        residuals = self._residuals
 
         # I think this steps though and runs compute/apply_nonlinear to any
         # sub-components.
         self.recurse_solve()
 
+        self.apply_nonlinear(inputs, outputs, residuals)
+
         # If the residual norm is small, we're close enough, so return.
-        GUESS_TOL = 1e-4
-        res_norm = residuals.get_norm()
-        if res_norm < GUESS_TOL:
+        SOLVE_TOL = 1e-10
+        res_norm = np.linalg.norm(residuals['phi'])
+        if res_norm < SOLVE_TOL:
             out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
                     outputs[name] += residuals[name]
+
+                self.apply_nonlinear(inputs, outputs, residuals)
+
             if DEBUG_PRINT:
                 print(
-                    f"guess_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
+                    f"solve_nonlinear res_norm: {res_norm} (skipping solve_nonlinear)")
             return
 
         options_d = {
@@ -414,26 +420,26 @@ class CCBladeResidualComp(ImplicitComponent):
         res_1[mask], res_2[mask] = res_2[mask], res_1[mask]
 
         if DEBUG_PRINT:
-            print("0 Still bracking a root?", np.all(res_1*res_2 < 0.))
+            print(f"{0+1} res_norm = {res_norm}, Still bracking a root?", np.all(res_1*res_2 < 0.))
 
         for i in range(100):
             outputs['phi'][:] = 0.5 * (phi_1 + phi_2)
-            self.recurse_solve()
+            self.apply_nonlinear(inputs, outputs, residuals)
             new_res = residuals['phi']
-            # print('iter', i, np.linalg.norm(new_res))
 
-            # only need to do this to get into the ballpark
             res_norm = np.linalg.norm(new_res)
-            if res_norm < GUESS_TOL:
+            if res_norm < SOLVE_TOL:
                 out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd',
                              'F')
                 for name in out_names:
                     if np.all(np.logical_not(np.isnan(residuals[name]))):
                         outputs[name] += residuals[name]
+
+                self.apply_nonlinear(inputs, outputs, residuals)
+
                 if DEBUG_PRINT:
                     print(
-                        f"guess_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
-                    print(f"Vy/r = {inputs['Vy']/inputs['radii']}")
+                        f"solve_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
                 break
 
             mask_1 = new_res < 0
@@ -453,8 +459,9 @@ class CCBladeResidualComp(ImplicitComponent):
             for name in out_names:
                 if np.all(np.logical_not(np.isnan(residuals[name]))):
                     outputs[name] += residuals[name]
+            self.apply_nonlinear(inputs, outputs, residuals)
             if DEBUG_PRINT:
-                print(f"guess_nonlinear res_norm = {res_norm} > GUESS_TOL")
+                print(f"solve_nonlinear res_norm = {res_norm} > SOLVE_TOL")
 
 
 class CCBladeThrustTorqueComp(ExplicitComponent):
@@ -538,17 +545,16 @@ class CCBladeGroup(Group):
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
-        # self.options.declare('num_cp', types=int)
         self.options.declare('num_blades', types=int)
         self.options.declare('af_filename', types=str)
-        # self.options.declare('turbine', types=bool)
+        self.options.declare('turbine', types=bool)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
-        # num_cp = self.options['num_cp']
         num_radial = self.options['num_radial']
         num_blades = self.options['num_blades']
         af_filename = self.options['af_filename']
+        turbine = self.options['turbine']
 
         comp = ExecComp('hub_radius = 0.5*hub_diameter',
                         hub_radius={'value': 0.1, 'units': 'm'},
@@ -576,16 +582,16 @@ class CCBladeGroup(Group):
         self.add_subsystem('Vy_comp', comp, promotes=['*'])
 
         comp = CCBladeResidualComp(num_nodes=num_nodes, num_radial=num_radial,
-                                   B=num_blades, turbine=False,
+                                   B=num_blades, turbine=turbine,
                                    af_fname=af_filename, debug_print=False)
-        comp.nonlinear_solver = NewtonSolver()
-        comp.nonlinear_solver.options['solve_subsystems'] = True
-        comp.nonlinear_solver.options['iprint'] = 0
-        comp.nonlinear_solver.options['maxiter'] = 30
-        comp.nonlinear_solver.options['err_on_non_converge'] = True
-        comp.nonlinear_solver.options['atol'] = 1e-5
-        comp.nonlinear_solver.options['rtol'] = 1e-8
-        comp.nonlinear_solver.linesearch = BoundsEnforceLS()
+        # comp.nonlinear_solver = NewtonSolver()
+        # comp.nonlinear_solver.options['solve_subsystems'] = True
+        # comp.nonlinear_solver.options['iprint'] = 0
+        # comp.nonlinear_solver.options['maxiter'] = 30
+        # comp.nonlinear_solver.options['err_on_non_converge'] = True
+        # comp.nonlinear_solver.options['atol'] = 1e-5
+        # comp.nonlinear_solver.options['rtol'] = 1e-8
+        # comp.nonlinear_solver.linesearch = BoundsEnforceLS()
         comp.linear_solver = DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=['radii', 'chord', 'theta', 'Vx',
@@ -611,4 +617,3 @@ class CCBladeGroup(Group):
                            promotes_outputs=['*'])
 
         self.linear_solver = DirectSolver(assemble_jac=True)
-
