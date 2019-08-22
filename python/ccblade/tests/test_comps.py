@@ -20,23 +20,29 @@ class SeparateCompTestCase(unittest.TestCase):
     def test_local_inflow_implicit_solve_turbine(self):
 
         num_nodes = 1
-        # B = 3  # number of blades
+        B = 3  # number of blades
         precone = 0.
         turbine = True
         hub_radius = 0.01
-        prop_radius = 500.0
+        prop_radius = 5.0
+        prop_radius_eff = 500.0
         r = np.array([0.2, 1, 2, 3, 4, 5])[np.newaxis, :]
         num_radial = r.size
 
-        gamma = np.array([61.0, 74.31002131, 84.89805553, 89.07195504, 91.25038415,
-                          92.58003871])
+        gamma = np.array([61.0, 74.31002131, 84.89805553, 89.07195504,
+                          91.25038415, 92.58003871])
         theta = ((90.0 - gamma)*np.pi/180)[np.newaxis, :]
-        chord = np.array([0.7, 0.706025153, 0.436187551, 0.304517933, 0.232257636,
-                          0.187279622])[np.newaxis, :]
+        chord = np.array([0.7, 0.706025153, 0.436187551, 0.304517933,
+                          0.232257636, 0.187279622])[np.newaxis, :]
+
+        def affunc(alpha, Re, M):
+            cl = 0.084*alpha*180/np.pi
+
+            return cl, np.zeros_like(cl)
 
         Vinf = np.array([7.0]).reshape((num_nodes, 1))
         tsr = 8
-        omega = tsr*Vinf/5.0
+        omega = tsr*Vinf/prop_radius
         rho = 1.0
 
         Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
@@ -46,7 +52,7 @@ class SeparateCompTestCase(unittest.TestCase):
 
         comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
                                         num_radial=num_radial,
-                                        airfoil_interp=dummy_airfoil,
+                                        airfoil_interp=affunc,
                                         turbine=turbine,
                                         debug_print=False)
 
@@ -54,9 +60,8 @@ class SeparateCompTestCase(unittest.TestCase):
 
         prob.setup()
 
-        # prob['ccblade.phi'] = np.array([0.706307, 0.416522, 0.226373, 0.153094,
-        #                                 0.115256, 0.092305])[np.newaxis, :]
-        prob['ccblade.phi'] = 1. # initial guess
+        prob['ccblade.B'] = B
+        prob['ccblade.phi'] = 1.  # initial guess
         prob['ccblade.radii'] = r
         prob['ccblade.chord'] = chord
         prob['ccblade.theta'] = theta
@@ -66,22 +71,25 @@ class SeparateCompTestCase(unittest.TestCase):
         prob['ccblade.mu'] = 1.
         prob['ccblade.asound'] = 1.
         prob['ccblade.hub_radius'] = hub_radius
-        prob['ccblade.prop_radius'] = prop_radius
+        prob['ccblade.prop_radius'] = prop_radius_eff
         prob['ccblade.precone'] = precone
 
         prob.run_model()
 
-        expected_phi = np.array([0.66632224, 0.39417967, 0.20869982, 0.13808477, 0.10209614,
-                   0.08053812])
+        # First entry in phi is uncomparable because the classical method fails at the root so they fixed cl
+        expected_beta = np.array([66.1354, 77.0298, 81.2283, 83.3961, 84.7113])
+        beta = 90.0 - np.degrees(prob['ccblade.phi'][0, 1:])
+        assert_rel_error(self, beta, expected_beta, 1e-5)
 
-        assert_rel_error(self, expected_phi, prob['ccblade.phi'][0], 1e-5)
-        # prob.model.list_outputs(residuals=True, print_arrays=True)
+        expected_a = np.array([0.2443, 0.2497, 0.2533, 0.2556, 0.25725])
+        assert_rel_error(self, prob['ccblade.a'][0, 1:], expected_a, 1e-3)
 
+        expected_ap = np.array([0.0676, 0.0180, 0.0081, 0.0046, 0.0030])
+        assert_rel_error(self, prob['ccblade.ap'][0, 1:], expected_ap, 5e-3)
 
-    def test_local_inflow_implicit_solve_propeller(self): 
+    def test_local_inflow_implicit_solve_propeller(self):
 
         num_nodes = 1
-        B = 2  # number of blades
         af = dummy_airfoil
         turbine = False
 
@@ -160,7 +168,7 @@ class SeparateCompTestCase(unittest.TestCase):
 
         assert_rel_error(self, expected_phi, prob['ccblade.phi'][0], 1e-5)
 
-    def test_local_inflow_implicit_solve_propeller2(self):
+    def test_propeller_aero4students(self):
         # From test/runtests.jl
 
         # inputs
