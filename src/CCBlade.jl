@@ -19,6 +19,7 @@ import Roots  # solve residual equation
 import Parameters: @unpack
 import Interpolations
 import ForwardDiff
+import OpenMDAO
 
 
 export Section, Rotor, Inflow, Outputs
@@ -26,6 +27,7 @@ export af_from_file, af_from_data
 export simpleinflow, windturbineinflow, windturbineinflow_az
 export solve, loads, effectivewake, thrusttorque, thrusttorque_azavg, nondim
 
+include("openmdao.jl")
 
 
 # --------- structs -------------
@@ -659,7 +661,7 @@ function solve(rotor, section, inflow)
         # it will return empty outputs
         # alternatively, one could increase npts and try again
     
-        return Outpus()
+        return Outputs()
     end        
 end
 
