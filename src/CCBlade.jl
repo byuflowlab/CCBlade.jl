@@ -13,60 +13,45 @@ Some unique features:
 
 module CCBlade
 
-
 import Dierckx  # cubic b-spline for airfoil data
-import Roots  # solve residual equation
+# import Roots  # solve residual equation
 import Parameters: @unpack
+import PyCall
 import Interpolations
 import ForwardDiff
-import OpenMDAO
 
-
-export Section, Rotor, Inflow, Outputs
+export Rotor, OperatingPoint, Outputs
 export af_from_file, af_from_data
-export simpleinflow, windturbineinflow, windturbineinflow_az
-export solve, loads, effectivewake, thrusttorque, thrusttorque_azavg, nondim
+export simple_op, windturbine_op
+export solve, thrusttorque, nondim
 
 include("openmdao.jl")
 
 
 # --------- structs -------------
 
-
 """
-    Section(r, chord, theta, af)
+    Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine, precone=0.0)
 
-Define section properties at a given radial location on the rotor
+Define rotor geometry
 
 **Arguments**
-- `r::Float64`: radial location (Rhub < r < Rtip)
-- `chord::Float64`: local chord length
-- `theta::Float64`: twist angle (radians)
-- `af`: a function of the form: cl, cd = af(alpha, Re, Mach)
-"""
-struct Section{TF, TAF}
-
-    r::TF
-    chord::TF
-    theta::TF  # includes pitch
-    af::TAF
-
-end
-
-"""
-    Rotor(Rhub, Rtip, B, turbine, precone=0.0)
-
-Define geometry common to the entire rotor.
-
-**Arguments**
+- `r::Array{Float64, 1}`: radial locations along turbine (Rhub < r < Rtip)
+- `chord::Array{Float64, 1}`: corresponding local chord lengths
+- `theta::Array{Float64, 1}`: corresponding twist angles (radians)
+- `af::Array{function, 1}`: a function of the form: cl, cd = af(alpha, Re, Mach)
 - `Rhub::Float64`: hub radius (along blade length)
 - `Rtip::Float64`: tip radius (along blade length)
 - `B::Int64`: number of blades
 - `turbine::Bool`: true if turbine, false if propeller
 - `precone::Float64`: precone angle
 """
-struct Rotor{TF, TI, TB}
+struct Rotor{TF, TAF, TI, TB, TA<:AbstractArray{TF, 1}, TAAF<:AbstractArray{TAF, 1}}
     
+    r::TA
+    chord::TA
+    theta::TA
+    af::TAAF
     Rhub::TF
     Rtip::TF
     B::TI
@@ -76,72 +61,100 @@ struct Rotor{TF, TI, TB}
 end
 
 # convenience constructor for no precone
-Rotor(Rhub, Rtip, B, turbine) = Rotor(Rhub, Rtip, B, turbine, 0.0)
+Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine) = Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine, 0.0)
 
-# make rotor broadcastable as a single entity
-Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
+# constructor for all keyword arguments, all scalars, ignoring extras
+function Rotor(; r::TF, chord::TF, theta::TF, af::TAF, Rhub::TF, Rtip::TF, B::TI, turbine::TB, precone::TF, kwargs...) where {TF, TAF, TI, TB}
+    Rotor(TF[r], TF[chord], TF[theta], TAF[af], Rhub, Rtip, B, turbine, precone)
+end
+
 
 
 """
-    Inflow(Vx, Vy, rho, mu=1.0, asound=1.0)
+    OperatingPoint(Vx, Vy, pitch, rho, mu=1.0, asound=1.0)
 
-Operation point for a rotor.  The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  See Documentation for more detail on coordinate systems.
+Operation point for a rotor.  
+The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
+See Documentation for more detail on coordinate systems.
+Vx and Vy vary radially at same locations as `r` in the rotor definition.
 
 **Arguments**
-- `Vx::Float64`: velocity in x-direction
-- `Vy::Float64`: velocity in y-direction
+- `Vx::Array{Float64, 1}`: velocity in x-direction along blade
+- `Vy::Array{Float64, 1}`: velocity in y-direction along blade
+- `pitch::Float64`: pitch angle (rad).  defined same direction as twist.
 - `rho::Float64`: fluid density
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct Inflow{TF}
-    Vx::TF
-    Vy::TF
+struct OperatingPoint{TF, TA<:AbstractArray{TF, 1}}
+    Vx::TA
+    Vy::TA
+    pitch::TF
     rho::TF
     mu::TF
     asound::TF
 end
 
 # convenience constructor when Re and Mach are not used.
-Inflow(Vx, Vy, rho) = Inflow(Vx, Vy, rho, 1.0, 1.0) 
+OperatingPoint(Vx, Vy, pitch, rho) = OperatingPoint(Vx, Vy, pitch, rho, 1.0, 1.0) 
+
+# constructor for all keyword arguments, ignoring extras
+function OperatingPoint(; Vx::TF, Vy::TF, pitch::TF, rho::TF, mu::TF, asound::TF, kwargs...)  where {TF}
+    OperatingPoint(TF[Vx], TF[Vy], pitch, rho, mu, asound)
+end
 
 
 """
-    Outputs(Np, Tp, a, ap, u, v, phi, W, cl, cd, F)
+    Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
 
-Outputs from the BEM solver.
+Outputs from the BEM solver along the radius.
 
 **Arguments**
-- `Np::Float64`: normal force per unit length
-- `Tp::Float64`: tangential force per unit length
-- `a::Float64`: axial induction factor
-- `ap::Float64`: tangential induction factor
-- `u::Float64`: axial induced velocity
-- `v::Float64`: tangential induced velocity
-- `phi::Float64`: inflow angle
-- `W::Float64`: inflow velocity
-- `cl::Float64`: lift coefficient
-- `cd::Float64`: drag coefficient
-- `F::Float64`: hub/tip loss correction
+- `Np::Array{Float64, 1}`: normal force per unit length
+- `Tp::Array{Float64, 1}`: tangential force per unit length
+- `a::Array{Float64, 1}`: axial induction factor
+- `ap::Array{Float64, 1}`: tangential induction factor
+- `u::Array{Float64, 1}`: axial induced velocity
+- `v::Array{Float64, 1}`: tangential induced velocity
+- `phi::Array{Float64, 1}`: inflow angle
+- `alpha::Array{Float64, 1}`: angle of attack
+- `W::Array{Float64, 1}`: inflow velocity
+- `cl::Array{Float64, 1}`: lift coefficient
+- `cd::Array{Float64, 1}`: drag coefficient
+- `cn::Array{Float64, 1}`: normal force coefficient
+- `ct::Array{Float64, 1}`: tangential force coefficient
+- `F::Array{Float64, 1}`: hub/tip loss correction
+- `G::Array{Float64, 1}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
 """
 struct Outputs{TF}
 
-    Np::TF
-    Tp::TF
-    a::TF
-    ap::TF
-    u::TF
-    v::TF
-    phi::TF
-    W::TF
-    cl::TF
-    cd::TF
-    F::TF
+    Np::Array{TF, 1}
+    Tp::Array{TF, 1}
+    a::Array{TF, 1}
+    ap::Array{TF, 1}
+    u::Array{TF, 1}
+    v::Array{TF, 1}
+    phi::Array{TF, 1}
+    alpha::Array{TF, 1}
+    W::Array{TF, 1}
+    cl::Array{TF, 1}
+    cd::Array{TF, 1}
+    cn::Array{TF, 1}
+    ct::Array{TF, 1}
+    F::Array{TF, 1}
+    G::Array{TF, 1}
 
 end
 
-# constructor for case with no solution found
-Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+# convenience constructor to initialize
+function Outputs(etype, nr)
+    return Outputs(
+        zeros(etype, nr), zeros(etype, nr), zeros(etype, nr), zeros(etype, nr),
+        zeros(etype, nr), zeros(etype, nr), zeros(etype, nr), zeros(etype, nr),
+        zeros(etype, nr), zeros(etype, nr), zeros(etype, nr), zeros(etype, nr),
+        zeros(etype, nr), zeros(etype, nr), zeros(etype, nr)
+    )
+end
 
 struct ResidualPartials{TF}
     phi::TF
@@ -277,26 +290,33 @@ end
 
 
 
-
-
-
 # ------------ BEM core ------------------
 
 
 """
 (private) residual function
+modifies outputs if setoutputs=true
 """
-function residual(phi, section, inflow, rotor)
+function residual!(phi, rotor, inflow, outputs, idx, setoutputs=false)
 
     # unpack inputs
-    @unpack r, chord, theta, af = section
-    @unpack Vx, Vy, rho, mu, asound = inflow
-    @unpack Rhub, Rtip, B, turbine = rotor
-
+    r = rotor.r[idx]
+    chord = rotor.chord[idx]
+    theta = rotor.theta[idx]
+    af = rotor.af[idx]
+    Rhub = rotor.Rhub
+    Rtip = rotor.Rtip
+    B = rotor.B
+    Vx = inflow.Vx[idx]
+    Vy = inflow.Vy[idx]
+    pitch = inflow.pitch
+    rho = inflow.rho
+    
     # check if turbine or propeller and change input sign if necessary
-    swapsign = turbine ? 1 : -1
-    theta *= swapsign
-    Vx *= swapsign
+    setsign = rotor.turbine ? 1 : -1
+    theta *= setsign
+    pitch *= setsign
+    Vx *= setsign
 
     # constants
     sigma_p = B*chord/(2.0*pi*r)
@@ -304,14 +324,14 @@ function residual(phi, section, inflow, rotor)
     cphi = cos(phi)
 
     # angle of attack
-    alpha = phi - theta
+    alpha = phi - (theta + pitch)
 
     # Reynolds number
-    W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
-    Re = rho * W0 * chord / mu
+    W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor difference and only affects Reynolds/Mach number
+    Re = rho * W0 * chord / inflow.mu
 
     # Mach number
-    Mach = W0/asound  # also ignoring induction
+    Mach = W0/inflow.asound  # also ignoring induction
 
     # airfoil cl/cd
     cl, cd = af(alpha, Re, Mach)
@@ -332,151 +352,374 @@ function residual(phi, section, inflow, rotor)
     k = cn*sigma_p/(4.0*F*sphi*sphi)
     kp = ct*sigma_p/(4.0*F*sphi*cphi)
 
-    # parameters used in Vx=0 and Vy=0 cases
-    k0 = cn*sigma_p/(4.0*F*sphi*cphi)
-    k0p = ct*sigma_p/(4.0*F*sphi*sphi)
+    # # parameters used in Vx=0 and Vy=0 cases
+    # k0 = cn*sigma_p/(4.0*F*sphi*cphi)
+    # k0p = ct*sigma_p/(4.0*F*sphi*sphi)
 
 
     # --- solve for induced velocities ------
-    if isapprox(Vx, 0.0, atol=1e-6)
+    # if isapprox(Vx, 0.0, atol=1e-6)
 
-        u = sign(phi)*k0*Vy
-        v = 0.0
-        a = 0.0
-        ap = 0.0
+    #     u = sign(phi)*k0*Vy
+    #     v = 0.0
+    #     a = 0.0
+    #     ap = 0.0
 
-    elseif isapprox(Vy, 0.0, atol=1e-6)
+    # elseif isapprox(Vy, 0.0, atol=1e-6)
         
-        u = 0.0
-        v = k0p*abs(Vx)
-        a = 0.0
-        ap = 0.0
+    #     u = 0.0
+    #     v = k0p*abs(Vx)
+    #     a = 0.0
+    #     ap = 0.0
     
-    else
+    # else
 
-        if phi < 0
-            k = -k
-        end
-
-        if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-            return 1.0, Outputs()
-        end
-
-        if k <= 2.0/3  # momentum region
-            a = k/(1 + k)
-
-        else  # empirical region
-            g1 = 2.0*F*k - (10.0/9-F)
-            g2 = 2.0*F*k - (4.0/3-F)*F
-            g3 = 2.0*F*k - (25.0/9-2*F)
-
-            if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-                a = 1.0 - 1.0/(2.0*sqrt(g2))
-            else
-                a = (g1 - sqrt(g2)) / g3
-            end
-        end
-
-        u = a * Vx
-
-        # -------- tangential induction ----------
-        if Vx < 0
-            kp = -kp
-        end
-
-        if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-            return 1.0, Outputs()
-        end
-
-        ap = kp/(1 - kp)
-        v = ap * Vy
-
+    if phi < 0
+        k *= -1
     end
 
+    if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+        return 1.0
+    end
+
+    if k <= 2.0/3  # momentum region
+        a = k/(1 + k)
+
+    else  # empirical region
+        g1 = 2.0*F*k - (10.0/9-F)
+        g2 = 2.0*F*k - (4.0/3-F)*F
+        g3 = 2.0*F*k - (25.0/9-2*F)
+
+        if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
+            a = 1.0 - 1.0/(2.0*sqrt(g2))
+        else
+            a = (g1 - sqrt(g2)) / g3
+        end
+    end
+
+    u = a * Vx
+
+    # -------- tangential induction ----------
+    if Vx < 0
+        kp *= -1
+    end
+
+    if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+        return 1.0
+    end
+
+    ap = kp/(1 - kp)
+    v = ap * Vy
+
+
+    # end
 
     # ------- residual function -------------
-    # R = sin(phi)*(Vy + v) - cos(phi)*(Vx - u)
     # R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
     R = sin(phi)/(Vx - u) - cos(phi)/(Vy + v)
 
-    # ------- loads ---------
-    W2 = (Vx - u)^2 + (Vy + v)^2
-    Np = cn*0.5*rho*W2*chord
-    Tp = ct*0.5*rho*W2*chord
 
-    # ---- swap output signs as needed -----
-    Tp *= swapsign
-    v *= swapsign
+    # fill outputs
+    if setoutputs
 
-    return R, Outputs(Np, Tp, a, ap, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
+        # ------- loads ---------
+        W2 = (Vx - u)^2 + (Vy + v)^2
+        Np = cn*0.5*rho*W2*chord
+        Tp = ct*0.5*rho*W2*chord
 
-end
+        # ---- swap output signs as needed -----
+        Tp *= setsign
+        v *= setsign
 
-function residual(B, af, turbine, inputs::AbstractArray)
-    phi = inputs[1]
-    r = inputs[2]
-    chord = inputs[3]
-    theta = inputs[4]
-    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
-    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
+        # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
+        # This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
+        # as they do not contain any hub/tip loss corrections.
+        # To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.
+        # In other words:
+        # CT = 4 a (1 - a) F = 4 a G (1 - a G)\n
+        # This is solved for G, then multiplied against the wake velocities.
+        G = (1.0 - sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
+        u *= G
+        v *= G
 
-    section = Section(r, chord, theta, af)
-    inflow = Inflow(Vx, Vy, rho, mu, asound)
-    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
-
-    R, outputs = residual(phi, section, inflow, rotor)
+        outputs.Np[idx] = Np
+        outputs.Tp[idx] = Tp
+        outputs.a[idx] = a
+        outputs.ap[idx] = ap
+        outputs.u[idx] = u
+        outputs.v[idx] = v
+        outputs.phi[idx] = phi
+        outputs.alpha[idx] = alpha
+        outputs.W[idx] = sqrt(W2)
+        outputs.cl[idx] = cl
+        outputs.cd[idx] = cd
+        outputs.cn[idx] = cn
+        outputs.ct[idx] = ct
+        outputs.F[idx] = F
+        outputs.G[idx] = G
+    end
 
     return R
+
 end
 
-function residual_outputs(B, af, turbine, inputs::AbstractArray)
-    phi = inputs[1]
-    r = inputs[2]
-    chord = inputs[3]
-    theta = inputs[4]
-    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
-    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
+# function residual(B, af, turbine, inputs::AbstractArray)
+#     phi = inputs[1]
+#     r = inputs[2]
+#     chord = inputs[3]
+#     theta = inputs[4]
+#     Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+#     Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
 
-    section = Section(r, chord, theta, af)
-    inflow = Inflow(Vx, Vy, rho, mu, asound)
-    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+#     section = Section(r, chord, theta, af)
+#     inflow = Inflow(Vx, Vy, rho, mu, asound)
+#     rotor = Rotor(Rhub, Rtip, B, turbine, precone)
 
-    R, outputs = residual(phi, section, inflow, rotor)
+#     R, outputs = residual(phi, section, inflow, rotor)
 
-    return [getfield(outputs, i) for i in fieldnames(Outputs)]
+#     return R
+# end
+
+# function residual_outputs(B, af, turbine, inputs::AbstractArray)
+#     phi = inputs[1]
+#     r = inputs[2]
+#     chord = inputs[3]
+#     theta = inputs[4]
+#     Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+#     Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
+
+#     section = Section(r, chord, theta, af)
+#     inflow = Inflow(Vx, Vy, rho, mu, asound)
+#     rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+
+#     R, outputs = residual(phi, section, inflow, rotor)
+
+#     return [getfield(outputs, i) for i in fieldnames(Outputs)]
+# end
+
+# function residual_partials(phi, section, inflow, rotor)
+#     # unpack inputs
+#     @unpack r, chord, theta, af = section
+#     @unpack Vx, Vy, rho, mu, asound = inflow
+#     @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+#     # Get a version of the residual function that's compatible with ForwardDiff.
+#     function R(inputs)
+#         return residual(B, af, turbine, inputs)
+#     end
+
+#     # Do it.
+#     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+#     return ResidualPartials(ForwardDiff.gradient(R, x)...)
+
+# end
+
+# function output_partials(phi, section, inflow, rotor)
+#     # unpack inputs
+#     @unpack r, chord, theta, af = section
+#     @unpack Vx, Vy, rho, mu, asound = inflow
+#     @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+#     # Get a version of the residual function that's compatible with ForwardDiff.
+#     function R(inputs)
+#         return residual_outputs(B, af, turbine, inputs)
+#     end
+
+#     # Do it.
+#     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+#     return ForwardDiff.jacobian(R, x)
+# end
+
+function pack_inputs(phi, rotor, inflow, idx)
+    r = rotor.r[idx]
+    chord = rotor.chord[idx]
+    theta = rotor.theta[idx]
+    Rhub = rotor.Rhub
+    Rtip = rotor.Rtip
+    precone = rotor.precone
+    Vx = inflow.Vx[idx]
+    Vy = inflow.Vy[idx]
+    pitch = inflow.pitch
+    rho = inflow.rho
+    mu = inflow.mu
+    asound = inflow.asound
+    return [phi, r, chord, theta, Rhub, Rtip, precone, Vx, Vy, pitch, rho, mu, asound]
 end
 
-function residual_partials(phi, section, inflow, rotor)
-    # unpack inputs
-    @unpack r, chord, theta, af = section
-    @unpack Vx, Vy, rho, mu, asound = inflow
-    @unpack Rhub, Rtip, B, turbine, precone = rotor
+function unpack_inputs(x)
+    i = 1
+    phi = x[i]
+    i += 1
+    r = x[i]
+    i += 1
+    chord = x[i]
+    i += 1
+    theta = x[i]
+    i += 1
+    Rhub = x[i]
+    i += 1
+    Rtip = x[i]
+    i += 1
+    precone = x[i]
+    i += 1
+    Vx = x[i]
+    i += 1
+    Vy = x[i]
+    i += 1
+    pitch = x[i]
+    i += 1
+    rho = x[i]
+    i += 1
+    mu = x[i]
+    i += 1
+    asound = x[i]
 
-    # Get a version of the residual function that's compatible with ForwardDiff.
-    function R(inputs)
-        return residual(B, af, turbine, inputs)
+    kwargs = Dict(
+        :phi => phi,
+        :r => r,
+        :chord => chord,
+        :theta => theta,
+        :Rhub => Rhub,
+        :Rtip => Rtip,
+        :precone => precone,
+        :Vx => Vx,
+        :Vy => Vy,
+        :pitch => pitch,
+        :rho => rho,
+        :mu => mu,
+        :asound => asound)
+    return kwargs
+end
+
+function pack_outputs(outputs, idx)
+    Np = outputs.Np[idx]
+    Tp = outputs.Tp[idx]
+    a = outputs.a[idx]
+    ap = outputs.ap[idx]
+    u = outputs.u[idx]
+    v = outputs.v[idx]
+    alpha = outputs.alpha[idx]
+    W = outputs.W[idx]
+    cl = outputs.cl[idx]
+    cd = outputs.cd[idx]
+    cn = outputs.cn[idx]
+    ct = outputs.ct[idx]
+    F = outputs.F[idx]
+    G = outputs.G[idx]
+    return [Np, Tp, a, ap, u, v, alpha, W, cl, cd, cn, ct, F, G]
+end
+
+function unpack_jacobian(x::AbstractArray{T, N}) where {T, N}
+    out = Dict{Tuple{Symbol, Symbol}, T}()
+    i = 1
+    Np = unpack_inputs(x[i, :])
+    for (key, val) in Np
+        out[(:Np, key)] = val
+    end
+    i += 1
+    Tp = unpack_inputs(x[i, :])
+    for (key, val) in Tp
+        out[(:Tp, key)] = val
+    end
+    i += 1
+    a = unpack_inputs(x[i, :])
+    for (key, val) in a
+        out[(:a, key)] = val
+    end
+    i += 1
+    ap = unpack_inputs(x[i, :])
+    for (key, val) in ap
+        out[(:ap, key)] = val
+    end
+    i += 1
+    u = unpack_inputs(x[i, :])
+    for (key, val) in u
+        out[(:u, key)] = val
+    end
+    i += 1
+    v = unpack_inputs(x[i, :])
+    for (key, val) in v
+        out[(:v, key)] = val
+    end
+    i += 1
+    alpha = unpack_inputs(x[i, :])
+    for (key, val) in alpha
+        out[(:alpha, key)] = val
+    end
+    i += 1
+    W = unpack_inputs(x[i, :])
+    for (key, val) in W
+        out[(:W, key)] = val
+    end
+    i += 1
+    cl = unpack_inputs(x[i, :])
+    for (key, val) in cl
+        out[(:cl, key)] = val
+    end
+    i += 1
+    cd = unpack_inputs(x[i, :])
+    for (key, val) in cd
+        out[(:cd, key)] = val
+    end
+    i += 1
+    cn = unpack_inputs(x[i, :])
+    for (key, val) in cn
+        out[(:cn, key)] = val
+    end
+    i += 1
+    ct = unpack_inputs(x[i, :])
+    for (key, val) in ct
+        out[(:ct, key)] = val
+    end
+    i += 1
+    F = unpack_inputs(x[i, :])
+    for (key, val) in F
+        out[(:F, key)] = val
+    end
+    i += 1
+    G = unpack_inputs(x[i, :])
+    for (key, val) in G
+        out[(:G, key)] = val
+    end
+    return out
+end
+
+function residual_partials(phi, rotor, inflow, outputs, idx)
+
+    B = rotor.B
+    af = rotor.af[idx]
+    turbine = rotor.turbine
+
+    function R(_x)
+        kwargs = unpack_inputs(_x)
+        _phi = kwargs[:phi]
+        _rotor = Rotor(; B=B, af=af, turbine=turbine, kwargs...)
+        _inflow = OperatingPoint(; kwargs...)
+        _outputs = Outputs(eltype(_x), 1)
+        return residual!(_phi, _rotor, _inflow, _outputs, 1, false)
     end
 
-    # Do it.
-    x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
-    return ResidualPartials(ForwardDiff.gradient(R, x)...)
-
+    x = pack_inputs(phi, rotor, inflow, idx)
+    return unpack_inputs(ForwardDiff.gradient(R, x))
 end
 
-function output_partials(phi, section, inflow, rotor)
-    # unpack inputs
-    @unpack r, chord, theta, af = section
-    @unpack Vx, Vy, rho, mu, asound = inflow
-    @unpack Rhub, Rtip, B, turbine, precone = rotor
+function output_partials(phi, rotor, inflow, outputs, idx)
+    B = rotor.B
+    af = rotor.af[idx]
+    turbine = rotor.turbine
 
-    # Get a version of the residual function that's compatible with ForwardDiff.
-    function R(inputs)
-        return residual_outputs(B, af, turbine, inputs)
+    function out(_x)
+        kwargs = unpack_inputs(_x)
+        _phi = kwargs[:phi]
+        _rotor = Rotor(; B=B, af=af, turbine=turbine, kwargs...)
+        _inflow = OperatingPoint(; kwargs...)
+        _outputs = Outputs(eltype(_x), 1)
+        _R = residual!(_phi, _rotor, _inflow, _outputs, 1, true)
+        return pack_outputs(_outputs, 1)
     end
 
-    # Do it.
-    x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
-    return ForwardDiff.jacobian(R, x)
+    x = pack_inputs(phi, rotor, inflow, idx)
+    return unpack_jacobian(ForwardDiff.jacobian(out, x))
 end
 
 """
@@ -511,20 +754,33 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 end
 
 
-function firstbracket(rotor::Rotor, section::Section, inflow::Inflow)
+"""
+    solve(rotor::Rotor, op::OperatingPoint)
+
+Solve the BEM equations for given rotor geometry and operating point.
+
+**Arguments**
+- `rotor::Rotor`: rotor properties
+- `op::OperatingPoint`: operating point
+
+**Returns**
+- `outputs::Outputs`: BEM output data including loads, induction factors, etc.
+"""
+function solve(rotor, op)
 
     # parameters
     npts = 20  # number of discretization points to find bracket in residual solve
 
     # unpack
-    swapsign = rotor.turbine ? 1 : -1
-    Vx = inflow.Vx * swapsign  # TODO: shouldn't be doing the sign swap in two different places
-    Vy = inflow.Vy
-    theta = section.theta * swapsign
+    setsign = rotor.turbine ? 1 : -1
+    Vx = op.Vx * setsign  # TODO: ideally should do sign swap only in one place
+    Vy = op.Vy
+    # theta = rotor.theta * setsign
+    # pitch = op.pitch * setsign
 
     # ---- determine quadrants based on case -----
-    Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
-    Vy_is_zero = isapprox(Vy, 0.0, atol=1e-6)
+    # Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
+    # Vy_is_zero = isapprox(Vy, 0.0, atol=1e-6)
 
     # quadrants
     epsilon = 1e-6
@@ -533,137 +789,113 @@ function firstbracket(rotor::Rotor, section::Section, inflow::Inflow)
     q3 = [pi/2, pi-epsilon]
     q4 = [-pi+epsilon, -pi/2]
 
-    # wrapper to residual function to accomodate format required by the
-    # firstbracket routine above.
-    function R(phi)
-        zero, _ = residual(phi, section, inflow, rotor)
-        return zero
-    end
+    # if Vx_is_zero && Vy_is_zero
+    #     return Outputs()
 
-    if Vx_is_zero && Vy_is_zero
-        return Outputs()
+    # elseif Vx_is_zero
 
-    elseif Vx_is_zero
+    #     startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
-        startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
+    #     if Vy > 0 && theta > 0
+    #         order = (q1, q2)
+    #     elseif Vy > 0 && theta < 0
+    #         order = (q2, q1)
+    #     elseif Vy < 0 && theta > 0
+    #         order = (q3, q4)
+    #     else  # Vy < 0 && theta < 0
+    #         order = (q4, q3)
+    #     end
 
-        if Vy > 0 && theta > 0
-            order = (q1, q2)
-        elseif Vy > 0 && theta < 0
-            order = (q2, q1)
-        elseif Vy < 0 && theta > 0
-            order = (q3, q4)
-        else  # Vy < 0 && theta < 0
-            order = (q4, q3)
-        end
+    # elseif Vy_is_zero
 
-    elseif Vy_is_zero
+    #     startfrom90 = true  # start bracket search from 90 deg
 
-        startfrom90 = true  # start bracket search from 90 deg
+    #     if Vx > 0 && abs(theta) < pi/2
+    #         order = (q1, q3)
+    #     elseif Vx < 0 && abs(theta) < pi/2
+    #         order = (q2, q4)
+    #     elseif Vx > 0 && abs(theta) > pi/2
+    #         order = (q3, q1)
+    #     else  # Vx < 0 && abs(theta) > pi/2
+    #         order = (q4, q2)
+    #     end
 
-        if Vx > 0 && abs(theta) < pi/2
-            order = (q1, q3)
-        elseif Vx < 0 && abs(theta) < pi/2
-            order = (q2, q4)
-        elseif Vx > 0 && abs(theta) > pi/2
-            order = (q3, q1)
-        else  # Vx < 0 && abs(theta) > pi/2
-            order = (q4, q2)
-        end
+    # else  # normal case
 
-    else  # normal case
+    nr = length(rotor.r)
+    
+    # initialize outputs
+    outputs = Outputs(eltype(rotor.r[1]), nr)
+
+    for i = 1:nr
 
         startfrom90 = false
 
-        if Vx > 0 && Vy > 0
+        if Vx[i] > 0 && Vy[i] > 0
             order = (q1, q2, q3, q4)
-        elseif Vx < 0 && Vy > 0
+        elseif Vx[i] < 0 && Vy[i] > 0
             order = (q2, q1, q4, q3)
-        elseif Vx > 0 && Vy < 0
+        elseif Vx[i] > 0 && Vy[i] < 0
             order = (q3, q4, q1, q2)
-        else  # Vx < 0 && Vy < 0
+        else  # Vx[i] < 0 && Vy[i] < 0
             order = (q4, q3, q2, q1)
         end
 
-    end
+        # end
 
-    success = false
-    for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
-        phimin, phimax = order[j]
+        # ----- solve residual function ------
 
-        # check to see if it would be faster to reverse the bracket search direction
-        backwardsearch = false
-        if !startfrom90
+        # # wrapper to residual function to accomodate format required by fzero
+        R(phi) = residual!(phi, rotor, op, outputs, i)
+
+        success = false
+        for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
+            phimin, phimax = order[j]
+
+            # check to see if it would be faster to reverse the bracket search direction
+            backwardsearch = false
+            # if !startfrom90
             if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
                 backwardsearch = true
             end
-        else
-            if phimax == pi/2  # q1
-                backwardsearch = true
-            end
-        end
+            # else
+            #     if phimax == pi/2  # q1
+            #         backwardsearch = true
+            #     end
+            # end
 
-        # find bracket
-        success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
+            # find bracket
+            success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
 
-        # once bracket is found, return it.
-        if success
-            return success, phiL, phiU
-        end        
+            # once bracket is found, solve root finding problem and compute loads
+            if success
+
+                # phistar = Roots.fzero(R, phiL, phiU)
+                
+                so = PyCall.pyimport("scipy.optimize")
+                phistar = so.brentq(R, phiL, phiU)
+                residual!(phistar, rotor, op, outputs, i, true)  # call once more to set outputs
+                break
+            end    
+        end    
     end
 
-    # If we get to this point, we've failed to find a bracket.
-    return success, zero(rotor.Rhub), zero(rotor.Rhub)
+    # it shouldn't get to this point.  if it does it means no solution was found
+    # it will return empty outputs
+    # alternatively, one could increase npts and try again
+
+    return outputs
 end
 
 
-"""
-    solve(section, inflow, rotor)
+# function solve(rotor::Rotor, op::AbstractArray{OperatingPoint, 1})
+#     n = length(op)
+#     output_array = Array{Outputs, n}
 
-Solve the BEM equations for one section, with given inflow conditions, and rotor properties.
-If multiple sections are to be solved (typical usage) then one can use broadcasting:
-`solve.(sections, inflows, rotor)` where sections and inflows are arrays.
-
-**Arguments**
-- `rotor::Rotor`: rotor properties
-- `section::Section`: section properties
-- `inflow::Inflow`: inflow conditions
-
-**Returns**
-- `outputs::Outputs`: BEM output data including loads, induction factors, etc.
-"""
-function solve(rotor, section, inflow)
-
-    # error handling
-    if typeof(section) <: Array
-        error("You passed in an array for section, but this funciton does not accept an array.\nProbably you intended to use broadcasting (notice the dot): solve.(sections, inflows, rotor)")
-    end
-
-    # ----- solve residual function ------
-
-    # wrapper to residual function to accomodate format required by fzero
-    function R(phi)
-        zero, _ = residual(phi, section, inflow, rotor)
-        return zero
-    end
-
-    # Attempt to bracket the solution.
-    success, phiL, phiU = firstbracket(rotor, section, inflow)
-
-    if success
-
-        phistar = Roots.fzero(R, phiL, phiU)
-        _, outputs = residual(phistar, section, inflow, rotor)
-
-        return outputs
-    else
-        # it shouldn't get to this point.  if it does it means no solution was found
-        # it will return empty outputs
-        # alternatively, one could increase npts and try again
-    
-        return Outputs()
-    end        
-end
+#     for i = 1:n
+#         output_array[i] = solve(rotor, op[i])
+#     end
+# end
 
 
 # ------------ inflow ------------------
@@ -671,34 +903,32 @@ end
 
 
 """
-    simpleinflow(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+    simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
 
 Uniform inflow through rotor.  Returns an Inflow object.
 
 **Arguments**
-- `Vinf::Float64`: freestream speed (m/s)
-- `Omega::Float64`: rotation speed (rad/s)
-- `r::Float64`: radial location where inflow is computed (m)
+- `Vinf::Float`: freestream speed (m/s)
+- `Omega::Float`: rotation speed (rad/s)
+- `r::Float{Float64, 1}`: radial location where inflow is computed (m)
+- `rho::Float`: air density (kg/m^3)
+- `pitch::Float`: pitch (rad)
+- `mu::Float`: air viscosity (Pa * s)
+- `asounnd::Float`: air speed of sound (m/s)
 - `precone::Float64`: precone angle (rad)
-- `rho::Float64`: air density (kg/m^3)
 """
-function simpleinflow(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+function simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
 
-    # error handling
-    if typeof(r) <: Array
-        error("You passed in an array for r, but this function does not accept an array.\nProbably you intended to use broadcasting")
-    end
+    Vx = Vinf * cos(precone) * ones(length(r))
+    Vy = Omega .* r * cos(precone)
 
-    Vx = Vinf * cos(precone)
-    Vy = Omega * r * cos(precone)
-
-    return Inflow(Vx, Vy, rho, mu, asound)
+    return OperatingPoint(Vx, Vy, pitch, rho, mu, asound)
 
 end
 
 
 """
-    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+    windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
 Compute relative wind velocity components along blade accounting for inflow conditions
 and orientation of turbine.  See Documentation for angle definitions.
@@ -706,16 +936,19 @@ and orientation of turbine.  See Documentation for angle definitions.
 **Arguments**
 - `Vhub::Float64`: freestream speed at hub (m/s)
 - `Omega::Float64`: rotation speed (rad/s)
+- `pitch::Float64`: pitch angle (rad)
 - `r::Array{Float64, 1}`: radial locations where inflow is computed (m)
 - `precone::Float64`: precone angle (rad)
 - `yaw::Float64`: yaw angle (rad)
 - `tilt::Float64`: tilt angle (rad)
-- `azimuth::Float64`: azimuth angle (rad)
+- `azimuth::Float64`: azimuth angle to evaluate at (rad)
 - `hubHt::Float64`: hub height (m) - used for shear
 - `shearExp::Float64`: power law shear exponent
 - `rho::Float64`: air density (kg/m^3)
+- `mu::Float`: air viscosity (Pa * s)
+- `asounnd::Float`: air speed of sound (m/s)
 """
-function windturbineinflow(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
+function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
     sy = sin(yaw)
     cy = cos(yaw)
@@ -732,10 +965,10 @@ function windturbineinflow(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, s
     y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero)
 
     # get section heights in wind-aligned coordinate system
-    heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
+    heightFromHub = (y_az*sa .+ z_az*ca)*ct .- x_az*st
 
     # velocity with shear
-    V = Vhub*(1 + heightFromHub/hubHt)^shearExp
+    V = Vhub*(1 .+ heightFromHub/hubHt).^shearExp
 
     # transform wind to blade c.s.
     Vwind_x = V * ((cy*st*ca + sy*sa)*sc + cy*ct*cc)
@@ -746,25 +979,13 @@ function windturbineinflow(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, s
     Vrot_y = Omega*z_az
 
     # total velocity
-    Vx = Vwind_x + Vrot_x
-    Vy = Vwind_y + Vrot_y
+    Vx = Vwind_x .+ Vrot_x
+    Vy = Vwind_y .+ Vrot_y
 
     # operating point
-    return Inflow(Vx, Vy, rho, mu, asound)
+    return OperatingPoint(Vx, Vy, pitch, rho, mu, asound)
 
 end
-
-
-function windturbineinflow_az(Vhub, Omega, r, precone, yaw, tilt, azimuth_array, hubHt, shearExp, rho, mu=1.0, asound=1.0)
-
-    azinflows = Array{Array{Inflow}}(undef, 4)
-    for i = 1:4
-        azinflows[i] = windturbineinflow.(Vhub, Omega, r, precone, yaw, tilt, azimuth_array[i], hubHt, shearExp, rho)
-    end
-
-    return azinflows
-end
-
 
 # -------------------------------------
 
@@ -772,75 +993,25 @@ end
 # -------- convenience methods ------------
 
 """
-    loads(outputs)
-
-Extract arrays for Np and Tp from the outputs.
-
-This does not do any calculations.  It is simply a syntax shorthand as loads are usually what we mostly care about from the outputs.
-"""
-function loads(outputs)
-    Np = getfield.(outputs, :Np)
-    Tp = getfield.(outputs, :Tp)
-    
-    return Np, Tp
-end
-
-
-"""
-    effectivewake(outputs)
-
-Computes rotor wake velocities.
-
-Note that the BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
-This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
-as they do not contain any hub/tip loss corrections.
-To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.
-In other words:\n
-CT = 4 a (1 - a) F = 4 a G (1 - a G)\n
-This is solved for G, then multiplied against the wake velocities.
-"""
-function effectivewake(outputs)
-
-    u = getfield.(outputs, :u)
-    v = getfield.(outputs, :v)
-    F = getfield.(outputs, :F)
-    a = getfield.(outputs, :a)
-    
-    # the effective "F" if it were multiplied against the velocities instead of the forces
-    G = (1.0 .- sqrt.(1.0 .- 4*a.*(1.0 .- a).*F))./(2*a)
-
-    ueff = u.*G
-    veff = v.*G
-
-    return ueff, veff
-
-end
-
-
-"""
-    thrusttorque(rotor, sections, outputs)
+    thrusttorque(rotor::Rotor, outputs::Outputs)
 
 integrate the thrust/torque across the blade, 
 including 0 loads at hub/tip, using a trapezoidal rule.
 
 **Arguments**
 - `rotor::Rotor`: rotor object
-- `sections::Array{Section, 1}`: section data along blade
-- `outputs::Array{Outputs, 1}`: output data along blade
+- `outputs::Outputs`: output data along blade
 
 **Returns**
-- `T::Float64`: thrust (along x-dir see Documentation)
-- `Q::Float64`: torque (along x-dir see Documentation)
+- `T::Array{Float64, 1}`: thrust (along x-dir see Documentation).
+- `Q::Array{Float64, 1}`: torque (along x-dir see Documentation).
 """
-function thrusttorque(rotor, sections, outputs)
-
-    Np, Tp = loads(outputs)
-    r = getfield.(sections, :r)
+function thrusttorque(rotor::Rotor, outputs::Outputs)
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
-    rfull = [rotor.Rhub; r; rotor.Rtip]
-    Npfull = [0.0; Np; 0.0]
-    Tpfull = [0.0; Tp; 0.0]
+    rfull = [rotor.Rhub; rotor.r; rotor.Rtip]
+    Npfull = [0.0; outputs.Np; 0.0]
+    Tpfull = [0.0; outputs.Tp; 0.0]
 
     # integrate Thrust and Torque (trapezoidal)
     thrust = Npfull*cos(rotor.precone)
@@ -908,17 +1079,19 @@ end
 
 
 """
-ttodo
+    thrusttorque(rotor::Rotor, outputs::AbstractArray{Outputs{TF}, 1}) where TF <: Number
+
+Integrate the thrust/torque across the blade given an array of output data.
+Generally used for azimuthal averaging of thrust/torque.
 """
-function thrusttorque_azavg(rotor, sections, azinflows)
+function thrusttorque(rotor::Rotor, outputs::AbstractArray{Outputs{TF}, 1}) where TF <: Number
 
     T = 0.0
     Q = 0.0
-    n = length(azinflows)
+    n = length(outputs)
 
     for i = 1:n
-        outputs = solve.(rotor, sections, azinflows[i])
-        Tsub, Qsub = thrusttorque(rotor, sections, outputs)
+        Tsub, Qsub = thrusttorque(rotor, outputs[i])
         T += Tsub / n
         Q += Qsub / n
     end

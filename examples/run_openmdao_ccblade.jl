@@ -64,15 +64,17 @@ comp = om.ExecComp("prop_radius = 0.5*prop_diameter",
 group.add_subsystem("prop_radius_comp", comp, promotes=["*"])
 
 comp = om.ExecComp("Vx = v*cos(precone)",
-                   v=Dict("units" => "m/s", "shape" => num_nodes),
+                   v=Dict("units" => "m/s",
+                          "shape" => (num_nodes, num_radial),
+                          "src_indices" => repeat(0:num_nodes-1, num_nodes, num_radial)),
                    precone=Dict("units" => "rad"),
-                   Vx=Dict("units" => "m/s", "shape" => num_nodes))
+                   Vx=Dict("units" => "m/s", "shape" => (num_nodes, num_radial)))
 group.add_subsystem("Vx_comp", comp, promotes=["*"])
 
 comp = om.ExecComp("Vy = omega*radii*cos(precone)",
                    omega=Dict("units" => "rad/s",
                           "shape" => (num_nodes, 1),
-                          "flat_src_indices" => [0]),
+                          "flat_src_indices" => collect(0:num_nodes-1)),
                    radii=Dict("units" => "m", "shape" => (1, num_radial)),
                    precone=Dict("units" => "rad"),
                    Vy=Dict("units" => "m/s", "shape" => (num_nodes, num_radial)))
@@ -84,9 +86,10 @@ comp = julia_comps.JuliaImplicitComp(julia_comp_data=ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)
 group.add_subsystem("ccblade_residual_comp", comp,
-                    promotes_inputs=["radii", "chord", "theta", "Vx", "Vy",
-                                     "rho", "mu", "asound", "hub_radius",
-                                     "prop_radius", "precone"],
+                    promotes_inputs=[("r", "radii"), "chord", "theta", "Vx",
+                                     "Vy", "rho", "mu", "asound", "pitch",
+                                     ("Rhub", "hub_radius"), ("Rtip", "prop_radius"),
+                                     "precone"],
                     promotes_outputs=["Np", "Tp"])
 
 comp = pyccblade.CCBladeThrustTorqueComp(num_nodes=num_nodes,
@@ -111,7 +114,7 @@ prob.model.add_subsystem(
     "ccblade_group", group,
     promotes_inputs=["radii", "dradii", "chord", "theta", "rho", "mu",
                      "asound", "v", "precone", "omega", "hub_diameter",
-                     "prop_diameter"],
+                     "prop_diameter", "pitch"],
     promotes_outputs=["thrust", "torque", "efficiency"])
 
 prob.model.add_design_var("chord_dv", lower=1., upper=20.,

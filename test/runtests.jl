@@ -24,9 +24,6 @@ Rtip = 5.0
 Rtip_eff = 5.0*100  # to eliminate tip effects as consistent with their study.
 B = 3  # number of blades
 
-rotor = Rotor(Rhub, Rtip_eff, B, turbine)
-
-
 # --- section definitions ---
 
 r = [0.2, 1, 2, 3, 4, 5]
@@ -41,7 +38,12 @@ function affunc(alpha, Re, M)
     return cl, 0.0
 end 
 
-sections = Section.(r, chord, theta, affunc)
+n = length(r)
+airfoils = fill(affunc, n)
+
+rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip_eff, B, turbine)
+
+# sections = Section.(r, chord, theta, affunc)
 
 
 # --- inflow definitions ---
@@ -51,33 +53,28 @@ tsr = 8
 Omega = tsr*Vinf/Rtip
 rho = 1.0
 
-inflows = simpleinflow.(Vinf, Omega, r, rho)
+op = simple_op(Vinf, Omega, r, rho)
 
 # --- evaluate ---
 
-outputs = solve.(rotor, sections, inflows)
+out = solve(rotor, op)
 
-Np, Tp = loads(outputs)
-avec = getfield.(outputs, :a)
-apvec = getfield.(outputs, :ap)
-phivec = getfield.(outputs, :phi)
-
-ivec = phivec*180/pi .- theta*180/pi
-betavec = 90 .- phivec*180/pi
+ivec = out.phi*180/pi .- theta*180/pi
+betavec = 90 .- out.phi*180/pi
 
 
 # outputs[1] is uncomparable because the classical method fails at the root so they fixed cl
 
-@test isapprox(avec[2], 0.2443, atol=1e-4)
-@test isapprox(apvec[2], 0.0676, atol=1e-4)
-@test isapprox(avec[3], 0.2497, atol=1e-4)
-@test isapprox(apvec[3], 0.0180, atol=1e-4)
-@test isapprox(avec[4], 0.2533, atol=1e-4)
-@test isapprox(apvec[4], 0.0081, atol=1e-4)
-@test isapprox(avec[5], 0.2556, atol=1e-4)
-@test isapprox(apvec[5], 0.0046, atol=1e-4)
-@test isapprox(avec[6], 0.25725, atol=1e-4)  # note that their spreadsheet is not converged so I ran their method longer.
-@test isapprox(apvec[6], 0.0030, atol=1e-4)
+@test isapprox(out.a[2], 0.2443, atol=1e-4)
+@test isapprox(out.ap[2], 0.0676, atol=1e-4)
+@test isapprox(out.a[3], 0.2497, atol=1e-4)
+@test isapprox(out.ap[3], 0.0180, atol=1e-4)
+@test isapprox(out.a[4], 0.2533, atol=1e-4)
+@test isapprox(out.ap[4], 0.0081, atol=1e-4)
+@test isapprox(out.a[5], 0.2556, atol=1e-4)
+@test isapprox(out.ap[5], 0.0046, atol=1e-4)
+@test isapprox(out.a[6], 0.25725, atol=1e-4)  # note that their spreadsheet is not converged so I ran their method longer.
+@test isapprox(out.ap[6], 0.0030, atol=1e-4)
 
 @test isapprox(betavec[2], 66.1354, atol=1e-3)
 @test isapprox(betavec[3], 77.0298, atol=1e-3)
@@ -129,7 +126,6 @@ RPM = 2100
 rho = 1.225
 pitch = 1.0  # pitch distance in meters.
 
-
 # --- rotor definition ---
 turbine = false
 Rhub = 0.0
@@ -138,13 +134,11 @@ Rhub_eff = 1e-6  # something small to eliminate hub effects
 Rtip_eff = 100.0  # something large to eliminate tip effects
 B = 2  # number of blades
 
-rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B, turbine)
-rotor = Rotor(Rhub, Rtip, B, turbine)
 
 # --- section definitions ---
 
 R = D/2.0
-r = range(R/10, stop=R, length=11)
+r = collect(range(R/10, stop=R, length=11))
 theta = atan.(pitch./(2*pi*r))
 
 
@@ -156,7 +150,14 @@ function affunc(alpha, Re, M)
     return cl, cd
 end 
 
-sections = Section.(r, chord, theta, affunc)
+n = length(r)
+airfoils = fill(affunc, n)
+
+chord = chord*ones(n)
+rho = rho
+
+rotor_no_F = Rotor(r, chord, theta, airfoils, Rhub_eff, Rtip_eff, B, turbine)
+rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip, B, turbine)
 
 
 # --- inflow definitions ---
@@ -167,21 +168,21 @@ qsim = 1e2*[0.803638686218187, 0.806984572453978, 0.809709290183008, 0.811743686
 for i = 1:60
 
   Vinf = float(i)
-  Omega = RPM * pi/30
+  Omega = RPM * pi/30 
 
-  inflows = simpleinflow.(Vinf, Omega, r, rho)
+  op = simple_op(Vinf, Omega, r, rho)
 
 
   # --- evaluate ---
 
-  outputs = solve.(rotor_no_F, sections, inflows)
+  out = solve(rotor_no_F, op)
 
-  Np, Tp = loads(outputs)
+  # Np, Tp = loads(outputs)
 
   # T, Q = thrusttorque(r[1], r, r[end], Np, Tp, B)
   # their spreadsheet did not use trapzezoidal rule, so just do a rect sum.
-  T = sum(Np*(r[2]-r[1]))*B
-  Q = sum(r.*Tp*(r[2]-r[1]))*B
+  T = sum(out.Np*(r[2]-r[1]))*B
+  Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 
   @test isapprox(T, tsim[i], atol=1e-2)  # 2 decimal places
   @test isapprox(Q, qsim[i], atol=2e-3)
@@ -192,14 +193,12 @@ end
 Vinf = 20.0
 Omega = RPM * pi/30
 
-inflows = simpleinflow.(Vinf, Omega, r, rho)
+op = simple_op(Vinf, Omega, r, rho)
 
-outputs = solve.(rotor_no_F, sections, inflows)
+out = solve(rotor_no_F, op)
 
-Np, Tp = loads(outputs)
-
-T = sum(Np*(r[2]-r[1]))*B
-Q = sum(r.*Tp*(r[2]-r[1]))*B
+T = sum(out.Np*(r[2]-r[1]))*B
+Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
 
 
@@ -211,8 +210,23 @@ eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
 # ---------------------------------------------
 
 
+
+# -----------------------------------------------
+
 # ------ hover verification --------
 
 
 
 end
+
+# Vhub = 12.0
+# Omega = 10.0
+# r = [1.0, 2.0, 3.0]
+# precone = 0.0
+# yaw = 20*pi/180
+# tilt = 5*pi/180
+# azimuth = 0.0
+# hubHt = 100.0
+# shearExp = 0.2
+# rho = 0.1
+# inflow = windturbineinflow(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
