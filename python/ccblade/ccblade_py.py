@@ -1,6 +1,7 @@
 import numpy as np
 
 import openmdao.api as om
+from ccblade.brentv import brentv
 
 
 def dummy_airfoil(alpha, Re, Mach):
@@ -22,7 +23,9 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         self.options.declare('airfoil_interp')
         self.options.declare('turbine', types=bool)
         self.options.declare('debug_print', types=bool, default=False)
-        self.options.declare('solve_nonlinear', types=bool, default=True)
+        self.options.declare(
+            'solve_nonlinear', types=str, default='brent',
+            check_valid=lambda _, s: s in ['bracketing', 'brent'])
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -121,7 +124,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         k[phi < 0.] *= -1.
 
         ####################################
-        # Original Julia Code 
+        # Original Julia Code
         ####################################
         # if k <= 2.0/3:  # momentum region
         #     a = k/(1 + k)
@@ -136,7 +139,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         #         a = (g1 - np.sqrt(g2)) / g3
 
         ####################################
-        # Slow Pythonized Code 
+        # Slow Pythonized Code
         ####################################
         a = np.zeros_like(phi)
         for i in range(num_nodes):
@@ -153,7 +156,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                         a[i, j] = (g1 - np.sqrt(g2)) / g3
 
         ####################################
-        # Fast Pythonized Code 
+        # Fast Pythonized Code
         ####################################
         # mom_mask = k <= 2./3.
         # a[mom_mask] = k[mom_mask]/(1 + k[mom_mask])
@@ -207,30 +210,26 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
     def solve_nonlinear(self, inputs, outputs,
                         discrete_inputs, discrete_outputs):
-        if not self.options['solve_nonlinear']:
-            return
+        method = self.options['solve_nonlinear']
+        if method == 'bracketing':
+            self._solve_nonlinear_bracketing(
+                inputs, outputs, discrete_inputs, discrete_outputs)
+        elif method == 'brent':
+            self._solve_nonlinear_brent(
+                inputs, outputs, discrete_inputs, discrete_outputs)
+        else:
+            msg = f"unknown CCBlade solve_nonlinear method {method}"
+            raise ValueError(msg)
 
+    def _solve_nonlinear_bracketing(self, inputs, outputs, discrete_inputs,
+                                    discrete_outputs):
+
+        SOLVE_TOL = 1e-10
         DEBUG_PRINT = self.options['debug_print']
         residuals = self._residuals
 
         self.apply_nonlinear(inputs, outputs, residuals,
                              discrete_inputs, discrete_outputs)
-
-        # If the residual norm is small, we're close enough, so return.
-        SOLVE_TOL = 1e-10
-        res_norm = np.linalg.norm(residuals['phi'])
-        if res_norm < SOLVE_TOL:
-            out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
-            for name in out_names:
-                if np.all(np.logical_not(np.isnan(residuals[name]))):
-                    outputs[name] += residuals[name]
-
-                self.apply_nonlinear(inputs, outputs, residuals,
-                                     discrete_inputs, discrete_outputs)
-
-            if DEBUG_PRINT:
-                print(f"solve_nonlinear res_norm: {res_norm} (skipping guess_nonlinear)")
-            return
 
         bracket_found, phi_1, phi_2 = self._first_bracket(
             inputs, outputs, residuals, discrete_inputs, discrete_outputs)
@@ -255,33 +254,13 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         phi_1[mask], phi_2[mask] = phi_2[mask], phi_1[mask]
         res_1[mask], res_2[mask] = res_2[mask], res_1[mask]
 
-        if DEBUG_PRINT:
-            print("0 Still bracking a root?", np.all(res_1*res_2 < 0.))
-
-        for i in range(100):
+        steps_taken = 0
+        success = np.all(np.abs(phi_1 - phi_2) < SOLVE_TOL)
+        while steps_taken < 50 and not success:
             outputs['phi'][:] = 0.5 * (phi_1 + phi_2)
             self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
                                  discrete_outputs)
             new_res = residuals['phi']
-
-            # only need to do this to get into the ballpark
-            res_norm = np.linalg.norm(new_res)
-            if DEBUG_PRINT:
-                print(f"{i} solve_nonlinear res_norm: {res_norm}")
-            if res_norm < SOLVE_TOL:
-                out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd',
-                             'F')
-                for name in out_names:
-                    if np.all(np.logical_not(np.isnan(residuals[name]))):
-                        outputs[name] += residuals[name]
-
-                self.apply_nonlinear(inputs, outputs, residuals,
-                                     discrete_inputs, discrete_outputs)
-
-                if DEBUG_PRINT:
-                    print(
-                        f"solve_nonlinear res_norm: {res_norm}, convergence criteria satisfied")
-                break
 
             mask_1 = new_res < 0
             mask_2 = new_res > 0
@@ -292,17 +271,66 @@ class LocalInflowAngleComp(om.ImplicitComponent):
             phi_2[mask_2] = outputs['phi'][mask_2]
             res_2[mask_2] = new_res[mask_2]
 
-        else:
-            out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
-            for name in out_names:
-                if np.all(np.logical_not(np.isnan(residuals[name]))):
-                    outputs[name] += residuals[name]
+            steps_taken += 1
+            success = np.all(np.abs(phi_1 - phi_2) < SOLVE_TOL)
 
-            self.apply_nonlinear(inputs, outputs, residuals,
-                                 discrete_inputs, discrete_outputs)
-
+            # only need to do this to get into the ballpark
             if DEBUG_PRINT:
-                print(f"solve_nonlinear res_norm = {res_norm} > SOLVE_TOL")
+                res_norm = np.linalg.norm(new_res)
+                print(f"{steps_taken} solve_nonlinear res_norm: {res_norm}")
+
+        # Fix up the other outputs.
+        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+        for name in out_names:
+            if np.all(np.logical_not(np.isnan(residuals[name]))):
+                outputs[name] += residuals[name]
+
+        # Fix up the other residuals.
+        self.apply_nonlinear(inputs, outputs, residuals,
+                             discrete_inputs, discrete_outputs)
+        if not success:
+            raise om.AnalysisError(
+                "CCBlade _solve_nonlinear_bracketing failed")
+
+    def _solve_nonlinear_brent(self, inputs, outputs, discrete_inputs,
+                               discrete_outputs):
+        SOLVE_TOL = 1e-10
+        DEBUG_PRINT = self.options['debug_print']
+
+        # Find brackets for the phi residual
+        bracket_found, phi_1, phi_2 = self._first_bracket(
+            inputs, outputs, self._residuals,
+            discrete_inputs, discrete_outputs)
+        if not np.all(bracket_found):
+            raise om.AnalysisError("CCBlade bracketing failed")
+
+        # Create a wrapper function compatible with the brentv function.
+        def f(x):
+            outputs['phi'][:, :] = x
+            self.apply_nonlinear(inputs, outputs, self._residuals,
+                                 discrete_inputs, discrete_outputs)
+            return np.copy(self._residuals['phi'])
+
+        # Find the root.
+        phi, steps_taken, success = brentv(f, phi_1, phi_2, tolerance=SOLVE_TOL)
+
+        # Fix up the other outputs.
+        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+        for name in out_names:
+            if np.all(np.logical_not(np.isnan(self._residuals[name]))):
+                outputs[name] += self._residuals[name]
+
+        # Fix up the other residuals.
+        self.apply_nonlinear(inputs, outputs, self._residuals,
+                             discrete_inputs, discrete_outputs)
+
+        if DEBUG_PRINT:
+            res_norm = np.linalg.norm(self._residuals['phi'])
+            print(f"CCBlade brentv steps taken: {steps_taken}, residual norm = {res_norm}")
+
+        if not success:
+            raise om.AnalysisError(
+                "CCBlade _solve_nonlinear_brent failed")
 
     def _first_bracket(self, inputs, outputs, residuals, discrete_inputs,
                        discrete_outputs):
@@ -504,8 +532,9 @@ class CCBladeGroup(om.Group):
         self.options.declare('num_radial', types=int)
         self.options.declare('airfoil_interp')
         self.options.declare('turbine', types=bool)
-        self.options.declare('phi_residual_solve_nonlinear', types=bool,
-                             default=True)
+        self.options.declare(
+            'phi_residual_solve_nonlinear', types=str, default='brent',
+            check_valid=lambda _, s: s in ['bracketing', 'brent'])
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -528,15 +557,6 @@ class CCBladeGroup(om.Group):
             num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
             airfoil_interp=airfoil_interp, debug_print=False,
             solve_nonlinear=solve_nonlinear)
-        if not solve_nonlinear:
-            comp.nonlinear_solver = om.NewtonSolver()
-            comp.nonlinear_solver.options['solve_subsystems'] = True
-            comp.nonlinear_solver.options['iprint'] = 2
-            comp.nonlinear_solver.options['maxiter'] = 30
-            comp.nonlinear_solver.options['err_on_non_converge'] = True
-            comp.nonlinear_solver.options['atol'] = 1e-5
-            comp.nonlinear_solver.options['rtol'] = 1e-8
-            comp.nonlinear_solver.linesearch = om.BoundsEnforceLS()
         comp.linear_solver = om.DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=[
@@ -547,8 +567,9 @@ class CCBladeGroup(om.Group):
 
         comp = FunctionalsComp(num_nodes=num_nodes,
                                num_radial=num_radial)
-        self.add_subsystem('ccblade_torquethrust_comp', comp,
-                           promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
-                           promotes_outputs=['thrust', 'torque','efficiency'])
+        self.add_subsystem(
+            'ccblade_torquethrust_comp', comp,
+            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
+            promotes_outputs=['thrust', 'torque', 'efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)

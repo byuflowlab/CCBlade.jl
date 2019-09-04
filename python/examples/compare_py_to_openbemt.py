@@ -125,7 +125,8 @@ def main():
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         airfoil_interp=ccblade_interp,
-                        turbine=False)
+                        turbine=False,
+                        phi_residual_solve_nonlinear='bracketing')
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',

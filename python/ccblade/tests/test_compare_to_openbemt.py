@@ -204,8 +204,7 @@ class OpenBEMTTestCase(unittest.TestCase):
             promotes_outputs=['Vx', 'Vy'])
 
         comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                            airfoil_interp=ccblade_interp, turbine=False,
-                            phi_residual_solve_nonlinear=True)
+                            airfoil_interp=ccblade_interp, turbine=False)
         prob_ccblade.model.add_subsystem(
             'ccblade_group', comp,
             promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
