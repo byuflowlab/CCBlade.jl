@@ -31,6 +31,18 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
+        af = self.options['airfoil_interp']
+        try:
+            af[0]
+        except TypeError:
+            self._af = num_radial*[af]
+        else:
+            n_af = len(af)
+            if n_af != num_radial:
+                msg = f"airfoil_interp option should have length {num_radial}, but has length {n_af}"
+                raise ValueError(msg)
+            self._af = af
+
         self.add_discrete_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('chord', shape=(num_nodes, num_radial), units='m')
@@ -70,7 +82,8 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         num_radial = self.options['num_radial']
         turbine = self.options['turbine']
         B = discrete_inputs['B']
-        af = self.options['airfoil_interp']
+        # af = self.options['airfoil_interp']
+        af = self._af
 
         r = inputs['radii']
         chord = inputs['chord']
@@ -105,7 +118,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         Mach = W0/asound  # also ignoring induction
 
         # airfoil cl/cd
-        cl, cd = af(alpha, Re, Mach)
+        cl = np.zeros_like(alpha)
+        cd = np.zeros_like(alpha)
+        for i in range(num_radial):
+            cl[:, i], cd[:, i] = af[i](alpha[:, i], Re[:, i], Mach[:, i])
 
         # resolve into normal and tangential forces
         cn = cl*cphi + cd*sphi
