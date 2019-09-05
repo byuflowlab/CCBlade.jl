@@ -143,7 +143,7 @@ end
 # constructor for case with no solution found
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-struct ResidualPartials{TF}
+struct PartialsWrt{TF}
     phi::TF
     r::TF
     chord::TF
@@ -157,6 +157,9 @@ struct ResidualPartials{TF}
     Rtip::TF
     precone::TF
 end
+
+# Need this for the mapslices call in output_partials.
+PartialsWrt(x::AbstractArray) = PartialsWrt(x...)
     
 
 
@@ -412,40 +415,6 @@ function residual(phi, section, inflow, rotor)
 
 end
 
-function residual(B, af, turbine, inputs::AbstractArray)
-    phi = inputs[1]
-    r = inputs[2]
-    chord = inputs[3]
-    theta = inputs[4]
-    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
-    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
-
-    section = Section(r, chord, theta, af)
-    inflow = Inflow(Vx, Vy, rho, mu, asound)
-    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
-
-    R, outputs = residual(phi, section, inflow, rotor)
-
-    return R
-end
-
-function residual_outputs(B, af, turbine, inputs::AbstractArray)
-    phi = inputs[1]
-    r = inputs[2]
-    chord = inputs[3]
-    theta = inputs[4]
-    Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
-    Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
-
-    section = Section(r, chord, theta, af)
-    inflow = Inflow(Vx, Vy, rho, mu, asound)
-    rotor = Rotor(Rhub, Rtip, B, turbine, precone)
-
-    R, outputs = residual(phi, section, inflow, rotor)
-
-    return [getfield(outputs, i) for i in fieldnames(Outputs)]
-end
-
 function residual_partials(phi, section, inflow, rotor)
     # unpack inputs
     @unpack r, chord, theta, af = section
@@ -454,12 +423,24 @@ function residual_partials(phi, section, inflow, rotor)
 
     # Get a version of the residual function that's compatible with ForwardDiff.
     function R(inputs)
-        return residual(B, af, turbine, inputs)
+        # The order of inputs should always match the order of fields in the
+        # PartialsWrt struct.
+        _phi = inputs[1]
+        _r = inputs[2]
+        _chord = inputs[3]
+        _theta = inputs[4]
+        _Vx, _Vy, _rho, _mu, _asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+        _Rhub, _Rtip, _precone = inputs[10], inputs[11], inputs[12]
+        _section = Section(_r, _chord, _theta, af)
+        _inflow = Inflow(_Vx, _Vy, _rho, _mu, _asound)
+        _rotor = Rotor(_Rhub, _Rtip, B, turbine, _precone)
+        res, out = residual(_phi, _section, _inflow, _rotor)
+        return res
     end
 
     # Do it.
     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
-    return ResidualPartials(ForwardDiff.gradient(R, x)...)
+    return PartialsWrt(ForwardDiff.gradient(R, x))
 
 end
 
@@ -469,14 +450,26 @@ function output_partials(phi, section, inflow, rotor)
     @unpack Vx, Vy, rho, mu, asound = inflow
     @unpack Rhub, Rtip, B, turbine, precone = rotor
 
-    # Get a version of the residual function that's compatible with ForwardDiff.
+    # Get a version of the output function that's compatible with ForwardDiff.
     function R(inputs)
-        return residual_outputs(B, af, turbine, inputs)
+        # The order of inputs should always match the order of fields in the
+        # PartialsWrt struct.
+        _phi = inputs[1]
+        _r = inputs[2]
+        _chord = inputs[3]
+        _theta = inputs[4]
+        _Vx, _Vy, _rho, _mu, _asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+        _Rhub, _Rtip, _precone = inputs[10], inputs[11], inputs[12]
+        _section = Section(_r, _chord, _theta, af)
+        _inflow = Inflow(_Vx, _Vy, _rho, _mu, _asound)
+        _rotor = Rotor(_Rhub, _Rtip, B, turbine, _precone)
+        res, out = residual(_phi, _section, _inflow, _rotor)
+        return [getfield(out, i) for i in fieldnames(typeof(out))]
     end
 
     # Do it.
     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
-    return ForwardDiff.jacobian(R, x)
+    return Outputs(mapslices(PartialsWrt, ForwardDiff.jacobian(R, x), dims=2)...)
 end
 
 """

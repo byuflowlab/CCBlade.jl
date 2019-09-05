@@ -137,16 +137,13 @@ function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, r
     @. residuals["phi"] = getindex(out, 1)
 
     # Get the other outputs.
-    @. residuals["Np"] = outputs["Np"] - getfield(getindex(out, 2), :Np)
-    @. residuals["Tp"] = outputs["Tp"] - getfield(getindex(out, 2), :Tp)
-    @. residuals["a"] = outputs["a"] - getfield(getindex(out, 2), :a)
-    @. residuals["ap"] = outputs["ap"] - getfield(getindex(out, 2), :ap)
-    @. residuals["u"] = outputs["u"] - getfield(getindex(out, 2), :u)
-    @. residuals["v"] = outputs["v"] - getfield(getindex(out, 2), :v)
-    @. residuals["W"] = outputs["W"] - getfield(getindex(out, 2), :W)
-    @. residuals["cl"] = outputs["cl"] - getfield(getindex(out, 2), :cl)
-    @. residuals["cd"] = outputs["cd"] - getfield(getindex(out, 2), :cd)
-    @. residuals["F"] = outputs["F"] - getfield(getindex(out, 2), :F)
+    for o in self.outputs
+        str = o.name
+        sym = Symbol(str)
+        @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
+    end
+
+    return nothing
 end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
@@ -183,187 +180,48 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     # Get the derivatives of the residual.
     residual_derivs = CCBlade.residual_partials.(phis, sections, inflows, rotor)
 
-    # Copy the derivatives of the residual to the partials dict.
-    wrt_name_sym = [
-        ("phi", :phi),
-        ("r", :r),
-        ("chord", :chord), 
-        ("theta", :theta), 
-        ("Vx", :Vx),
-        ("Vy", :Vy),
-        ("rho", :rho),
-        ("mu", :mu),
-        ("asound", :asound),
-        ("Rhub", :Rhub),
-        ("Rtip", :Rtip),
-        ("precone", :precone)]
-    for (name, sym) in wrt_name_sym
-        # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-        deriv = transpose(reshape(partials["phi", name], (num_radial, num_nodes)))
+    # Copy the derivatives of the residual to the partials dict. First do the
+    # derivative of the phi residual wrt phi.
+    deriv = transpose(reshape(partials["phi", "phi"], (num_radial, num_nodes)))
+    @. deriv = getfield(residual_derivs, :phi)
+
+    # Copy the derivatives of the residual wrt each input.
+    for i in self.inputs
+        str = i.name
+        sym = Symbol(str)
+        deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
         @. deriv = getfield(residual_derivs, sym)
     end
 
-    # Get the derivatives of the outputs.
+    # Get the derivatives of the explicit outputs.
     output_derivs = CCBlade.output_partials.(phis, sections, inflows, rotor)
-    # @show getindex.(output_derivs, 1, 1)
 
-    # Holy Guido, so ugly...
-    of_names = String["Np", "Tp", "a", "ap", "u", "v", "phi", "W",
-                      "cl", "cd", "F"]
-    wrt_names = String["phi", "r", "chord", "theta", "Vx",
-                       "Vy", "rho", "mu", "asound", "Rhub",
-                       "Rtip", "precone"]
-    for (of_idx, of_name) in enumerate(of_names)
-        if of_name == "phi"
+    # Copy the derivatives of the explicit outputs into the partials dict.
+    for o in self.outputs
+        of_str = o.name
+        if of_str == "phi"
             continue
         else
-            for (wrt_idx, wrt_name) in enumerate(wrt_names)
+            of_sym = Symbol(of_str)
+            for i in self.inputs
+                wrt_str = i.name
+                wrt_sym = Symbol(wrt_str)
                 # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-                deriv = transpose(reshape(partials[of_name, wrt_name], (num_radial, num_nodes)))
-                @. deriv = -getindex(output_derivs, of_idx, wrt_idx)
+                deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+                @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
             end
+            # Also need the derivative of each output with respect to phi, but
+            # phi is an output, not an input, so we'll need to handle that
+            # seperately.
+            wrt_str = "phi"
+            wrt_sym = :phi
+            # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
+            deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+            @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
         end
     end
 
-end
-
-function OpenMDAO.guess_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
-    DEBUG_PRINT = self.debug_print
-
-    # These are all the explicit output names.
-    out_names = ["Np", "Tp", "a", "ap", "u", "v", "W", "cl", "cd", "F"]
-
-    # If the residual norm is small, we're close enough, so return.
-    GUESS_TOL = 1e-4
-    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
-    res_norm = norm(residuals["phi"])
-    if res_norm < GUESS_TOL
-        for name in out_names
-            if all(isfinite.(residuals[name]))
-                @. outputs[name] = outputs[name] - residuals[name]
-            end
-        end
-        if DEBUG_PRINT
-            println(
-                "guess_nonlinear res_norm: $(res_norm) (skipping guess_nonlinear bracketing)")
-        end
-        return
-    end
-
-    # Airfoil interpolation object.
-    af = self.af
-
-    # Rotor parameters.
-    B = self.B
-    Rhub = inputs["Rhub"][1]
-    Rtip = inputs["Rtip"][1]
-    precone = inputs["precone"][1]
-    turbine = self.turbine
-    rotor = Rotor(Rhub, Rtip, B, turbine)
-
-    # Blade section parameters.
-    r = inputs["r"]
-    chord = inputs["chord"]
-    theta = inputs["theta"]
-    sections = Section.(r, chord, theta, af)
-
-    # Inflow parameters.
-    Vx = inputs["Vx"]
-    Vy = inputs["Vy"]
-    rho = inputs["rho"]
-    mu = inputs["mu"]
-    asound = inputs["asound"]
-    inflows = Inflow.(Vx, Vy, rho, mu, asound)
-
-    # Find an interval for each section that brackets the root
-    # (hopefully). This will return a 2D array of Bool, Float64,
-    # Float64 tuples.
-    out = CCBlade.firstbracket.(rotor, sections, inflows)
-
-    # Check that we bracketed the root for each section.
-    success = getindex.(out, 1)
-    if ! all(success)
-        println("CCBlade bracketing failed")
-        @warn "CCBlade bracketing failed"
-    end
-
-    # Get the left and right value of each interval.
-    phi_1 = getindex.(out, 2)
-    phi_2 = getindex.(out, 3)
-
-    # Initialize the residual arrays.
-    res_1 = similar(phi_1)
-    res_2 = similar(phi_1)
-
-    # Evaluate the residual for phi_1.
-    @. outputs["phi"] = phi_1
-    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
-    @. res_1 = residuals["phi"]
-
-    # Evaluate the residual for phi_2.
-    @. outputs["phi"] = phi_2
-    OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
-    @. res_2 = residuals["phi"]
-
-    # Sort the phi_1, phi_2 values by whether they give a negative or positive
-    # residual.
-    mask = res_1 .> 0.0
-    phi_1[mask], phi_2[mask] = phi_2[mask], phi_1[mask]
-
-    # Sort the res_1 and res_2 by whether they are negative or positive.
-    res_1[mask], res_2[mask] = res_2[mask], res_1[mask]
-
-    if DEBUG_PRINT
-        println("0 Still bracking a root? $(all((res_1.*res_2) .< 0.0))")
-    end
-
-    for i in 1:100
-        # Evaulate the residual at a new phi value.
-        @. outputs["phi"] = 0.5 * (phi_1 + phi_2)
-        OpenMDAO.apply_nonlinear!(self, inputs, outputs, residuals)
-        new_res = residuals["phi"]
-
-        # Check if the residual satisfies the tolerance.
-        res_norm = norm(new_res)
-        if res_norm < GUESS_TOL
-            for name in out_names
-                if all(isfinite.(residuals[name]))
-                    @. outputs[name] = outputs[name] - residuals[name]
-                end
-            end
-            if DEBUG_PRINT
-                println(
-                    "guess_nonlinear res_norm: $(res_norm), convergence criteria satisfied")
-            end
-            return
-        end
-
-        # Sort the phi and residual values again.
-        mask_1 = new_res .< 0
-        mask_2 = new_res .> 0
-
-        phi_1[mask_1] = outputs["phi"][mask_1]
-        res_1[mask_1] = new_res[mask_1]
-
-        phi_2[mask_2] = outputs["phi"][mask_2]
-        res_2[mask_2] = new_res[mask_2]
-
-        if DEBUG_PRINT
-            println("$(i+1) res_norm = $(res_norm), Still bracking a root? $(all((res_1.*res_2) .< 0.0))")
-        end
-    end
-
-    # If we get here, we were unable to satisfy the convergence criteria.
-    for name in out_names
-        if all(isfinite.(residuals[name]))
-            @. outputs[name] = outputs[name] - residuals[name]
-        end
-    end
-    if DEBUG_PRINT
-        println(
-            "guess_nonlinear res_norm: $(res_norm) > GUESS_TOL")
-    end
-
+    return nothing
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
@@ -409,4 +267,5 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
     @. outputs["cd"] = getfield(out, :cd)
     @. outputs["F"] = getfield(out, :F)
 
+    return nothing
 end
