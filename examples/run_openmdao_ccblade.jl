@@ -87,7 +87,8 @@ comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)
 group.add_subsystem("ccblade_residual_comp", comp,
                     promotes_inputs=[("r", "radii"), "chord", "theta", "Vx",
-                                     "Vy", "rho", "mu", "asound", "pitch",
+                                     "Vy", "rho", "mu", "asound",
+                                     # "pitch",
                                      ("Rhub", "hub_radius"), ("Rtip", "prop_radius"),
                                      "precone"],
                     promotes_outputs=["Np", "Tp"])
@@ -114,7 +115,9 @@ prob.model.add_subsystem(
     "ccblade_group", group,
     promotes_inputs=["radii", "dradii", "chord", "theta", "rho", "mu",
                      "asound", "v", "precone", "omega", "hub_diameter",
-                     "prop_diameter", "pitch"],
+                     "prop_diameter",
+                     # "pitch",
+                    ],
     promotes_outputs=["thrust", "torque", "efficiency"])
 
 prob.model.add_design_var("chord_dv", lower=1., upper=20.,
