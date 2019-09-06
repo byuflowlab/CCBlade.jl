@@ -6,6 +6,7 @@ using PyPlot
 om = pyimport("openmdao.api")
 julia_comps = pyimport("omjl.julia_comps")
 pyccblade = pyimport("ccblade.ccblade_jl")
+pyccblade_py = pyimport("ccblade.ccblade_py")
 pyccblade_geom = pyimport("ccblade.geometry")
 
 num_nodes = 1
@@ -29,6 +30,7 @@ omega = 236.0
 prob = om.Problem()
 
 comp = om.IndepVarComp()
+comp.add_discrete_output("B", val=num_blades)
 comp.add_output("rho", val=rho0, shape=num_nodes, units="kg/m**3")
 comp.add_output("mu", val=1., shape=num_nodes, units="N/m**2*s")
 comp.add_output("asound", val=c0, shape=num_nodes, units="m/s")
@@ -93,10 +95,9 @@ group.add_subsystem("ccblade_residual_comp", comp,
                                      "precone"],
                     promotes_outputs=["Np", "Tp"])
 
-comp = pyccblade.CCBladeThrustTorqueComp(num_nodes=num_nodes,
-                                         num_radial=num_radial, B=num_blades)
+comp = pyccblade_py.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial)
 group.add_subsystem("ccblade_torquethrust_comp", comp,
-                    promotes_inputs=["radii", "dradii", "Np", "Tp"],
+                    promotes_inputs=["B", "radii", "dradii", "Np", "Tp"],
                     promotes_outputs=["thrust", "torque"])
 
 comp = om.ExecComp("efficiency = (thrust*v)/(torque*omega)",

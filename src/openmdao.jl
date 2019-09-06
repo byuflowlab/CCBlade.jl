@@ -96,6 +96,25 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
         push!(partials_data, PartialsData(name, name, rows=rows, cols=cols, val=1.0))
     end
 
+    # Check if the airfoil interpolation passed is a num_radial-length array.
+    try
+        num_af = length(af)
+        if num_af == num_radial
+            af = reshape(af, 1, num_radial)
+        else
+            throw(DomainError("af has length $num_af, but should have length $num_radial"))
+        end
+    catch e
+        if isa(e, MethodError)
+            # af is not an array of stuff, so assume it's just a single
+            # function, and make it have shape (num_nodes, num_radial).
+            af = fill(af, 1, num_radial)
+        else
+            # Some other error happened, so rethrow it.
+            rethrow(e)
+        end
+    end
+
     return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, input_data, output_data, partials_data)
 end
 
