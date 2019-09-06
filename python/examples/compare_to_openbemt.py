@@ -5,6 +5,7 @@ from openmdao.api import IndepVarComp, Problem
 from openbemt.airfoils.process_airfoils import ViternaAirfoil
 from openbemt.bemt.groups.bemt_group import BEMTGroup
 from ccblade.geometry import GeometryGroup
+from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_jl import CCBladeGroup
 
 
@@ -12,7 +13,7 @@ def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
+    num_blades = prob.model.ccblade_group.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     dradii = prob.get_val('dradii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
@@ -104,14 +105,20 @@ def main():
                          'theta_dv', 'pitch'],
         promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
 
+    comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
+    prob.model.add_subsystem(
+        'inflow_comp', comp,
+        promotes_inputs=['v', 'omega', 'radii', 'precone'],
+        promotes_outputs=['Vx', 'Vy'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         num_blades=num_blades, af_filename=af_filename,
                         turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
-                         'prop_diameter'],
+        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+                         'asound', 'Vx', 'Vy', 'v', 'precone', 'omega',
+                         'hub_diameter', 'prop_diameter'],
         promotes_outputs=[('Np', 'ccblade_normal_load'),
                           ('Tp', 'ccblade_circum_load')])
 

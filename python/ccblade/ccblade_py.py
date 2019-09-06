@@ -581,11 +581,10 @@ class CCBladeGroup(om.Group):
                                'prop_radius', 'precone'],
                            promotes_outputs=['Np', 'Tp'])
 
-        comp = FunctionalsComp(num_nodes=num_nodes,
-                               num_radial=num_radial)
+        comp = FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial)
         self.add_subsystem(
             'ccblade_torquethrust_comp', comp,
-            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
+            promotes_inputs=['B', 'radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
             promotes_outputs=['thrust', 'torque', 'efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)

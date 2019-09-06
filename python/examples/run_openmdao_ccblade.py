@@ -3,6 +3,7 @@ import numpy as np
 
 from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
 from ccblade.geometry import GeometryGroup
+from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_jl import CCBladeGroup
 
 
@@ -10,7 +11,7 @@ def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
+    num_blades = prob.model.ccblade_group.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
@@ -25,6 +26,8 @@ def make_plots(prob):
     fname = 'ccblade_normal_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
     fig, ax = plt.subplots()
     ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
@@ -34,6 +37,8 @@ def make_plots(prob):
     fname = 'ccblade_circum_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
 
 def main():
@@ -56,6 +61,7 @@ def main():
     prob = Problem()
 
     comp = IndepVarComp()
+    comp.add_discrete_input('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -79,14 +85,20 @@ def main():
                          'theta_dv', 'pitch'],
         promotes_outputs=['radii', 'dradii', 'chord', 'theta'])
 
+    comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
+    prob.model.add_subsystem(
+        'inflow_comp', comp,
+        promotes_inputs=['v', 'omega', 'radii', 'precone'],
+        promotes_outputs=['Vx', 'Vy'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         num_blades=num_blades, af_filename=af_filename,
                         turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
-                         'prop_diameter'],
+                         'asound', 'v', 'precone', 'omega', 'Vx', 'Vy',
+                         'precone', 'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
     prob.model.add_design_var('chord_dv', lower=1., upper=20.,

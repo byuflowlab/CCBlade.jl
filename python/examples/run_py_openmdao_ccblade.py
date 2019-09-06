@@ -29,6 +29,8 @@ def make_plots(prob):
     fname = 'pyccblade_normal_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
     fig, ax = plt.subplots()
     ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
@@ -38,6 +40,8 @@ def make_plots(prob):
     fname = 'pyccblade_circum_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
 
 def main():
@@ -104,7 +108,7 @@ def main():
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         airfoil_interp=ccblade_interp, turbine=False,
-                        phi_residual_solve_nonlinear='brent')
+                        phi_residual_solve_nonlinear='bracketing')
     prob.model.add_subsystem(
         'ccblade_group', comp,
         promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
