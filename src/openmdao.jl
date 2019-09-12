@@ -10,6 +10,9 @@ struct CCBladeResidualComp
     B
     turbine
     debug_print
+    rotor
+    sections
+    inflows
     inputs
     outputs
     partials
@@ -17,6 +20,7 @@ end
 
 convert(::Type{CCBladeResidualComp}, po::PyObject) = CCBladeResidualComp(
     po.num_nodes, po.num_radial, po.af, po.B, po.turbine, po.debug_print,
+    po.rotor, po.sections, po.inflows,
     po.inputs, po.outputs, po.partials)
 
 function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_print)
@@ -115,34 +119,62 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
         end
     end
 
-    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, input_data, output_data, partials_data)
+    rotor = Rotor(0., 1., B, turbine, 0.)
+
+    r = fill(1., 1, num_radial)
+    chord = fill(1., 1, num_radial)
+    theta = fill(1., 1, num_radial)
+    sections = Section.(r, chord, theta, af)
+
+    Vx = fill(1., num_nodes, num_radial)
+    Vy = fill(1., num_nodes, num_radial)
+    rho = fill(1., num_nodes, 1)
+    mu = fill(1., num_nodes, 1)
+    asound = fill(1., num_nodes, 1)
+    inflows = Inflow.(Vx, Vy, rho, mu, asound)
+
+    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, rotor, sections, inflows, input_data, output_data, partials_data)
 end
 
 function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
     # Airfoil interpolation object.
-    af = self.af
+    # af = self.af
 
     # Rotor parameters.
-    B = self.B
-    Rhub = inputs["Rhub"][1]
-    Rtip = inputs["Rtip"][1]
-    precone = inputs["precone"][1]
-    turbine = self.turbine
-    rotor = Rotor(Rhub, Rtip, B, turbine)
+    # B = self.B
+    # Rhub = inputs["Rhub"][1]
+    # Rtip = inputs["Rtip"][1]
+    # precone = inputs["precone"][1]
+    # turbine = self.turbine
+    # rotor = Rotor(Rhub, Rtip, B, turbine)
+    self.rotor.Rhub = inputs["Rhub"][1]
+    self.rotor.Rtip = inputs["Rtip"][1]
+    self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    r = inputs["r"]
-    chord = inputs["chord"]
-    theta = inputs["theta"]
-    sections = Section.(r, chord, theta, af)
+    # r = inputs["r"]
+    # chord = inputs["chord"]
+    # theta = inputs["theta"]
+    # sections = Section.(r, chord, theta, af)
+    # @. self.sections.r = inputs["r"]
+    # @. self.sections.chord = inputs["chord"]
+    # @. self.sections.theta = inputs["theta"]
+    setfield!.(self.sections, :r, inputs["r"])
+    setfield!.(self.sections, :chord, inputs["chord"])
+    setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    Vx = inputs["Vx"]
-    Vy = inputs["Vy"]
-    rho = inputs["rho"]
-    mu = inputs["mu"]
-    asound = inputs["asound"]
-    inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    # Vx = inputs["Vx"]
+    # Vy = inputs["Vy"]
+    # rho = inputs["rho"]
+    # mu = inputs["mu"]
+    # asound = inputs["asound"]
+    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    setfield!.(self.inflows, :Vx, inputs["Vx"])
+    setfield!.(self.inflows, :Vy, inputs["Vy"])
+    setfield!.(self.inflows, :rho, inputs["rho"])
+    setfield!.(self.inflows, :mu, inputs["mu"])
+    setfield!.(self.inflows, :asound, inputs["asound"])
 
     phis = outputs["phi"]
 
@@ -150,7 +182,7 @@ function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, r
     # two-dimensional array of length-two tuples. The first tuple
     # entry is the residual, and the second is the `Outputs`
     # struct.
-    out = CCBlade.residual.(phis, sections, inflows, rotor)
+    out = CCBlade.residual.(phis, self.sections, self.inflows, self.rotor)
 
     # Store the residual.
     @. residuals["phi"] = getindex(out, 1)
@@ -169,35 +201,49 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     num_nodes = self.num_nodes
     num_radial = self.num_radial
     # Airfoil interpolation object.
-    af = self.af
+    # af = self.af
 
     # Rotor parameters.
-    Rhub = inputs["Rhub"][1]
-    Rtip = inputs["Rtip"][1]
-    precone = inputs["precone"][1]
-    B = self.B
-    turbine = self.turbine
-    rotor = Rotor(Rhub, Rtip, B, turbine)
+    # Rhub = inputs["Rhub"][1]
+    # Rtip = inputs["Rtip"][1]
+    # precone = inputs["precone"][1]
+    # B = self.B
+    # turbine = self.turbine
+    # rotor = Rotor(Rhub, Rtip, B, turbine)
+    self.rotor.Rhub = inputs["Rhub"][1]
+    self.rotor.Rtip = inputs["Rtip"][1]
+    self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    r = inputs["r"]
-    chord = inputs["chord"]
-    theta = inputs["theta"]
-    sections = Section.(r, chord, theta, af)
+    # r = inputs["r"]
+    # chord = inputs["chord"]
+    # theta = inputs["theta"]
+    # sections = Section.(r, chord, theta, af)
+    # @. self.sections.r = inputs["r"]
+    # @. self.sections.chord = inputs["chord"]
+    # @. self.sections.theta = inputs["theta"]
+    setfield!.(self.sections, :r, inputs["r"])
+    setfield!.(self.sections, :chord, inputs["chord"])
+    setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    Vx = inputs["Vx"]
-    Vy = inputs["Vy"]
-    rho = inputs["rho"]
-    mu = inputs["mu"]
-    asound = inputs["asound"]
-    inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    # Vx = inputs["Vx"]
+    # Vy = inputs["Vy"]
+    # rho = inputs["rho"]
+    # mu = inputs["mu"]
+    # asound = inputs["asound"]
+    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    setfield!.(self.inflows, :Vx, inputs["Vx"])
+    setfield!.(self.inflows, :Vy, inputs["Vy"])
+    setfield!.(self.inflows, :rho, inputs["rho"])
+    setfield!.(self.inflows, :mu, inputs["mu"])
+    setfield!.(self.inflows, :asound, inputs["asound"])
 
     # Phi, the implicit variable.
     phis = outputs["phi"]
 
     # Get the derivatives of the residual.
-    residual_derivs = CCBlade.residual_partials.(phis, sections, inflows, rotor)
+    residual_derivs = CCBlade.residual_partials.(phis, self.sections, self.inflows, self.rotor)
 
     # Copy the derivatives of the residual to the partials dict. First do the
     # derivative of the phi residual wrt phi.
@@ -213,7 +259,7 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     end
 
     # Get the derivatives of the explicit outputs.
-    output_derivs = CCBlade.output_partials.(phis, sections, inflows, rotor)
+    output_derivs = CCBlade.output_partials.(phis, self.sections, self.inflows, self.rotor)
 
     # Copy the derivatives of the explicit outputs into the partials dict.
     for o in self.outputs
@@ -245,33 +291,47 @@ end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
     # Airfoil interpolation object.
-    af = self.af
+    # af = self.af
 
     # Rotor parameters.
-    B = self.B
-    Rhub = inputs["Rhub"][1]
-    Rtip = inputs["Rtip"][1]
-    precone = inputs["precone"][1]
-    turbine = self.turbine
-    rotor = Rotor(Rhub, Rtip, B, turbine)
+    # Rhub = inputs["Rhub"][1]
+    # Rtip = inputs["Rtip"][1]
+    # precone = inputs["precone"][1]
+    # B = self.B
+    # turbine = self.turbine
+    # rotor = Rotor(Rhub, Rtip, B, turbine)
+    self.rotor.Rhub = inputs["Rhub"][1]
+    self.rotor.Rtip = inputs["Rtip"][1]
+    self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    r = inputs["r"]
-    chord = inputs["chord"]
-    theta = inputs["theta"]
-    sections = Section.(r, chord, theta, af)
+    # r = inputs["r"]
+    # chord = inputs["chord"]
+    # theta = inputs["theta"]
+    # sections = Section.(r, chord, theta, af)
+    # @. self.sections.r = inputs["r"]
+    # @. self.sections.chord = inputs["chord"]
+    # @. self.sections.theta = inputs["theta"]
+    setfield!.(self.sections, :r, inputs["r"])
+    setfield!.(self.sections, :chord, inputs["chord"])
+    setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    Vx = inputs["Vx"]
-    Vy = inputs["Vy"]
-    rho = inputs["rho"]
-    mu = inputs["mu"]
-    asound = inputs["asound"]
-    inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    # Vx = inputs["Vx"]
+    # Vy = inputs["Vy"]
+    # rho = inputs["rho"]
+    # mu = inputs["mu"]
+    # asound = inputs["asound"]
+    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
+    setfield!.(self.inflows, :Vx, inputs["Vx"])
+    setfield!.(self.inflows, :Vy, inputs["Vy"])
+    setfield!.(self.inflows, :rho, inputs["rho"])
+    setfield!.(self.inflows, :mu, inputs["mu"])
+    setfield!.(self.inflows, :asound, inputs["asound"])
 
     # When called this way, CCBlade.solve will return a 2D array of `Outputs`
     # objects.
-    out = CCBlade.solve.(rotor, sections, inflows)
+    out = CCBlade.solve.(self.rotor, self.sections, self.inflows)
 
     # Set the outputs.
     @. outputs["phi"] = getfield(out, :phi)

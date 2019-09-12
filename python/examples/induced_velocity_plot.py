@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from openmdao.api import (IndepVarComp, Problem, Group, BalanceComp,
                           DirectSolver, NewtonSolver, BoundsEnforceLS)
 from ccblade.geometry import GeometryGroup
+from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_jl import CCBladeGroup
 
 
@@ -58,11 +59,12 @@ def main():
     # Find the thrust per rotor from the vehicle's mass.
     m_full = 6367  # kg
     g = 9.81  # m/s**2
-    thrust_vtol = m_full*g/n_props
+    thrust_vtol = 0.1*m_full*g/n_props
 
     prob = Problem()
 
     comp = IndepVarComp()
+    comp.add_discrete_output('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -88,14 +90,20 @@ def main():
 
     balance_group = Group()
 
+    comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
+    balance_group.add_subsystem(
+        'inflow_comp', comp,
+        promotes_inputs=['v', 'omega', 'radii', 'precone'],
+        promotes_outputs=['Vx', 'Vy'])
+
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
                         num_blades=num_blades, af_filename=af_filename,
                         turbine=False)
     balance_group.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
-                         'asound', 'v', 'precone', 'omega', 'hub_diameter',
-                         'prop_diameter'],
+        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+                         'asound', 'v', 'precone', 'omega', 'Vx', 'Vy',
+                         'precone', 'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
     comp = BalanceComp()
@@ -103,22 +111,19 @@ def main():
         name='omega',
         eq_units='N', lhs_name='thrust', rhs_name='thrust_vtol',
         val=omega, units='rad/s',
-        lower=0.)
+        # lower=0.,
+    )
     balance_group.add_subsystem('thrust_balance_comp', comp, promotes=['*'])
 
     balance_group.linear_solver = DirectSolver(assemble_jac=True)
-    # balance_group.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
-    # balance_group.nonlinear_solver.options['solve_subsystems'] = True
-    # balance_group.nonlinear_solver.options['atol'] = 1e-9
+    balance_group.nonlinear_solver = NewtonSolver(maxiter=50, iprint=2)
+    balance_group.nonlinear_solver.options['solve_subsystems'] = True
+    # prob.model.nonlinear_solver.linesearch = BoundsEnforceLS()
+    balance_group.nonlinear_solver.options['atol'] = 1e-9
 
     prob.model.add_subsystem('thrust_balance_group', balance_group,
                              promotes=['*'])
 
-    prob.model.nonlinear_solver = NewtonSolver(maxiter=20, iprint=2)
-    prob.model.nonlinear_solver.options['solve_subsystems'] = True
-    prob.model.nonlinear_solver.options['atol'] = 1e-9
-    prob.model.nonlinear_solver.linesearch = BoundsEnforceLS()
-    prob.model.nonlinear_solver.linesearch.options['iprint'] = 2
     prob.setup()
     prob.final_setup()
 
@@ -152,7 +157,7 @@ def main():
         dArea = 2*np.pi*radii*dradii
 
         # Get the induced velocity at the rotor plane for each blade section.
-        Vx = prob.get_val('ccblade_group.Vx', units='m/s')
+        Vx = prob.get_val('Vx', units='m/s')
         a = prob.get_val('ccblade_group.ccblade_comp.a')
 
         # Get the area-weighted average of the induced velocity.
@@ -169,7 +174,8 @@ def main():
             label='Momentum Theory (climb)')
 
     # Descent:
-    climb_velocity_nondim = np.linspace(-4., -2.5, 10)
+    # climb_velocity_nondim = np.linspace(-3.5, -2.6, 10)
+    climb_velocity_nondim = np.linspace(-5.0, -2.1, 10)
     induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
     for vc, vi in np.nditer(
             [climb_velocity_nondim, induced_velocity_nondim],
@@ -189,52 +195,52 @@ def main():
         dArea = 2*np.pi*radii*dradii
 
         # Get the induced velocity at the rotor plane for each blade section.
-        Vx = prob.get_val('ccblade_group.Vx', units='m/s')
+        Vx = prob.get_val('Vx', units='m/s')
         a = prob.get_val('ccblade_group.ccblade_comp.a')
 
         # Get the area-weighted average of the induced velocity.
         vi[...] = np.sum(a*Vx*dArea/A_rotor)/v_h
 
-    # Induced velocity from plain old momentum theory (for descent).
-    induced_velocity_mt = (
-        -0.5*climb_velocity_nondim - np.sqrt((0.5*climb_velocity_nondim)**2 - 1.))
-
     # Plot the induced velocity for descent.
     ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
             label='CCBlade.jl (descent)')
+
+    # Induced velocity from plain old momentum theory (for descent).
+    induced_velocity_mt = (
+        -0.5*climb_velocity_nondim - np.sqrt((0.5*climb_velocity_nondim)**2 - 1.))
     ax.plot(climb_velocity_nondim, induced_velocity_mt,
             label='Momentum Theory (descent)')
 
-    # # Empirical region:
-    # climb_velocity_nondim = np.linspace(-1.9, -1.5, 5)
-    # induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
-    # for vc, vi in np.nditer(
-    #         [climb_velocity_nondim, induced_velocity_nondim],
-    #         op_flags=[['readonly'], ['writeonly']]):
+    # Empirical region:
+    climb_velocity_nondim = np.linspace(-1.9, -1.5, 5)
+    induced_velocity_nondim = np.zeros_like(climb_velocity_nondim)
+    for vc, vi in np.nditer(
+            [climb_velocity_nondim, induced_velocity_nondim],
+            op_flags=[['readonly'], ['writeonly']]):
 
-    #     # Run the model with the requested climb velocity.
-    #     prob.set_val('v', vc*v_h, units='m/s')
-    #     print(f"vc = {vc}, v = {prob.get_val('v', units='m/s')}")
-    #     prob.run_model()
+        # Run the model with the requested climb velocity.
+        prob.set_val('v', vc*v_h, units='m/s')
+        print(f"vc = {vc}, v = {prob.get_val('v', units='m/s')}")
+        prob.run_model()
 
-    #     # Calculate the area-weighted average induced velocity at the rotor.
-    #     # Need the area of each blade section.
-    #     radii = prob.get_val('radii',
-    #                          units='m')
-    #     dradii = prob.get_val('dradii',
-    #                           units='m')
-    #     dArea = 2*np.pi*radii*dradii
+        # Calculate the area-weighted average induced velocity at the rotor.
+        # Need the area of each blade section.
+        radii = prob.get_val('radii',
+                             units='m')
+        dradii = prob.get_val('dradii',
+                              units='m')
+        dArea = 2*np.pi*radii*dradii
 
-    #     # Get the induced velocity at the rotor plane for each blade section.
-    #     Vx = prob.get_val('ccblade_group.Vx', units='m/s')
-    #     a = prob.get_val('ccblade_group.ccblade_comp.a')
+        # Get the induced velocity at the rotor plane for each blade section.
+        Vx = prob.get_val('Vx', units='m/s')
+        a = prob.get_val('ccblade_group.ccblade_comp.a')
 
-    #     # Get the area-weighted average of the induced velocity.
-    #     vi[...] = np.sum(a*Vx*dArea/A_rotor)/v_h
+        # Get the area-weighted average of the induced velocity.
+        vi[...] = np.sum(a*Vx*dArea/A_rotor)/v_h
 
-    # # Plot the induced velocity for the empirical region.
-    # ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
-    #         label='CCBlade.jl (empirical region)')
+    # Plot the induced velocity for the empirical region.
+    ax.plot(climb_velocity_nondim, -induced_velocity_nondim,
+            label='CCBlade.jl (empirical region)')
 
     ax.set_xlabel('Vc/vh')
     ax.set_ylabel('Vi/vh')

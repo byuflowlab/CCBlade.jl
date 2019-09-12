@@ -44,7 +44,7 @@ Define section properties at a given radial location on the rotor
 - `theta::Float64`: twist angle (radians)
 - `af`: a function of the form: cl, cd = af(alpha, Re, Mach)
 """
-struct Section{TF, TAF}
+mutable struct Section{TF, TAF}
 
     r::TF
     chord::TF
@@ -65,7 +65,7 @@ Define geometry common to the entire rotor.
 - `turbine::Bool`: true if turbine, false if propeller
 - `precone::Float64`: precone angle
 """
-struct Rotor{TF, TI, TB}
+mutable struct Rotor{TF, TI, TB}
     
     Rhub::TF
     Rtip::TF
@@ -94,7 +94,7 @@ Operation point for a rotor.  The x direction is the axial direction, and y dire
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct Inflow{TF}
+mutable struct Inflow{TF}
     Vx::TF
     Vy::TF
     rho::TF
