@@ -63,10 +63,8 @@ class OpenBEMTTestCase(unittest.TestCase):
         comp.add_output('incidence', val=0., shape=num_nodes, units='rad')
         comp.add_output('precone', val=0., units='deg')
         comp.add_output('omega', val=omega, shape=num_nodes, units='rad/s')
-        comp.add_output('hub_diameter', val=hub_diameter, shape=num_nodes,
-                        units='cm')
-        comp.add_output('prop_diameter', val=prop_diameter, shape=num_nodes,
-                        units='cm')
+        comp.add_output('hub_diameter', val=hub_diameter, units='cm')
+        comp.add_output('prop_diameter', val=prop_diameter, units='cm')
         comp.add_output('pitch', val=pitch, shape=num_nodes, units='rad')
         comp.add_output('chord_dv', val=chord, shape=num_cp, units='cm')
         comp.add_output('theta_dv', val=theta, shape=num_cp, units='rad')
@@ -177,10 +175,8 @@ class OpenBEMTTestCase(unittest.TestCase):
         comp.add_output('incidence', val=0., shape=num_nodes, units='rad')
         comp.add_output('precone', val=0., units='deg')
         comp.add_output('omega', val=omega, shape=num_nodes, units='rad/s')
-        comp.add_output('hub_diameter', val=hub_diameter, shape=num_nodes,
-                        units='cm')
-        comp.add_output('prop_diameter', val=prop_diameter, shape=num_nodes,
-                        units='cm')
+        comp.add_output('hub_diameter', val=hub_diameter, units='cm')
+        comp.add_output('prop_diameter', val=prop_diameter, units='cm')
         comp.add_output('pitch', val=pitch, shape=num_nodes, units='rad')
         comp.add_output('chord_dv', val=chord, shape=num_cp, units='cm')
         comp.add_output('theta_dv', val=theta, shape=num_cp, units='rad')
