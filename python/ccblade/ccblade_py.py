@@ -52,9 +52,9 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         self.add_input('rho', shape=(num_nodes, 1), units='kg/m**3')
         self.add_input('mu', shape=(num_nodes, 1), units='N/m**2*s')
         self.add_input('asound', shape=(num_nodes, 1), units='m/s')
-        self.add_input('hub_radius', shape=(1, 1), units='m')
-        self.add_input('prop_radius', shape=(1, 1), units='m')
-        self.add_input('precone', shape=(1, 1), units='rad')
+        self.add_input('hub_radius', shape=(num_nodes, 1), units='m')
+        self.add_input('prop_radius', shape=(num_nodes, 1), units='m')
+        self.add_input('precone', shape=(num_nodes, 1), units='rad')
 
         self.add_output('phi', shape=(num_nodes, num_radial), units='rad')
         self.add_output('Np', shape=(num_nodes, num_radial), units='N/m')
@@ -559,15 +559,15 @@ class CCBladeGroup(om.Group):
         turbine = self.options['turbine']
         solve_nonlinear = self.options['phi_residual_solve_nonlinear']
 
-        comp = om.ExecComp('hub_radius = 0.5*hub_diameter',
-                           hub_radius={'value': 0.1, 'units': 'm'},
-                           hub_diameter={'units': 'm'})
-        self.add_subsystem('hub_radius_comp', comp, promotes=['*'])
-
-        comp = om.ExecComp('prop_radius = 0.5*prop_diameter',
-                           prop_radius={'value': 1.0, 'units': 'm'},
-                           prop_diameter={'units': 'm'})
-        self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
+        comp = om.ExecComp(
+            ['hub_radius = 0.5*hub_diameter',
+             'prop_radius = 0.5*prop_diameter'],
+            shape=num_nodes, has_diag_partials=True,
+            hub_radius={'units': 'm'},
+            hub_diameter={'units': 'm'},
+            prop_radius={'units': 'm'},
+            prop_diameter={'units': 'm'})
+        self.add_subsystem('hub_prop_radius_comp', comp, promotes=['*'])
 
         comp = LocalInflowAngleComp(
             num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,

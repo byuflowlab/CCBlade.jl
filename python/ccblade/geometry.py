@@ -163,7 +163,7 @@ class GeometryGroup(Group):
                                             ('pitch_cp', 'pitch')],
                            promotes_outputs=['theta_cp'])
 
-        comp = AkimaSplineComp(vec_size=1, num_control_points=num_cp,
+        comp = AkimaSplineComp(vec_size=num_nodes, num_control_points=num_cp,
                                num_points=num_radial, name='chord', units='cm',
                                eval_at='cell_center')
 

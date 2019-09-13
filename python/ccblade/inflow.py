@@ -15,7 +15,7 @@ class SimpleInflow(om.ExplicitComponent):
         self.add_input('v', shape=num_nodes, units='m/s')
         self.add_input('omega', shape=num_nodes, units='rad/s')
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
-        self.add_input('precone', units='rad')
+        self.add_input('precone', shape=num_nodes, units='rad')
 
         self.add_output('Vx', shape=(num_nodes, num_radial), units='m/s')
         self.add_output('Vy', shape=(num_nodes, num_radial), units='m/s')
@@ -29,16 +29,16 @@ class SimpleInflow(om.ExplicitComponent):
                               show_summary=True, show_sparsity=False)
 
     def compute(self, inputs, outputs):
-        v = inputs['v']
-        omega = inputs['omega']
+        v = inputs['v'][:, np.newaxis]
+        omega = inputs['omega'][:, np.newaxis]
         radii = inputs['radii']
-        precone = inputs['precone']
+        precone = inputs['precone'][:, np.newaxis]
 
         Vx = outputs['Vx']
         Vy = outputs['Vy']
 
-        Vx[:, :] = v[:, np.newaxis] * np.cos(precone)
-        Vy[:, :] = omega[:, np.newaxis] * radii * np.cos(precone)
+        Vx[:, :] = v * np.cos(precone)
+        Vy[:, :] = omega * radii * np.cos(precone)
 
 
 class WindTurbineInflow(om.ExplicitComponent):
@@ -54,16 +54,17 @@ class WindTurbineInflow(om.ExplicitComponent):
         self.add_input('vhub', shape=num_nodes, units='m/s')
         self.add_input('omega', shape=num_nodes, units='rad/s')
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
-        self.add_input('precone', units='rad')
+        self.add_input('precone', shape=num_nodes, units='rad')
 
-        # Should yaw, tilt, shear_exp have length num_nodes?
-        self.add_input('yaw', units='rad')
-        self.add_input('tilt', units='rad')
-        self.add_input('shear_exp', units=None)
+        # Should yaw, tilt, shear_exp have length num_nodes? Let's say yes.
+        self.add_input('yaw', shape=num_nodes, units='rad')
+        self.add_input('tilt', shape=num_nodes, units='rad')
+        self.add_input('shear_exp', shape=num_nodes, units=None)
 
-        # Might need an additional array dimension for the azimuthal angle.
-        self.add_input('azimuth', units='rad')
-        self.add_input('hub_height', units='m')
+        # Might need an additional array dimension for the azimuthal angle some
+        # day.
+        self.add_input('azimuth', shape=num_nodes, units='rad')
+        self.add_input('hub_height', shape=num_nodes, units='m')
 
         self.add_output('Vx', shape=(num_nodes, num_radial), units='m/s')
         self.add_output('Vy', shape=(num_nodes, num_radial), units='m/s')
@@ -77,15 +78,15 @@ class WindTurbineInflow(om.ExplicitComponent):
                               show_summary=True, show_sparsity=False)
 
     def compute(self, inputs, outputs):
-        vhub = inputs['vhub']
-        omega = inputs['omega']
+        vhub = inputs['vhub'][:, np.newaxis]
+        omega = inputs['omega'][:, np.newaxis]
         radii = inputs['radii']
-        precone = inputs['precone']
-        yaw = inputs['yaw']
-        tilt = inputs['tilt']
-        azimuth = inputs['azimuth']
-        hub_height = inputs['hub_height']
-        shear_exp = inputs['shear_exp']
+        precone = inputs['precone'][:, np.newaxis]
+        yaw = inputs['yaw'][:, np.newaxis]
+        tilt = inputs['tilt'][:, np.newaxis]
+        azimuth = inputs['azimuth'][:, np.newaxis]
+        hub_height = inputs['hub_height'][:, np.newaxis]
+        shear_exp = inputs['shear_exp'][:, np.newaxis]
 
         Vx = outputs['Vx']
         Vy = outputs['Vy']
@@ -108,15 +109,15 @@ class WindTurbineInflow(om.ExplicitComponent):
         height_from_hub = (y_az*sa + z_az*ca)*ct - x_az*st  # (num_nodes, num_radii)
 
         # velocity with shear
-        V = vhub[:, np.newaxis]*(1 + height_from_hub/hub_height)**shear_exp  # (num_nodes, num_radial)
+        V = vhub*(1 + height_from_hub/hub_height)**shear_exp  # (num_nodes, num_radial)
 
         # transform wind to blade c.s.
         Vwind_x = V * ((cy*st*ca + sy*sa)*sc + cy*ct*cc)  # (num_nodes, num_radial)
         Vwind_y = V * (cy*st*sa - sy*ca)  # (num_nodes, num_radial)
 
         # wind from rotation to blade c.s.
-        Vrot_x = -omega[:, np.newaxis]*y_az*sc  # (num_nodes, 1)
-        Vrot_y = omega[:, np.newaxis]*z_az  # (num_nodes, num_radial)
+        Vrot_x = -omega*y_az*sc  # (num_nodes, 1)
+        Vrot_y = omega*z_az  # (num_nodes, num_radial)
 
         # total velocity
         Vx[:, :] = Vwind_x + Vrot_x
