@@ -43,7 +43,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 raise ValueError(msg)
             self._af = af
 
-        self.add_discrete_input('B', val=3)
+        self.add_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('chord', shape=(num_nodes, num_radial), units='m')
         self.add_input('theta', shape=(num_nodes, num_radial), units='rad')
@@ -75,16 +75,16 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                               num_full_jacs=2, tol=1e-20, orders=20,
                               show_summary=True, show_sparsity=False)
 
-    def apply_nonlinear(self, inputs, outputs, residuals,
-                        discrete_inputs, discrete_outputs):
+    def apply_nonlinear(self, inputs, outputs, residuals):
 
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
         turbine = self.options['turbine']
-        B = discrete_inputs['B']
+        # B = discrete_inputs['B']
         # af = self.options['airfoil_interp']
         af = self._af
 
+        B = inputs['B']
         r = inputs['radii']
         chord = inputs['chord']
         Vy = inputs['Vy']
@@ -224,45 +224,40 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         residuals['cd'] = cd - outputs['cd']
         residuals['F'] = F - outputs['F']
 
-    def solve_nonlinear(self, inputs, outputs,
-                        discrete_inputs, discrete_outputs):
+    def solve_nonlinear(self, inputs, outputs):
         method = self.options['solve_nonlinear']
         if method == 'bracketing':
             self._solve_nonlinear_bracketing(
-                inputs, outputs, discrete_inputs, discrete_outputs)
+                inputs, outputs)
         elif method == 'brent':
             self._solve_nonlinear_brent(
-                inputs, outputs, discrete_inputs, discrete_outputs)
+                inputs, outputs)
         else:
             msg = f"unknown CCBlade solve_nonlinear method {method}"
             raise ValueError(msg)
 
-    def _solve_nonlinear_bracketing(self, inputs, outputs, discrete_inputs,
-                                    discrete_outputs):
+    def _solve_nonlinear_bracketing(self, inputs, outputs):
 
         SOLVE_TOL = 1e-10
         DEBUG_PRINT = self.options['debug_print']
         residuals = self._residuals
 
-        self.apply_nonlinear(inputs, outputs, residuals,
-                             discrete_inputs, discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals)
 
         bracket_found, phi_1, phi_2 = self._first_bracket(
-            inputs, outputs, residuals, discrete_inputs, discrete_outputs)
+            inputs, outputs, residuals)
         if not np.all(bracket_found):
             raise om.AnalysisError("CCBlade bracketing failed")
 
         # Initialize the residuals.
         res_1 = np.zeros_like(phi_1)
         outputs['phi'][:, :] = phi_1
-        self.apply_nonlinear(inputs, outputs, residuals,
-                             discrete_inputs, discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals)
         res_1[:, :] = residuals['phi']
 
         res_2 = np.zeros_like(phi_1)
         outputs['phi'][:, :] = phi_2
-        self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
-                             discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals)
         res_2[:, :] = residuals['phi']
 
         # now initialize the phi_1 and phi_2 vectors so they represent the correct brackets
@@ -274,8 +269,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         success = np.all(np.abs(phi_1 - phi_2) < SOLVE_TOL)
         while steps_taken < 50 and not success:
             outputs['phi'][:] = 0.5 * (phi_1 + phi_2)
-            self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
-                                 discrete_outputs)
+            self.apply_nonlinear(inputs, outputs, residuals)
             new_res = residuals['phi']
 
             mask_1 = new_res < 0
@@ -302,29 +296,25 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 outputs[name] += residuals[name]
 
         # Fix up the other residuals.
-        self.apply_nonlinear(inputs, outputs, residuals,
-                             discrete_inputs, discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals)
         if not success:
             raise om.AnalysisError(
                 "CCBlade _solve_nonlinear_bracketing failed")
 
-    def _solve_nonlinear_brent(self, inputs, outputs, discrete_inputs,
-                               discrete_outputs):
+    def _solve_nonlinear_brent(self, inputs, outputs):
         SOLVE_TOL = 1e-10
         DEBUG_PRINT = self.options['debug_print']
 
         # Find brackets for the phi residual
         bracket_found, phi_1, phi_2 = self._first_bracket(
-            inputs, outputs, self._residuals,
-            discrete_inputs, discrete_outputs)
+            inputs, outputs, self._residuals)
         if not np.all(bracket_found):
             raise om.AnalysisError("CCBlade bracketing failed")
 
         # Create a wrapper function compatible with the brentv function.
         def f(x):
             outputs['phi'][:, :] = x
-            self.apply_nonlinear(inputs, outputs, self._residuals,
-                                 discrete_inputs, discrete_outputs)
+            self.apply_nonlinear(inputs, outputs, self._residuals)
             return np.copy(self._residuals['phi'])
 
         # Find the root.
@@ -337,8 +327,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 outputs[name] += self._residuals[name]
 
         # Fix up the other residuals.
-        self.apply_nonlinear(inputs, outputs, self._residuals,
-                             discrete_inputs, discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, self._residuals)
 
         if DEBUG_PRINT:
             res_norm = np.linalg.norm(self._residuals['phi'])
@@ -348,8 +337,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
             raise om.AnalysisError(
                 "CCBlade _solve_nonlinear_brent failed")
 
-    def _first_bracket(self, inputs, outputs, residuals, discrete_inputs,
-                       discrete_outputs):
+    def _first_bracket(self, inputs, outputs, residuals):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
         turbine = self.options['turbine']
@@ -437,8 +425,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
                     # find bracket
                     found, p1, p2 = self._first_bracket_search(
-                        inputs, outputs, residuals,
-                        discrete_inputs, discrete_outputs, i, j,
+                        inputs, outputs, residuals, i, j,
                         phimin, phimax, npts, backwardsearch)
                     success[i, j], phi_1[i, j], phi_2[i, j] = found, p1, p2
 
@@ -449,7 +436,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         return success, phi_1, phi_2
 
     def _first_bracket_search(self, inputs, outputs, residuals,
-                              discrete_inputs, discrete_outputs, i, j,
+                              i, j,
                               xmin, xmax, n, backwardsearch):
 
         xvec = np.linspace(xmin, xmax, n)
@@ -458,14 +445,12 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
         # fprev = f(xvec[1])
         outputs['phi'][i, j] = xvec[0]
-        self.apply_nonlinear(inputs, outputs, residuals, discrete_inputs,
-                             discrete_outputs)
+        self.apply_nonlinear(inputs, outputs, residuals)
         fprev = residuals['phi'][i, j]
         for k in range(1, n):
             # fnext = f(xvec[i])
             outputs['phi'][i, j] = xvec[k]
-            self.apply_nonlinear(inputs, outputs, residuals,
-                                 discrete_inputs, discrete_outputs)
+            self.apply_nonlinear(inputs, outputs, residuals)
             fnext = residuals['phi'][i, j]
             if fprev*fnext < 0:  # bracket found
                 if backwardsearch:
@@ -487,7 +472,7 @@ class FunctionalsComp(om.ExplicitComponent):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
-        self.add_discrete_input('B', val=3)
+        self.add_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('dradii', shape=(num_nodes, num_radial), units='m')
         self.add_input('Np',
@@ -525,8 +510,8 @@ class FunctionalsComp(om.ExplicitComponent):
                               num_full_jacs=2, tol=1e-20, orders=20,
                               show_summary=True, show_sparsity=False)
 
-    def compute(self, inputs, outputs, discrete_inputs, discrete_outputs):
-        B = discrete_inputs['B']
+    def compute(self, inputs, outputs):
+        B = inputs['B']
         radii = inputs['radii']
         dradii = inputs['dradii']
         Np = inputs['Np']
