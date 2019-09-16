@@ -20,6 +20,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
+        self.options.declare('num_blades', types=int)
         self.options.declare('airfoil_interp')
         self.options.declare('turbine', types=bool)
         self.options.declare('debug_print', types=bool, default=False)
@@ -43,7 +44,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 raise ValueError(msg)
             self._af = af
 
-        self.add_input('B', val=3)
+        # self.add_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('chord', shape=(num_nodes, num_radial), units='m')
         self.add_input('theta', shape=(num_nodes, num_radial), units='rad')
@@ -79,12 +80,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
+        B = self.options['num_blades']
         turbine = self.options['turbine']
-        # B = discrete_inputs['B']
-        # af = self.options['airfoil_interp']
         af = self._af
 
-        B = inputs['B']
         r = inputs['radii']
         chord = inputs['chord']
         Vy = inputs['Vy']
@@ -467,12 +466,12 @@ class FunctionalsComp(om.ExplicitComponent):
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
+        self.options.declare('num_blades', types=int)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
-        self.add_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('dradii', shape=(num_nodes, num_radial), units='m')
         self.add_input('Np',
@@ -511,7 +510,7 @@ class FunctionalsComp(om.ExplicitComponent):
                               show_summary=True, show_sparsity=False)
 
     def compute(self, inputs, outputs):
-        B = inputs['B']
+        B = self.options['num_blades']
         radii = inputs['radii']
         dradii = inputs['dradii']
         Np = inputs['Np']
@@ -531,6 +530,7 @@ class CCBladeGroup(om.Group):
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
+        self.options.declare('num_blades', types=int)
         self.options.declare('airfoil_interp')
         self.options.declare('turbine', types=bool)
         self.options.declare(
@@ -540,6 +540,7 @@ class CCBladeGroup(om.Group):
     def setup(self):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
+        num_blades = self.options['num_blades']
         airfoil_interp = self.options['airfoil_interp']
         turbine = self.options['turbine']
         solve_nonlinear = self.options['phi_residual_solve_nonlinear']
@@ -555,21 +556,23 @@ class CCBladeGroup(om.Group):
         self.add_subsystem('hub_prop_radius_comp', comp, promotes=['*'])
 
         comp = LocalInflowAngleComp(
-            num_nodes=num_nodes, num_radial=num_radial, turbine=turbine,
+            num_nodes=num_nodes, num_radial=num_radial, num_blades=num_blades,
+            turbine=turbine,
             airfoil_interp=airfoil_interp, debug_print=False,
             solve_nonlinear=solve_nonlinear)
         comp.linear_solver = om.DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=[
-                               'B', 'radii', 'chord', 'theta', 'Vx', 'Vy',
+                               'radii', 'chord', 'theta', 'Vx', 'Vy',
                                'rho', 'mu', 'asound', 'hub_radius',
                                'prop_radius', 'precone'],
                            promotes_outputs=['Np', 'Tp'])
 
-        comp = FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial)
+        comp = FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial,
+                               num_blades=num_blades)
         self.add_subsystem(
             'ccblade_torquethrust_comp', comp,
-            promotes_inputs=['B', 'radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
+            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
             promotes_outputs=['thrust', 'torque', 'power', 'efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)

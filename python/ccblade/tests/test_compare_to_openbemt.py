@@ -54,7 +54,6 @@ class OpenBEMTTestCase(unittest.TestCase):
         prob = om.Problem()
 
         comp = om.IndepVarComp()
-        comp.add_discrete_input('B', val=num_blades)
         comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
         comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
         comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -95,11 +94,11 @@ class OpenBEMTTestCase(unittest.TestCase):
             promotes_outputs=['Vx', 'Vy'])
 
         comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                            airfoil_interp=ccblade_interp,
-                            turbine=False)
+                            num_blades=num_blades,
+                            airfoil_interp=ccblade_interp, turbine=False)
         prob.model.add_subsystem(
             'ccblade_group', comp,
-            promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
+            promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho',
                              'mu', 'asound', 'Vx', 'Vy', 'v', 'precone',
                              'omega', 'hub_diameter', 'prop_diameter'],
             promotes_outputs=[('Np', 'ccblade_normal_load'),
@@ -110,7 +109,6 @@ class OpenBEMTTestCase(unittest.TestCase):
         prob.run_model()
 
         # Get the normal and circumferential loads.
-        num_blades = prob.get_val('inputs_comp.B')
         dradii = prob.get_val('dradii', units='m')
         ccblade_normal_load = prob.get_val(
             'ccblade_normal_load', units='N/m')*num_blades
@@ -168,7 +166,6 @@ class OpenBEMTTestCase(unittest.TestCase):
         prob_openbemt = om.Problem()
 
         comp = om.IndepVarComp()
-        comp.add_discrete_input('B', val=num_blades)
         comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
         comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
         comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -204,10 +201,11 @@ class OpenBEMTTestCase(unittest.TestCase):
             promotes_outputs=['Vx', 'Vy'])
 
         comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
+                            num_blades=num_blades,
                             airfoil_interp=ccblade_interp, turbine=False)
         prob_ccblade.model.add_subsystem(
             'ccblade_group', comp,
-            promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
+            promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho',
                              'mu', 'asound', 'v', 'omega', 'Vx', 'Vy',
                              'precone', 'hub_diameter', 'prop_diameter'],
             promotes_outputs=['thrust', 'torque', 'efficiency'])
@@ -227,7 +225,6 @@ class OpenBEMTTestCase(unittest.TestCase):
         prob_ccblade.final_setup()
         prob_ccblade.run_driver()
 
-        num_blades = prob_ccblade.get_val('indep_var_comp.B')
         ccblade_normal_load = prob_ccblade.get_val(
             'ccblade_group.Np', units='N/m')*num_blades
         ccblade_circum_load = prob_ccblade.get_val(

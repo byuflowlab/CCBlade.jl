@@ -52,6 +52,7 @@ class SeparateCompTestCase(unittest.TestCase):
 
         comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
                                         num_radial=num_radial,
+                                        num_blades=B,
                                         airfoil_interp=affunc,
                                         turbine=turbine,
                                         debug_print=False)
@@ -60,7 +61,6 @@ class SeparateCompTestCase(unittest.TestCase):
 
         prob.setup()
 
-        prob['ccblade.B'] = B
         prob['ccblade.phi'] = 1.  # initial guess
         prob['ccblade.radii'] = r
         prob['ccblade.chord'] = chord
@@ -134,6 +134,7 @@ class SeparateCompTestCase(unittest.TestCase):
 
         comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
                                         num_radial=num_radial,
+                                        num_blades=3,
                                         airfoil_interp=af,
                                         turbine=turbine,
                                         debug_print=False)
@@ -218,7 +219,6 @@ class SeparateCompTestCase(unittest.TestCase):
         comp.add_output('asound', val=1.0, shape=(num_nodes, 1), units='m/s')
         comp.add_output('hub_radius', val=Rhub_eff, shape=num_nodes, units='m')
         comp.add_output('prop_radius', val=Rtip_eff, shape=num_nodes, units='m')
-        comp.add_discrete_output('B', val=B)
         prob.model.add_subsystem('ivc', comp, promotes_outputs=['*'])
 
         comp = SimpleInflow(num_nodes=num_nodes, num_radial=num_radial)
@@ -229,6 +229,7 @@ class SeparateCompTestCase(unittest.TestCase):
 
         comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
                                         num_radial=num_radial,
+                                        num_blades=B,
                                         airfoil_interp=affunc,
                                         turbine=turbine,
                                         debug_print=False)
@@ -237,13 +238,14 @@ class SeparateCompTestCase(unittest.TestCase):
             'ccblade', comp,
             promotes_inputs=['radii', 'chord', 'theta', 'Vx', 'Vy', 'rho',
                              'mu', 'asound', 'hub_radius', 'prop_radius',
-                             'precone', 'B'],
+                             'precone'],
             promotes_outputs=['Np', 'Tp'])
 
-        comp = ccb.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial)
+        comp = ccb.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial,
+                                   num_blades=B)
         prob.model.add_subsystem(
             'ccblade_torquethrust_comp', comp,
-            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega', 'B'],
+            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
             promotes_outputs=['thrust', 'torque'])
 
         prob.setup()
