@@ -238,7 +238,7 @@ end
 (private) residual function
 modifies outputs if setoutputs=true
 """
-function residual!(phi, rotor, inflow, outputs, idx, setoutputs=false)
+function residual!(phi, rotor, op, outputs, idx, setoutputs=false)
 
     # unpack inputs
     r = rotor.r[idx]
@@ -248,10 +248,10 @@ function residual!(phi, rotor, inflow, outputs, idx, setoutputs=false)
     Rhub = rotor.Rhub
     Rtip = rotor.Rtip
     B = rotor.B
-    Vx = inflow.Vx[idx]
-    Vy = inflow.Vy[idx]
-    pitch = inflow.pitch
-    rho = inflow.rho
+    Vx = op.Vx[idx]
+    Vy = op.Vy[idx]
+    pitch = op.pitch
+    rho = op.rho
     
     # check if turbine or propeller and change input sign if necessary
     setsign = rotor.turbine ? 1 : -1
@@ -269,10 +269,10 @@ function residual!(phi, rotor, inflow, outputs, idx, setoutputs=false)
 
     # Reynolds number
     W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor difference and only affects Reynolds/Mach number
-    Re = rho * W0 * chord / inflow.mu
+    Re = rho * W0 * chord / op.mu
 
     # Mach number
-    Mach = W0/inflow.asound  # also ignoring induction
+    Mach = W0/op.asound  # also ignoring induction
 
     # airfoil cl/cd
     cl, cd = af(alpha, Re, Mach)
@@ -702,6 +702,10 @@ function thrusttorque(rotor::Rotor, outputs::Outputs)
     thrust = Npfull*cos(rotor.precone)
     torque = Tpfull.*rfull*cos(rotor.precone)
 
+    println(rfull)
+    println(thrust)
+    println(trapz(rfull, thrust))
+    println(sum(thrust))
     T = rotor.B * trapz(rfull, thrust)
     Q = rotor.B * trapz(rfull, torque)
 
