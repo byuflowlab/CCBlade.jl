@@ -13,17 +13,19 @@ Some unique features:
 
 module CCBlade
 
-
-
 import Dierckx  # cubic b-spline for airfoil data
 # import Roots  # solve residual equation
+import Parameters: @unpack
 import PyCall
+import Interpolations
+import ForwardDiff
 
 export Rotor, OperatingPoint, Outputs
 export af_from_file, af_from_data
 export simple_op, windturbine_op
 export solve, thrusttorque, nondim
 
+include("openmdao.jl")
 
 
 # --------- structs -------------
@@ -61,6 +63,12 @@ end
 # convenience constructor for no precone
 Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine) = Rotor(r, chord, theta, af, Rhub, Rtip, B, turbine, 0.0)
 
+# constructor for all keyword arguments, all scalars, ignoring extras
+function Rotor(; r::TF, chord::TF, theta::TF, af::TAF, Rhub::TF, Rtip::TF, B::TI, turbine::TB, precone::TF, kwargs...) where {TF, TAF, TI, TB}
+    Rotor(TF[r], TF[chord], TF[theta], TAF[af], Rhub, Rtip, B, turbine, precone)
+end
+
+
 
 """
     OperatingPoint(Vx, Vy, pitch, rho, mu=1.0, asound=1.0)
@@ -89,6 +97,11 @@ end
 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, pitch, rho) = OperatingPoint(Vx, Vy, pitch, rho, 1.0, 1.0) 
+
+# constructor for all keyword arguments, ignoring extras
+function OperatingPoint(; Vx::TF, Vy::TF, pitch::TF, rho::TF, mu::TF, asound::TF, kwargs...)  where {TF}
+    OperatingPoint(TF[Vx], TF[Vy], pitch, rho, mu, asound)
+end
 
 
 """
@@ -143,6 +156,22 @@ function Outputs(etype, nr)
     )
 end
 
+struct ResidualPartials{TF}
+    phi::TF
+    r::TF
+    chord::TF
+    theta::TF
+    Vx::TF
+    Vy::TF
+    rho::TF
+    mu::TF
+    asound::TF
+    Rhub::TF
+    Rtip::TF
+    precone::TF
+end
+    
+
 
 # -------------------------------
 
@@ -169,7 +198,7 @@ alpha3 cl3 cd3\n
 
 Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M are currently ignored.
 """
-function af_from_file(filename)
+function af_from_file(filename; use_interpolations_jl=false)
 
     alpha = Float64[]
     cl = Float64[]
@@ -189,7 +218,7 @@ function af_from_file(filename)
 
     end
 
-    return af_from_data(alpha*pi/180.0, cl, cd)
+    return af_from_data(alpha*pi/180.0, cl, cd; use_interpolations_jl=use_interpolations_jl)
 end
 
 
@@ -207,7 +236,7 @@ for gradient-based optimization.
 
 Returns a function of the form `cl, cd = func(alpha, Re, M)` although Re and M are currently ignored.
 """
-function af_from_data(alpha, cl, cd, spl_k=3)
+function af_from_data(alpha, cl, cd, spl_k=3; use_interpolations_jl=false)
 
     # # TODO: update once smoothing is implemented: https://github.com/JuliaMath/Interpolations.jl/issues/254
     # afcl = CubicSplineInterpolation(alpha, cl)
@@ -219,6 +248,36 @@ function af_from_data(alpha, cl, cd, spl_k=3)
     # 1D interpolations for now.  ignoring Re dependence (which is very minor)
     afcl_1d = Dierckx.Spline1D(alpha, cl; k=k, s=0.1)
     afcd_1d = Dierckx.Spline1D(alpha, cd; k=k, s=0.001)
+
+    if use_interpolations_jl
+
+        # Check if the original alpha is uniformly distributed.
+        dalpha = alpha[2:end] - alpha[1:end-1]
+        tol = 1e-8
+        if all(@. abs(dalpha - dalpha[1]) < tol)
+            # Uniform spacing, so no need to reinterpolate the Dierckx
+            # interpolation onto a uniform grid.
+
+            # println("detected uniform angle of attack sampling.")
+            n_uniform = length(alpha)
+            alpha_uniform = LinRange(minimum(alpha), maximum(alpha), n_uniform)
+            afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl, extrapolation_bc=Interpolations.Periodic())
+            afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd, extrapolation_bc=Interpolations.Periodic())
+
+        else
+            # Evaluate the Dierckx interpolation object on a uniform grid.
+            n_uniform = 2*length(alpha)
+            alpha_uniform = LinRange(minimum(alpha), maximum(alpha), n_uniform)
+            cl_uniform = afcl_1d(alpha_uniform)
+            cd_uniform = afcd_1d(alpha_uniform)
+
+            # Use the uniform data to create a new interpolations objects using
+            # Interpolations.jl.
+            afcl_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cl_uniform, extrapolation_bc=Interpolations.Periodic())
+            afcd_1d = Interpolations.CubicSplineInterpolation(alpha_uniform, cd_uniform, extrapolation_bc=Interpolations.Periodic())
+        end
+
+    end
 
     afeval(alpha, Re, M) = afcl_1d(alpha), afcd_1d(alpha)  # ignore Re, M 
 
@@ -287,6 +346,7 @@ function residual!(phi, rotor, op, outputs, idx, setoutputs=false)
     factorhub = B/2.0*(r - Rhub)/(Rhub*abs(sphi))
     Fhub = 2.0/pi*acos(exp(-factorhub))
     F = Ftip * Fhub
+    # F::typeof(Ftip) = 1.0
 
     # sec parameters
     k = cn*sigma_p/(4.0*F*sphi*sphi)
@@ -403,7 +463,264 @@ function residual!(phi, rotor, op, outputs, idx, setoutputs=false)
 
 end
 
+# function residual(B, af, turbine, inputs::AbstractArray)
+#     phi = inputs[1]
+#     r = inputs[2]
+#     chord = inputs[3]
+#     theta = inputs[4]
+#     Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+#     Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
 
+#     section = Section(r, chord, theta, af)
+#     inflow = Inflow(Vx, Vy, rho, mu, asound)
+#     rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+
+#     R, outputs = residual(phi, section, inflow, rotor)
+
+#     return R
+# end
+
+# function residual_outputs(B, af, turbine, inputs::AbstractArray)
+#     phi = inputs[1]
+#     r = inputs[2]
+#     chord = inputs[3]
+#     theta = inputs[4]
+#     Vx, Vy, rho, mu, asound = inputs[5], inputs[6], inputs[7], inputs[8], inputs[9]
+#     Rhub, Rtip, precone = inputs[10], inputs[11], inputs[12]
+
+#     section = Section(r, chord, theta, af)
+#     inflow = Inflow(Vx, Vy, rho, mu, asound)
+#     rotor = Rotor(Rhub, Rtip, B, turbine, precone)
+
+#     R, outputs = residual(phi, section, inflow, rotor)
+
+#     return [getfield(outputs, i) for i in fieldnames(Outputs)]
+# end
+
+# function residual_partials(phi, section, inflow, rotor)
+#     # unpack inputs
+#     @unpack r, chord, theta, af = section
+#     @unpack Vx, Vy, rho, mu, asound = inflow
+#     @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+#     # Get a version of the residual function that's compatible with ForwardDiff.
+#     function R(inputs)
+#         return residual(B, af, turbine, inputs)
+#     end
+
+#     # Do it.
+#     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+#     return ResidualPartials(ForwardDiff.gradient(R, x)...)
+
+# end
+
+# function output_partials(phi, section, inflow, rotor)
+#     # unpack inputs
+#     @unpack r, chord, theta, af = section
+#     @unpack Vx, Vy, rho, mu, asound = inflow
+#     @unpack Rhub, Rtip, B, turbine, precone = rotor
+
+#     # Get a version of the residual function that's compatible with ForwardDiff.
+#     function R(inputs)
+#         return residual_outputs(B, af, turbine, inputs)
+#     end
+
+#     # Do it.
+#     x = [phi, r, chord, theta, Vx, Vy, rho, mu, asound, Rhub, Rtip, precone]
+#     return ForwardDiff.jacobian(R, x)
+# end
+
+function pack_inputs(phi, rotor, inflow, idx)
+    r = rotor.r[idx]
+    chord = rotor.chord[idx]
+    theta = rotor.theta[idx]
+    Rhub = rotor.Rhub
+    Rtip = rotor.Rtip
+    precone = rotor.precone
+    Vx = inflow.Vx[idx]
+    Vy = inflow.Vy[idx]
+    pitch = inflow.pitch
+    rho = inflow.rho
+    mu = inflow.mu
+    asound = inflow.asound
+    return [phi, r, chord, theta, Rhub, Rtip, precone, Vx, Vy, pitch, rho, mu, asound]
+end
+
+function unpack_inputs(x)
+    i = 1
+    phi = x[i]
+    i += 1
+    r = x[i]
+    i += 1
+    chord = x[i]
+    i += 1
+    theta = x[i]
+    i += 1
+    Rhub = x[i]
+    i += 1
+    Rtip = x[i]
+    i += 1
+    precone = x[i]
+    i += 1
+    Vx = x[i]
+    i += 1
+    Vy = x[i]
+    i += 1
+    pitch = x[i]
+    i += 1
+    rho = x[i]
+    i += 1
+    mu = x[i]
+    i += 1
+    asound = x[i]
+
+    kwargs = Dict(
+        :phi => phi,
+        :r => r,
+        :chord => chord,
+        :theta => theta,
+        :Rhub => Rhub,
+        :Rtip => Rtip,
+        :precone => precone,
+        :Vx => Vx,
+        :Vy => Vy,
+        :pitch => pitch,
+        :rho => rho,
+        :mu => mu,
+        :asound => asound)
+    return kwargs
+end
+
+function pack_outputs(outputs, idx)
+    Np = outputs.Np[idx]
+    Tp = outputs.Tp[idx]
+    a = outputs.a[idx]
+    ap = outputs.ap[idx]
+    u = outputs.u[idx]
+    v = outputs.v[idx]
+    alpha = outputs.alpha[idx]
+    W = outputs.W[idx]
+    cl = outputs.cl[idx]
+    cd = outputs.cd[idx]
+    cn = outputs.cn[idx]
+    ct = outputs.ct[idx]
+    F = outputs.F[idx]
+    G = outputs.G[idx]
+    return [Np, Tp, a, ap, u, v, alpha, W, cl, cd, cn, ct, F, G]
+end
+
+function unpack_jacobian(x::AbstractArray{T, N}) where {T, N}
+    out = Dict{Tuple{Symbol, Symbol}, T}()
+    i = 1
+    Np = unpack_inputs(x[i, :])
+    for (key, val) in Np
+        out[(:Np, key)] = val
+    end
+    i += 1
+    Tp = unpack_inputs(x[i, :])
+    for (key, val) in Tp
+        out[(:Tp, key)] = val
+    end
+    i += 1
+    a = unpack_inputs(x[i, :])
+    for (key, val) in a
+        out[(:a, key)] = val
+    end
+    i += 1
+    ap = unpack_inputs(x[i, :])
+    for (key, val) in ap
+        out[(:ap, key)] = val
+    end
+    i += 1
+    u = unpack_inputs(x[i, :])
+    for (key, val) in u
+        out[(:u, key)] = val
+    end
+    i += 1
+    v = unpack_inputs(x[i, :])
+    for (key, val) in v
+        out[(:v, key)] = val
+    end
+    i += 1
+    alpha = unpack_inputs(x[i, :])
+    for (key, val) in alpha
+        out[(:alpha, key)] = val
+    end
+    i += 1
+    W = unpack_inputs(x[i, :])
+    for (key, val) in W
+        out[(:W, key)] = val
+    end
+    i += 1
+    cl = unpack_inputs(x[i, :])
+    for (key, val) in cl
+        out[(:cl, key)] = val
+    end
+    i += 1
+    cd = unpack_inputs(x[i, :])
+    for (key, val) in cd
+        out[(:cd, key)] = val
+    end
+    i += 1
+    cn = unpack_inputs(x[i, :])
+    for (key, val) in cn
+        out[(:cn, key)] = val
+    end
+    i += 1
+    ct = unpack_inputs(x[i, :])
+    for (key, val) in ct
+        out[(:ct, key)] = val
+    end
+    i += 1
+    F = unpack_inputs(x[i, :])
+    for (key, val) in F
+        out[(:F, key)] = val
+    end
+    i += 1
+    G = unpack_inputs(x[i, :])
+    for (key, val) in G
+        out[(:G, key)] = val
+    end
+    return out
+end
+
+function residual_partials(phi, rotor, inflow, outputs, idx)
+
+    B = rotor.B
+    af = rotor.af[idx]
+    turbine = rotor.turbine
+
+    function R(_x)
+        kwargs = unpack_inputs(_x)
+        _phi = kwargs[:phi]
+        _rotor = Rotor(; B=B, af=af, turbine=turbine, kwargs...)
+        _inflow = OperatingPoint(; kwargs...)
+        _outputs = Outputs(eltype(_x), 1)
+        return residual!(_phi, _rotor, _inflow, _outputs, 1, false)
+    end
+
+    x = pack_inputs(phi, rotor, inflow, idx)
+    return unpack_inputs(ForwardDiff.gradient(R, x))
+end
+
+function output_partials(phi, rotor, inflow, outputs, idx)
+    B = rotor.B
+    af = rotor.af[idx]
+    turbine = rotor.turbine
+
+    function out(_x)
+        kwargs = unpack_inputs(_x)
+        _phi = kwargs[:phi]
+        _rotor = Rotor(; B=B, af=af, turbine=turbine, kwargs...)
+        _inflow = OperatingPoint(; kwargs...)
+        _outputs = Outputs(eltype(_x), 1)
+        _R = residual!(_phi, _rotor, _inflow, _outputs, 1, true)
+        return pack_outputs(_outputs, 1)
+    end
+
+    x = pack_inputs(phi, rotor, inflow, idx)
+    return unpack_jacobian(ForwardDiff.jacobian(out, x))
+end
 
 """
 (private) Find a bracket for the root closest to xmin by subdividing
@@ -528,8 +845,6 @@ function solve(rotor, op)
 
         # ----- solve residual function ------
 
-        
-
         # # wrapper to residual function to accomodate format required by fzero
         R(phi) = residual!(phi, rotor, op, outputs, i)
 
@@ -568,7 +883,7 @@ function solve(rotor, op)
     # it shouldn't get to this point.  if it does it means no solution was found
     # it will return empty outputs
     # alternatively, one could increase npts and try again
-    
+
     return outputs
 end
 
@@ -710,6 +1025,60 @@ function thrusttorque(rotor::Rotor, outputs::Outputs)
     Q = rotor.B * trapz(rfull, torque)
 
     return T, Q
+end
+
+function thrusttorque(B, inputs::AbstractArray)
+
+    num_radial = div(length(inputs)-3, 3)
+
+    r = inputs[1:num_radial]
+    Np = inputs[num_radial+1:2*num_radial]
+    Tp = inputs[2*num_radial+1:3*num_radial]
+
+    Rhub = inputs[3*num_radial+1]
+    Rtip = inputs[3*num_radial+2]
+    precone = inputs[3*num_radial+3]
+
+    # Dummy values for stuff we don't need for the integrated loads. I guess I
+    # could just reuse r, but whatever.
+    array_dummy = similar(r)
+    af_dummy = 0.
+
+    rotor = Rotor(Rhub, Rtip, B, false, precone)
+    sections = Section.(r, array_dummy, array_dummy, af_dummy)
+    outputs = Outputs.(Np, Tp,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy,
+                       array_dummy)
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T, Q]
+    
+end
+
+function thrusttorque_partials(rotor, sections, Np, Tp)
+
+    B = rotor.B
+    function R(inputs)
+        return thrusttorque(B, inputs)
+    end
+
+    num_radial = length(sections)
+    x = zeros(typeof(sections[1].r), 3*num_radial+3)
+    @. x[1:num_radial] = getfield(sections, :r)
+    @. x[num_radial+1:2*num_radial] = Np
+    @. x[2*num_radial+1:3*num_radial] = Tp
+    x[3*num_radial+1] = rotor.Rhub
+    x[3*num_radial+2] = rotor.Rtip
+    x[3*num_radial+3] = rotor.precone
+
+    return ForwardDiff.jacobian(R, x)
 end
 
 
