@@ -47,7 +47,7 @@ def main():
     num_blades = 3
     num_radial = 15
     num_cp = 6
-    af_filename = 'airfoils/mh117.dat'
+    af_filename = 'mh117.dat'
     chord = 10.
     theta = np.linspace(65., 25., num_cp)*np.pi/180.
     pitch = 0.
@@ -61,7 +61,6 @@ def main():
     prob = Problem()
 
     comp = IndepVarComp()
-    comp.add_discrete_input('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')

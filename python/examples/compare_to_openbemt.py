@@ -51,7 +51,7 @@ def main():
     num_blades = 3
     num_radial = 15
     num_cp = 6
-    af_filename = 'airfoils/mh117.dat'
+    af_filename = 'mh117.dat'
     chord = 10.
     theta = np.linspace(65., 25., num_cp)*np.pi/180.
     pitch = 0.
@@ -116,7 +116,7 @@ def main():
                         turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
                          'asound', 'Vx', 'Vy', 'v', 'precone', 'omega',
                          'hub_diameter', 'prop_diameter'],
         promotes_outputs=[('Np', 'ccblade_normal_load'),

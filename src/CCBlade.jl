@@ -79,7 +79,7 @@ end
 Rotor(Rhub, Rtip, B, turbine) = Rotor(Rhub, Rtip, B, turbine, 0.0)
 
 # make rotor broadcastable as a single entity
-Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
+# Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
 
 
 """
@@ -361,9 +361,9 @@ function residual(phi, section, inflow, rotor)
             k = -k
         end
 
-        if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-            return 1.0, Outputs()
-        end
+        # if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+        #     return 1.0, Outputs()
+        # end
 
         if k <= 2.0/3  # momentum region
             a = k/(1 + k)

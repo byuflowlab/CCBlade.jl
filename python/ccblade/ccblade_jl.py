@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import openmdao.api as om
 from omjl.julia_comps import JuliaImplicitComp
@@ -52,17 +53,21 @@ class CCBladeGroup(om.Group):
         af_filename = self.options['af_filename']
         turbine = self.options['turbine']
 
-        comp = om.ExecComp('hub_radius = 0.5*hub_diameter',
-                           hub_radius={'value': 0.1, 'units': 'm'},
-                           hub_diameter={'units': 'm'})
-        self.add_subsystem('hub_radius_comp', comp, promotes=['*'])
+        comp = om.ExecComp(
+            ['hub_radius = 0.5*hub_diameter',
+             'prop_radius = 0.5*prop_diameter'],
+            shape=num_nodes, has_diag_partials=True,
+            hub_radius={'units': 'm'},
+            hub_diameter={'units': 'm'},
+            prop_radius={'units': 'm'},
+            prop_diameter={'units': 'm'})
+        self.add_subsystem('hub_prop_radius_comp', comp, promotes=['*'])
 
-        comp = om.ExecComp('prop_radius = 0.5*prop_diameter',
-                           prop_radius={'value': 1.0, 'units': 'm'},
-                           prop_diameter={'units': 'm'})
-        self.add_subsystem('prop_radius_comp', comp, promotes=['*'])
+        # Stole this from John Hwang's OpenBEMT code.
+        this_dir = os.path.split(__file__)[0]
+        file_path = os.path.join(this_dir, 'airfoils', af_filename)
+        af = CCBlade.af_from_file(file_path, use_interpolations_jl=True)
 
-        af = CCBlade.af_from_file(af_filename, use_interpolations_jl=True)
         julia_comp_data = CCBlade.CCBladeResidualComp(
             num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades,
             turbine=turbine, debug_print=True)
