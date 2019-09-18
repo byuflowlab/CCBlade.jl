@@ -1,6 +1,7 @@
 import numpy as np
 
 import openmdao.api as om
+from ccblade.utils import get_rows_cols
 from ccblade.brentv import brentv
 
 
@@ -467,6 +468,7 @@ class FunctionalsComp(om.ExplicitComponent):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_radial', types=int)
         self.options.declare('num_blades', types=int)
+        self.options.declare('dynamic_coloring', types=bool, default=False)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -486,28 +488,37 @@ class FunctionalsComp(om.ExplicitComponent):
         self.add_output('power', shape=num_nodes, units='W')
         self.add_output('efficiency', shape=num_nodes, val=10.)
 
-        self.declare_partials('thrust', 'dradii')
-        self.declare_partials('torque', 'dradii')
-        self.declare_partials('torque', 'radii')
-        self.declare_partials('thrust', 'Np')
-        self.declare_partials('torque', 'Tp')
+        if self.options['dynamic_coloring']:
+            self.declare_partials('*', '*', method='fd')
+            # turn on dynamic partial coloring
+            self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
+                                  num_full_jacs=2, tol=1e-20, orders=20,
+                                  show_summary=True, show_sparsity=False)
+        else:
+            ss_sizes = {'i': num_nodes, 'j': num_radial}
+            rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss='i', wrt_ss='ij')
 
-        self.declare_partials('power', 'dradii')
-        self.declare_partials('power', 'radii')
-        self.declare_partials('power', 'Np')
-        self.declare_partials('power', 'Tp')
+            self.declare_partials('thrust', 'Np', rows=rows, cols=cols)
+            self.declare_partials('thrust', 'dradii', rows=rows, cols=cols)
 
-        self.declare_partials('efficiency', 'dradii')
-        self.declare_partials('efficiency', 'radii')
-        self.declare_partials('efficiency', 'Tp')
-        self.declare_partials('efficiency', 'Np')
-        self.declare_partials('efficiency', 'omega')
-        self.declare_partials('efficiency', 'v')
+            self.declare_partials('torque', 'Tp', rows=rows, cols=cols)
+            self.declare_partials('torque', 'radii', rows=rows, cols=cols)
+            self.declare_partials('torque', 'dradii', rows=rows, cols=cols)
 
-        # turn on dynamic partial coloring
-        self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
-                              num_full_jacs=2, tol=1e-20, orders=20,
-                              show_summary=True, show_sparsity=False)
+            self.declare_partials('power', 'Tp', rows=rows, cols=cols)
+            self.declare_partials('power', 'radii', rows=rows, cols=cols)
+            self.declare_partials('power', 'dradii', rows=rows, cols=cols)
+
+            self.declare_partials('efficiency', 'Np', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'dradii', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'Tp', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'radii', rows=rows, cols=cols)
+
+            rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss='i', wrt_ss='i')
+            self.declare_partials('power', 'omega', rows=rows, cols=cols)
+
+            self.declare_partials('efficiency', 'v', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'omega', rows=rows, cols=cols)
 
     def compute(self, inputs, outputs):
         B = self.options['num_blades']
@@ -523,6 +534,116 @@ class FunctionalsComp(om.ExplicitComponent):
         outputs['power'][:] = outputs['torque']*inputs['omega']
 
         outputs['efficiency'] = (thrust*v[:, 0])/(torque*omega[:, 0])
+
+    def compute_partials(self, inputs, partials):
+        num_nodes = self.options['num_nodes']
+        num_radial = self.options['num_radial']
+        B = self.options['num_blades']
+        radii = inputs['radii']
+        dradii = inputs['dradii']
+        Np = inputs['Np']
+        Tp = inputs['Tp']
+        v = inputs['v'][:, np.newaxis]
+        omega = inputs['omega'][:, np.newaxis]
+
+        thrust = B*np.sum(Np * dradii, axis=1, keepdims=True)
+        torque = B*np.sum(Tp * radii * dradii, axis=1, keepdims=True)
+
+        dthrust_dNp = partials['thrust', 'Np']
+        dthrust_dNp.shape = (num_nodes, num_radial)
+        dthrust_dNp[:, :] = B * dradii
+        dthrust_dNp.shape = (-1,)
+
+        dthrust_ddradii = partials['thrust', 'dradii']
+        dthrust_ddradii.shape = (num_nodes, num_radial)
+        dthrust_ddradii[:, :] = B * Np
+        dthrust_ddradii.shape = (-1,)
+
+        dtorque_dTp = partials['torque', 'Tp']
+        dtorque_dTp.shape = (num_nodes, num_radial)
+        dtorque_dTp[:, :] = B * radii * dradii
+        dtorque_dTp.shape = (-1,)
+
+        dtorque_dradii = partials['torque', 'radii']
+        dtorque_dradii.shape = (num_nodes, num_radial)
+        dtorque_dradii[:, :] = B * Tp * dradii
+        dtorque_dradii.shape = (-1,)
+
+        dtorque_ddradii = partials['torque', 'dradii']
+        dtorque_ddradii.shape = (num_nodes, num_radial)
+        dtorque_ddradii[:, :] = B * Tp * radii
+        dtorque_ddradii.shape = (-1,)
+
+        dpower_dTp = partials['power', 'Tp']
+        dpower_dTp.shape = (num_nodes, num_radial)
+        dpower_dTp[:, :] = B * radii * dradii * omega
+        dpower_dTp.shape = (-1,)
+
+        dpower_dradii = partials['power', 'radii']
+        dpower_dradii.shape = (num_nodes, num_radial)
+        dpower_dradii[:, :] = B * Tp * dradii * omega
+        dpower_dradii.shape = (-1,)
+
+        dpower_ddradii = partials['power', 'dradii']
+        dpower_ddradii.shape = (num_nodes, num_radial)
+        dpower_ddradii[:, :] = B * Tp * radii * omega
+        dpower_ddradii.shape = (-1,)
+
+        dpower_domega = partials['power', 'omega']
+        dpower_domega.shape = (num_nodes,)
+        dpower_domega[:] = torque[:, 0]
+        dpower_domega.shape = (-1,)
+
+        dthrust_ddradii = partials['thrust', 'dradii']
+        dthrust_ddradii.shape = (num_nodes, num_radial)
+
+        dtorque_ddradii = partials['torque', 'dradii']
+        dtorque_ddradii.shape = (num_nodes, num_radial)
+
+        dtorque_dTp = partials['torque', 'Tp']
+        dtorque_dTp.shape = (num_nodes, num_radial)
+
+        dtorque_dradii = partials['torque', 'radii']
+        dtorque_dradii.shape = (num_nodes, num_radial)
+
+        defficiency_dNp = partials['efficiency', 'Np']
+        defficiency_dNp.shape = (num_nodes, num_radial)
+        defficiency_dNp[:, :] = B * dradii * v / (torque * omega)
+        defficiency_dNp.shape = (-1,)
+
+        # dradii from thrust and torque cancel each other. Haha, no they don't,
+        # dummy.
+        defficiency_ddradii = partials['efficiency', 'dradii']
+        defficiency_ddradii.shape = (num_nodes, num_radial)
+        defficiency_ddradii[:, :] = (
+            ((torque*omega)*(dthrust_ddradii*v) - (thrust*v)*(dtorque_ddradii*omega))/(torque*omega*torque*omega)
+        )
+        defficiency_ddradii.shape = (-1,)
+
+        defficiency_dTp = partials['efficiency', 'Tp']
+        defficiency_dTp.shape = (num_nodes, num_radial)
+        defficiency_dTp[:, :] = -(thrust * v) / (torque * torque * omega) * dtorque_dTp
+        defficiency_dTp.shape = (-1,)
+
+        defficiency_dradii = partials['efficiency', 'radii']
+        defficiency_dradii.shape = (num_nodes, num_radial)
+        defficiency_dradii[:, :] = -(thrust * v) / (torque * torque * omega) * dtorque_dradii
+        defficiency_dradii.shape = (-1,)
+
+        defficiency_dv = partials['efficiency', 'v']
+        defficiency_dv.shape = (num_nodes,)
+        defficiency_dv[:] = (thrust[:, 0])/(torque[:, 0] * omega[:, 0])
+        defficiency_dv[:].shape = (-1,)
+
+        defficicency_domega = partials['efficiency', 'omega']
+        defficicency_domega.shape = (num_nodes,)
+        defficicency_domega[:] = -(thrust[:, 0] * v[:, 0]) / (torque[:, 0] * omega[:, 0] * omega[:, 0])
+        defficicency_domega.shape = (-1,)
+
+        dthrust_ddradii.shape = (-1,)
+        dtorque_ddradii.shape = (-1,)
+        dtorque_dTp.shape = (-1,)
+        dtorque_dradii.shape = (-1,)
 
 
 class CCBladeGroup(om.Group):
@@ -576,3 +697,34 @@ class CCBladeGroup(om.Group):
             promotes_outputs=['thrust', 'torque', 'power', 'efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)
+
+
+if __name__ == "__main__":
+    num_nodes = 2
+    num_blades = 3
+    num_radial = 4
+
+    radii = np.random.random((num_nodes, num_radial))
+    dradii = np.random.random((num_nodes, num_radial))
+    Np = np.random.random((num_nodes, num_radial))
+    Tp = np.random.random((num_nodes, num_radial))
+    omega = np.random.random((num_nodes,))
+    v = np.random.random((num_nodes,))
+
+    p = om.Problem()
+
+    comp = om.IndepVarComp()
+    comp.add_output('radii', val=radii, units='m')
+    comp.add_output('dradii', val=dradii, units='m')
+    comp.add_output('Np', val=Np, units='N/m')
+    comp.add_output('Tp', val=Tp, units='N/m')
+    comp.add_output('omega', val=omega, units='rad/s')
+    comp.add_output('v', val=v, units='m/s')
+    p.model.add_subsystem('inputs_comp', comp, promotes=['*'])
+
+    comp = FunctionalsComp(
+        num_nodes=num_nodes, num_blades=num_blades, num_radial=num_radial)
+    p.model.add_subsystem('functionals_comp', comp, promotes=['*'])
+
+    p.setup()
+    p.check_partials()
