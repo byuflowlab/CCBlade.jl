@@ -583,14 +583,6 @@ class CCBladeGroup(Group):
         comp = CCBladeResidualComp(num_nodes=num_nodes, num_radial=num_radial,
                                    B=num_blades, turbine=turbine,
                                    af_fname=af_filename, debug_print=False)
-        # comp.nonlinear_solver = NewtonSolver()
-        # comp.nonlinear_solver.options['solve_subsystems'] = True
-        # comp.nonlinear_solver.options['iprint'] = 0
-        # comp.nonlinear_solver.options['maxiter'] = 30
-        # comp.nonlinear_solver.options['err_on_non_converge'] = True
-        # comp.nonlinear_solver.options['atol'] = 1e-5
-        # comp.nonlinear_solver.options['rtol'] = 1e-8
-        # comp.nonlinear_solver.linesearch = BoundsEnforceLS()
         comp.linear_solver = DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=['radii', 'chord', 'theta', 'Vx',
