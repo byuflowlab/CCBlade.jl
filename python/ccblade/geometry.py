@@ -1,5 +1,6 @@
 import numpy as np
 from openmdao.api import ExplicitComponent, AkimaSplineComp, Group
+from ccblade.utils import get_rows_cols
 
 
 def tile_sparse_jac(data, rows, cols, nrow, ncol, num_nodes):
@@ -108,9 +109,6 @@ class BEMTMeshComp(ExplicitComponent):
 class BEMTThetaComp(ExplicitComponent):
     """
     Compute the pitched theta control points by subtracting pitch from the unpitched thetas.
-
-    Unpitched thetas are of dim num_cp, and pitch angle is of dim num_nodes, so the pitched
-    theta control points have dim (num_nodes, num_cp).
     """
 
     def initialize(self):
@@ -123,23 +121,33 @@ class BEMTThetaComp(ExplicitComponent):
         num_nodes = self.options['num_nodes']
         num_cp = self.options['num_cp']
 
-        self.add_input('theta_cp_unpitched', shape=num_cp, units='rad')
+        self.add_input('theta_cp_unpitched', shape=(num_nodes, num_cp), units='rad')
         self.add_input('pitch_cp', val=0, shape=num_nodes, units='rad')
 
         self.add_output('theta_cp', shape=(num_nodes, num_cp), units='rad')
 
-        rows = np.arange(num_nodes * num_cp)
-        cols = np.tile(np.arange(num_cp), num_nodes)
-        self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows, cols=cols, val=1.0)
+        # rows = np.arange(num_nodes * num_cp)
+        # cols = np.tile(np.arange(num_cp), num_nodes)
+        # self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows, cols=cols, val=1.0)
 
-        cols = np.repeat(np.arange(num_nodes), num_cp)
-        self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols, val=-1.0)
+        # cols = np.repeat(np.arange(num_nodes), num_cp)
+        # self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols, val=-1.0)
+
+        ss_sizes = {'i': num_nodes, 'j': num_cp}
+        rows, cols = get_rows_cols(ss_sizes, of_ss='ij', wrt_ss='ij')
+        self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows,
+                              cols=cols, val=1.0)
+
+        rows, cols = get_rows_cols(ss_sizes, of_ss='ij', wrt_ss='i')
+        self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols,
+                              val=-1.0)
 
     def compute(self, inputs, outputs):
         theta_u = inputs['theta_cp_unpitched']
         pitch = inputs['pitch_cp']
 
-        outputs['theta_cp'] = np.add.outer(-pitch, theta_u)
+        # outputs['theta_cp'] = np.add.outer(-pitch, theta_u)
+        outputs['theta_cp'] = theta_u - pitch[:, np.newaxis]
 
 
 class GeometryGroup(Group):
