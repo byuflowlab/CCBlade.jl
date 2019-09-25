@@ -12,9 +12,7 @@ def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    # num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    # num_blades = prob.get_val('inputs_comp.B')
-    num_blades = prob.get_val('indep_var_comp.B')
+    num_blades = prob.model.ccblade_group.ccblade_comp.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
@@ -107,11 +105,12 @@ def main():
         promotes_outputs=['Vx', 'Vy'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
+                        num_blades=num_blades,
                         airfoil_interp=ccblade_interp, turbine=False,
                         phi_residual_solve_nonlinear='bracketing')
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho',
                          'mu', 'asound', 'v', 'omega', 'Vx', 'Vy', 'precone',
                          'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])

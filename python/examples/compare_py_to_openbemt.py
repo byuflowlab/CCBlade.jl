@@ -13,8 +13,7 @@ def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    # num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    num_blades = prob.get_val('inputs_comp.B')
+    num_blades = prob.model.ccblade_group.ccblade_comp.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     dradii = prob.get_val('dradii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
@@ -85,7 +84,6 @@ def main():
     prob = Problem()
 
     comp = IndepVarComp()
-    comp.add_discrete_input('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -124,12 +122,13 @@ def main():
         promotes_outputs=['Vx', 'Vy'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
+                        num_blades=num_blades,
                         airfoil_interp=ccblade_interp,
                         turbine=False,
                         phi_residual_solve_nonlinear='bracketing')
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
                          'asound', 'Vx', 'Vy', 'v', 'precone', 'omega',
                          'hub_diameter', 'prop_diameter'],
         promotes_outputs=[('Np', 'ccblade_normal_load'),

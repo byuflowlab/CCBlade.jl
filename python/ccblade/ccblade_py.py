@@ -646,6 +646,31 @@ class FunctionalsComp(om.ExplicitComponent):
         dtorque_dradii.shape = (-1,)
 
 
+class HubPropRadiusComp(om.ExplicitComponent):
+    def initialize(self):
+        self.options.declare('num_nodes', types=int)
+
+    def setup(self):
+        num_nodes = self.options['num_nodes']
+        self.add_input('hub_diameter', shape=num_nodes, units='m')
+        self.add_input('prop_diameter', shape=num_nodes, units='m')
+
+        self.add_output('hub_radius', shape=num_nodes, units='m')
+        self.add_output('prop_radius', shape=num_nodes, units='m')
+
+        self.declare_partials('hub_radius', 'hub_diameter')
+        self.declare_partials('prop_radius', 'prop_diameter')
+
+        # turn on dynamic partial coloring
+        self.declare_coloring(wrt='*', method='cs', perturb_size=1e-5,
+                              num_full_jacs=2, tol=1e-20, orders=20,
+                              show_summary=True, show_sparsity=False)
+
+    def compute(self, inputs, outputs):
+        outputs['hub_radius'][:] = 0.5*inputs['hub_diameter']
+        outputs['prop_radius'][:] = 0.5*inputs['prop_diameter']
+
+
 class CCBladeGroup(om.Group):
 
     def initialize(self):
@@ -666,14 +691,14 @@ class CCBladeGroup(om.Group):
         turbine = self.options['turbine']
         solve_nonlinear = self.options['phi_residual_solve_nonlinear']
 
-        comp = om.ExecComp(
-            ['hub_radius = 0.5*hub_diameter',
-             'prop_radius = 0.5*prop_diameter'],
-            shape=num_nodes, has_diag_partials=True,
-            hub_radius={'units': 'm'},
-            hub_diameter={'units': 'm'},
-            prop_radius={'units': 'm'},
-            prop_diameter={'units': 'm'})
+        # comp = om.ExecComp(
+        #     ['hub_radius = 0.5*hub_diameter',
+        #      'prop_radius = 0.5*prop_diameter'],
+        #     hub_radius={'units': 'm', 'shape': num_nodes},
+        #     hub_diameter={'units': 'm'},
+        #     prop_radius={'units': 'm', 'shape': num_nodes},
+        #     prop_diameter={'units': 'm'})
+        comp = HubPropRadiusComp(num_nodes=num_nodes)
         self.add_subsystem('hub_prop_radius_comp', comp, promotes=['*'])
 
         comp = LocalInflowAngleComp(

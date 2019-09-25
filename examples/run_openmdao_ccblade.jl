@@ -4,7 +4,6 @@ using CCBlade
 using PyPlot
 
 om = pyimport("openmdao.api")
-julia_comps = pyimport("omjl.julia_comps")
 pyccblade = pyimport("ccblade.ccblade_jl")
 pyccblade_py = pyimport("ccblade.ccblade_py")
 pyccblade_geom = pyimport("ccblade.geometry")
@@ -30,7 +29,6 @@ omega = 236.0
 prob = om.Problem()
 
 comp = om.IndepVarComp()
-comp.add_discrete_output("B", val=num_blades)
 comp.add_output("rho", val=rho0, shape=num_nodes, units="kg/m**3")
 comp.add_output("mu", val=1., shape=num_nodes, units="N/m**2*s")
 comp.add_output("asound", val=c0, shape=num_nodes, units="m/s")
@@ -84,7 +82,7 @@ group.add_subsystem("Vy_comp", comp, promotes=["*"])
 
 ccblade_residual_comp_data = CCBlade.CCBladeResidualComp(
     num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false, debug_print=true)
-comp = julia_comps.JuliaImplicitComp(julia_comp_data=ccblade_residual_comp_data)
+comp = make_component(ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)
 group.add_subsystem("ccblade_residual_comp", comp,
@@ -95,9 +93,9 @@ group.add_subsystem("ccblade_residual_comp", comp,
                                      "precone"],
                     promotes_outputs=["Np", "Tp"])
 
-comp = pyccblade_py.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial)
+comp = pyccblade_py.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial, num_blades=num_blades)
 group.add_subsystem("ccblade_torquethrust_comp", comp,
-                    promotes_inputs=["B", "radii", "dradii", "Np", "Tp"],
+                    promotes_inputs=["radii", "dradii", "Np", "Tp"],
                     promotes_outputs=["thrust", "torque"])
 
 comp = om.ExecComp("efficiency = (thrust*v)/(torque*omega)",
