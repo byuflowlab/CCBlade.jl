@@ -3,7 +3,7 @@ using PyCall
 using OpenMDAO
 using LinearAlgebra: norm
 
-struct CCBladeResidualComp
+struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
     num_nodes
     num_radial
     af
@@ -13,23 +13,62 @@ struct CCBladeResidualComp
     rotor
     sections
     inflows
-    inputs
-    outputs
-    partials
+    # inputs
+    # outputs
+    # partials
 end
 
-convert(::Type{CCBladeResidualComp}, po::PyObject) = CCBladeResidualComp(
-    po.num_nodes, po.num_radial, po.af, po.B, po.turbine, po.debug_print,
-    po.rotor, po.sections, po.inflows,
-    po.inputs, po.outputs, po.partials)
+# convert(::Type{CCBladeResidualComp}, po::PyObject) = CCBladeResidualComp(
+#     po.num_nodes, po.num_radial, po.af, po.B, po.turbine, po.debug_print,
+#     po.rotor, po.sections, po.inflows,
+#     po.inputs, po.outputs, po.partials)
 
 function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_print)
+    # Check if the airfoil interpolation passed is a num_radial-length array.
+    try
+        num_af = length(af)
+        if num_af == num_radial
+            af = reshape(af, 1, num_radial)
+        else
+            throw(DomainError("af has length $num_af, but should have length $num_radial"))
+        end
+    catch e
+        if isa(e, MethodError)
+            # af is not an array of stuff, so assume it's just a single
+            # function, and make it have shape (num_nodes, num_radial).
+            af = fill(af, 1, num_radial)
+        else
+            # Some other error happened, so rethrow it.
+            rethrow(e)
+        end
+    end
 
+    rotor = Rotor(0., 1., B, turbine, 0.)
+
+    r = fill(1., 1, num_radial)
+    chord = fill(1., 1, num_radial)
+    theta = fill(1., 1, num_radial)
+    sections = Section.(r, chord, theta, af)
+
+    Vx = fill(1., num_nodes, num_radial)
+    Vy = fill(1., num_nodes, num_radial)
+    rho = fill(1., num_nodes, 1)
+    mu = fill(1., num_nodes, 1)
+    asound = fill(1., num_nodes, 1)
+    inflows = Inflow.(Vx, Vy, rho, mu, asound)
+
+    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, rotor, sections, inflows)
+end
+
+function OpenMDAO.setup(self::CCBladeResidualComp)
     # Putting these two lines at the top level of this file doesn't work:
     # get_rows_cols will be a "Null" PyObject, and then the first call to
     # get_rows_cols will give a nasty segfault.
     pyccblade = pyimport("ccblade.ccblade_jl")
     get_rows_cols = pyccblade.get_rows_cols
+
+    num_nodes = self.num_nodes
+    num_radial = self.num_radial
 
     input_data = [
         VarData("r", [1, num_radial], 1., "m")
@@ -57,7 +96,7 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
         VarData("cd", [num_nodes, num_radial], 1.),
         VarData("F", [num_nodes, num_radial], 1.)]
 
-    partials_data = Array{PartialsData, 1}()
+    partials_data = Vector{PartialsData}()
 
     rows, cols = get_rows_cols(
         of_shape=(num_nodes, num_radial), of_ss="ij",
@@ -100,76 +139,21 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
         push!(partials_data, PartialsData(name, name, rows=rows, cols=cols, val=1.0))
     end
 
-    # Check if the airfoil interpolation passed is a num_radial-length array.
-    try
-        num_af = length(af)
-        if num_af == num_radial
-            af = reshape(af, 1, num_radial)
-        else
-            throw(DomainError("af has length $num_af, but should have length $num_radial"))
-        end
-    catch e
-        if isa(e, MethodError)
-            # af is not an array of stuff, so assume it's just a single
-            # function, and make it have shape (num_nodes, num_radial).
-            af = fill(af, 1, num_radial)
-        else
-            # Some other error happened, so rethrow it.
-            rethrow(e)
-        end
-    end
-
-    rotor = Rotor(0., 1., B, turbine, 0.)
-
-    r = fill(1., 1, num_radial)
-    chord = fill(1., 1, num_radial)
-    theta = fill(1., 1, num_radial)
-    sections = Section.(r, chord, theta, af)
-
-    Vx = fill(1., num_nodes, num_radial)
-    Vy = fill(1., num_nodes, num_radial)
-    rho = fill(1., num_nodes, 1)
-    mu = fill(1., num_nodes, 1)
-    asound = fill(1., num_nodes, 1)
-    inflows = Inflow.(Vx, Vy, rho, mu, asound)
-
-    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, rotor, sections, inflows, input_data, output_data, partials_data)
+    return input_data, output_data, partials_data
 end
 
 function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
-    # Airfoil interpolation object.
-    # af = self.af
-
     # Rotor parameters.
-    # B = self.B
-    # Rhub = inputs["Rhub"][1]
-    # Rtip = inputs["Rtip"][1]
-    # precone = inputs["precone"][1]
-    # turbine = self.turbine
-    # rotor = Rotor(Rhub, Rtip, B, turbine)
     self.rotor.Rhub = inputs["Rhub"][1]
     self.rotor.Rtip = inputs["Rtip"][1]
     self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    # r = inputs["r"]
-    # chord = inputs["chord"]
-    # theta = inputs["theta"]
-    # sections = Section.(r, chord, theta, af)
-    # @. self.sections.r = inputs["r"]
-    # @. self.sections.chord = inputs["chord"]
-    # @. self.sections.theta = inputs["theta"]
     setfield!.(self.sections, :r, inputs["r"])
     setfield!.(self.sections, :chord, inputs["chord"])
     setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    # Vx = inputs["Vx"]
-    # Vy = inputs["Vy"]
-    # rho = inputs["rho"]
-    # mu = inputs["mu"]
-    # asound = inputs["asound"]
-    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
     setfield!.(self.inflows, :Vx, inputs["Vx"])
     setfield!.(self.inflows, :Vy, inputs["Vy"])
     setfield!.(self.inflows, :rho, inputs["rho"])
@@ -200,39 +184,18 @@ end
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
     num_nodes = self.num_nodes
     num_radial = self.num_radial
-    # Airfoil interpolation object.
-    # af = self.af
 
     # Rotor parameters.
-    # Rhub = inputs["Rhub"][1]
-    # Rtip = inputs["Rtip"][1]
-    # precone = inputs["precone"][1]
-    # B = self.B
-    # turbine = self.turbine
-    # rotor = Rotor(Rhub, Rtip, B, turbine)
     self.rotor.Rhub = inputs["Rhub"][1]
     self.rotor.Rtip = inputs["Rtip"][1]
     self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    # r = inputs["r"]
-    # chord = inputs["chord"]
-    # theta = inputs["theta"]
-    # sections = Section.(r, chord, theta, af)
-    # @. self.sections.r = inputs["r"]
-    # @. self.sections.chord = inputs["chord"]
-    # @. self.sections.theta = inputs["theta"]
     setfield!.(self.sections, :r, inputs["r"])
     setfield!.(self.sections, :chord, inputs["chord"])
     setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    # Vx = inputs["Vx"]
-    # Vy = inputs["Vy"]
-    # rho = inputs["rho"]
-    # mu = inputs["mu"]
-    # asound = inputs["asound"]
-    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
     setfield!.(self.inflows, :Vx, inputs["Vx"])
     setfield!.(self.inflows, :Vy, inputs["Vy"])
     setfield!.(self.inflows, :rho, inputs["rho"])
@@ -251,8 +214,8 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     @. deriv = getfield(residual_derivs, :phi)
 
     # Copy the derivatives of the residual wrt each input.
-    for i in self.inputs
-        str = i.name
+    # for i in self.inputs
+    for str in keys(inputs)
         sym = Symbol(str)
         deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
         @. deriv = getfield(residual_derivs, sym)
@@ -262,14 +225,12 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     output_derivs = CCBlade.output_partials.(phis, self.sections, self.inflows, self.rotor)
 
     # Copy the derivatives of the explicit outputs into the partials dict.
-    for o in self.outputs
-        of_str = o.name
+    for of_str in keys(outputs)
         if of_str == "phi"
             continue
         else
             of_sym = Symbol(of_str)
-            for i in self.inputs
-                wrt_str = i.name
+            for wrt_str in keys(inputs)
                 wrt_sym = Symbol(wrt_str)
                 # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
                 deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
@@ -290,39 +251,17 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
-    # Airfoil interpolation object.
-    # af = self.af
-
     # Rotor parameters.
-    # Rhub = inputs["Rhub"][1]
-    # Rtip = inputs["Rtip"][1]
-    # precone = inputs["precone"][1]
-    # B = self.B
-    # turbine = self.turbine
-    # rotor = Rotor(Rhub, Rtip, B, turbine)
     self.rotor.Rhub = inputs["Rhub"][1]
     self.rotor.Rtip = inputs["Rtip"][1]
     self.rotor.precone = inputs["precone"][1]
 
     # Blade section parameters.
-    # r = inputs["r"]
-    # chord = inputs["chord"]
-    # theta = inputs["theta"]
-    # sections = Section.(r, chord, theta, af)
-    # @. self.sections.r = inputs["r"]
-    # @. self.sections.chord = inputs["chord"]
-    # @. self.sections.theta = inputs["theta"]
     setfield!.(self.sections, :r, inputs["r"])
     setfield!.(self.sections, :chord, inputs["chord"])
     setfield!.(self.sections, :theta, inputs["theta"])
 
     # Inflow parameters.
-    # Vx = inputs["Vx"]
-    # Vy = inputs["Vy"]
-    # rho = inputs["rho"]
-    # mu = inputs["mu"]
-    # asound = inputs["asound"]
-    # inflows = Inflow.(Vx, Vy, rho, mu, asound)
     setfield!.(self.inflows, :Vx, inputs["Vx"])
     setfield!.(self.inflows, :Vy, inputs["Vy"])
     setfield!.(self.inflows, :rho, inputs["rho"])

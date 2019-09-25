@@ -4,7 +4,6 @@ using CCBlade
 using PyPlot
 
 om = pyimport("openmdao.api")
-julia_comps = pyimport("omjl.julia_comps")
 pyccblade = pyimport("ccblade.ccblade_jl")
 pyccblade_py = pyimport("ccblade.ccblade_py")
 pyccblade_geom = pyimport("ccblade.geometry")
@@ -84,7 +83,7 @@ group.add_subsystem("Vy_comp", comp, promotes=["*"])
 
 ccblade_residual_comp_data = CCBlade.CCBladeResidualComp(
     num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false, debug_print=true)
-comp = julia_comps.JuliaImplicitComp(julia_comp_data=ccblade_residual_comp_data)
+comp = make_component(ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)
 group.add_subsystem("ccblade_residual_comp", comp,
