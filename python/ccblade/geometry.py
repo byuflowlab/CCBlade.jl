@@ -108,7 +108,7 @@ class BEMTMeshComp(ExplicitComponent):
 
 class BEMTThetaComp(ExplicitComponent):
     """
-    Compute the pitched theta control points by subtracting pitch from the unpitched thetas.
+    Compute the pitched theta control points by adding pitch to the unpitched thetas.
     """
 
     def initialize(self):
@@ -126,13 +126,6 @@ class BEMTThetaComp(ExplicitComponent):
 
         self.add_output('theta_cp', shape=(num_nodes, num_cp), units='rad')
 
-        # rows = np.arange(num_nodes * num_cp)
-        # cols = np.tile(np.arange(num_cp), num_nodes)
-        # self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows, cols=cols, val=1.0)
-
-        # cols = np.repeat(np.arange(num_nodes), num_cp)
-        # self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols, val=-1.0)
-
         ss_sizes = {'i': num_nodes, 'j': num_cp}
         rows, cols = get_rows_cols(ss_sizes, of_ss='ij', wrt_ss='ij')
         self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows,
@@ -140,14 +133,13 @@ class BEMTThetaComp(ExplicitComponent):
 
         rows, cols = get_rows_cols(ss_sizes, of_ss='ij', wrt_ss='i')
         self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols,
-                              val=-1.0)
+                              val=1.0)
 
     def compute(self, inputs, outputs):
         theta_u = inputs['theta_cp_unpitched']
         pitch = inputs['pitch_cp']
 
-        # outputs['theta_cp'] = np.add.outer(-pitch, theta_u)
-        outputs['theta_cp'] = theta_u - pitch[:, np.newaxis]
+        outputs['theta_cp'] = theta_u + pitch[:, np.newaxis]
 
 
 class GeometryGroup(Group):
