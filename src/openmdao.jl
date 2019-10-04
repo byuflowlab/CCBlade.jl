@@ -157,8 +157,10 @@ function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, r
 
     # Get the other outputs.
     for str in keys(outputs)
-        sym = Symbol(str)
-        @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
+        if str != "phi"
+            sym = Symbol(str)
+            @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
+        end
     end
 
     return nothing
