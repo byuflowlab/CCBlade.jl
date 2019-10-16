@@ -141,7 +141,7 @@ struct Outputs{TF}
 end
 
 # constructor for case with no solution found
-Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.1, 0.1, -5.0*pi/180.0, 0.0, 0.0, 0.0, 0.0)
 
 struct PartialsWrt{TF}
     phi::TF
@@ -308,6 +308,7 @@ function residual(phi, section, inflow, rotor)
 
     # angle of attack
     alpha = phi - theta
+    # @show theta
 
     # Reynolds number
     W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
@@ -344,16 +345,21 @@ function residual(phi, section, inflow, rotor)
     if isapprox(Vx, 0.0, atol=1e-6)
 
         u = sign(phi)*k0*Vy
-        v = 0.0
-        a = 0.0
-        ap = 0.0
+        v = zero(phi)
+        a = zero(phi)
+        ap = zero(phi)
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
         
-        u = 0.0
+        # u = 0.0
+        # v = k0p*abs(Vx)
+        # a = 0.0
+        # ap = 0.0
+
+        u = zero(phi)
         v = k0p*abs(Vx)
-        a = 0.0
-        ap = 0.0
+        a = zero(phi)
+        ap = zero(phi)
     
     else
 
@@ -387,9 +393,9 @@ function residual(phi, section, inflow, rotor)
             kp = -kp
         end
 
-        if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-            return 1.0, Outputs()
-        end
+        # if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+        #     return 1.0, Outputs()
+        # end
 
         ap = kp/(1 - kp)
         v = ap * Vy
@@ -411,6 +417,7 @@ function residual(phi, section, inflow, rotor)
     Tp *= swapsign
     v *= swapsign
 
+    # @show Np, Tp, u, phi
     return R, Outputs(Np, Tp, a, ap, u, v, phi, sqrt(W2), cl, cd, F)  # multiply by F because a and ap as currently used are only correct in combination with the loads.  If you want a wake model then you need to add the hub/tip loss factors separately.
 
 end
@@ -648,13 +655,13 @@ function solve(rotor, section, inflow)
         phistar = Roots.fzero(R, phiL, phiU)
         _, outputs = residual(phistar, section, inflow, rotor)
 
-        return outputs
+        return success, outputs
     else
         # it shouldn't get to this point.  if it does it means no solution was found
         # it will return empty outputs
         # alternatively, one could increase npts and try again
     
-        return Outputs()
+        return false, Outputs()
     end        
 end
 

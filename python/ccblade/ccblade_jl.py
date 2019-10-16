@@ -87,5 +87,3 @@ class CCBladeGroup(om.Group):
             'ccblade_torquethrust_comp', comp,
             promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
             promotes_outputs=['thrust', 'torque', 'power', 'efficiency'])
-
-        # self.linear_solver = om.DirectSolver(assemble_jac=True)

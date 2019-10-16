@@ -48,8 +48,8 @@ def main():
     num_radial = 15
     num_cp = 6
     af_filename = 'mh117.dat'
-    chord = 10.
-    theta = np.linspace(65., 25., num_cp)*np.pi/180.
+    chord = np.tile(10., (num_nodes, num_cp))
+    theta = np.tile(np.linspace(65., 25., num_cp)*np.pi/180., (num_nodes, 1))
     pitch = 0.
 
     hub_diameter = 30.  # cm
@@ -60,20 +60,21 @@ def main():
 
     prob = Problem()
 
+    v = np.linspace(1., 1.5, num_nodes)*77.2
     comp = IndepVarComp()
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
-    comp.add_output('v', val=77.2, shape=num_nodes, units='m/s')
+    comp.add_output('v', val=v, shape=num_nodes, units='m/s')
     comp.add_output('alpha', val=0., shape=num_nodes, units='rad')
     comp.add_output('incidence', val=0., shape=num_nodes, units='rad')
-    comp.add_output('precone', val=0., units='deg')
+    comp.add_output('precone', val=0., shape=num_nodes, units='deg')
     comp.add_output('omega', val=omega, shape=num_nodes, units='rad/s')
     comp.add_output('hub_diameter', val=hub_diameter, shape=num_nodes, units='cm')
     comp.add_output('prop_diameter', val=prop_diameter, shape=num_nodes, units='cm')
     comp.add_output('pitch', val=pitch, shape=num_nodes, units='rad')
-    comp.add_output('chord_dv', val=chord, shape=num_cp, units='cm')
-    comp.add_output('theta_dv', val=theta, shape=num_cp, units='rad')
+    comp.add_output('chord_dv', val=chord, shape=(num_nodes, num_cp), units='cm')
+    comp.add_output('theta_dv', val=theta, shape=(num_nodes, num_cp), units='rad')
     prob.model.add_subsystem('indep_var_comp', comp, promotes=['*'])
 
     comp = GeometryGroup(num_nodes=num_nodes, num_cp=num_cp,
@@ -100,21 +101,22 @@ def main():
                          'precone', 'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
-    prob.model.add_design_var('chord_dv', lower=1., upper=20.,
-                              scaler=5e-2)
-    prob.model.add_design_var('theta_dv',
-                              lower=20.*np.pi/180., upper=90*np.pi/180.)
+    # prob.model.add_design_var('chord_dv', lower=1., upper=20.,
+    #                           scaler=5e-2)
+    # prob.model.add_design_var('theta_dv',
+    #                           lower=20.*np.pi/180., upper=90*np.pi/180.)
 
-    prob.model.add_objective('efficiency', scaler=-1.,)
-    prob.model.add_constraint('thrust', equals=700., scaler=1e-3,
-                              indices=np.arange(num_nodes))
-    prob.driver = pyOptSparseDriver()
-    prob.driver.options['optimizer'] = 'SNOPT'
+    # prob.model.add_objective('efficiency', scaler=-1.,)
+    # prob.model.add_constraint('thrust', equals=700., scaler=1e-3,
+    #                           indices=np.arange(num_nodes))
+    # prob.driver = pyOptSparseDriver()
+    # prob.driver.options['optimizer'] = 'SNOPT'
 
     prob.setup()
     prob.final_setup()
     st = time.time()
-    prob.run_driver()
+    # prob.run_driver()
+    prob.run_model()
     elapsed_time = time.time() - st
 
     make_plots(prob)

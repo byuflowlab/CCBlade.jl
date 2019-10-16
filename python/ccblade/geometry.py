@@ -164,7 +164,7 @@ class GeometryGroup(Group):
                            promotes_outputs=['theta_cp'])
 
         comp = AkimaSplineComp(vec_size=num_nodes, num_control_points=num_cp,
-                               num_points=num_radial, name='chord', units='cm',
+                               num_points=num_radial, name='chord', units='m',
                                eval_at='cell_center')
 
         self.add_subsystem('chord_bspline_comp', comp,

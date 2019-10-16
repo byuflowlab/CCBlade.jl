@@ -40,9 +40,9 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
     precone = fill(0., num_nodes, 1)
     rotors = Rotor.(Rhub, Rtip, B, turbine, precone)
 
-    r = fill(1., 1, num_radial)
-    chord = fill(1., 1, num_radial)
-    theta = fill(1., 1, num_radial)
+    r = fill(1., num_nodes, num_radial)
+    chord = fill(1., num_nodes, num_radial)
+    theta = fill(1., num_nodes, num_radial)
     sections = Section.(r, chord, theta, af)
 
     Vx = fill(1., num_nodes, num_radial)
@@ -190,7 +190,8 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     # Phi, the implicit variable.
     phis = outputs["phi"]
 
-    # Get the derivatives of the residual.
+    # Get the derivatives of the residual. This will have size (num_nodes,
+    # num_radial).
     residual_derivs = CCBlade.residual_partials.(phis, self.sections, self.inflows, self.rotors)
 
     # Copy the derivatives of the residual to the partials dict. First do the
@@ -225,7 +226,7 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
             # phi is an output, not an input, so we'll need to handle that
             # seperately.
             wrt_str = "phi"
-            wrt_sym = :phi
+            wrt_sym = Symbol(wrt_str)
             # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
             deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
             @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
@@ -236,6 +237,9 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
+    num_nodes = self.num_nodes
+    num_radial = self.num_radial
+
     # Rotor parameters.
     setfield!.(self.rotors, :Rhub, inputs["Rhub"])
     setfield!.(self.rotors, :Rtip, inputs["Rtip"])
@@ -254,8 +258,16 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
     setfield!.(self.inflows, :asound, inputs["asound"])
 
     # When called this way, CCBlade.solve will return a 2D array of `Outputs`
-    # objects.
-    out = CCBlade.solve.(self.rotors, self.sections, self.inflows)
+    # objects. Not anymore. Now it will return a 2D array of length-2 tuples.
+    # The first entry in the tuple is a boolean indicating if the solve for phi
+    # was successful, and the second is the Output struct.
+    success_outputs = CCBlade.solve.(self.rotors, self.sections, self.inflows)
+
+    # Get an array of success booleans.
+    success = getindex.(success_outputs, 1)
+
+    # Get an array of Output structs.
+    out = getindex.(success_outputs, 2)
 
     # Set the outputs.
     @. outputs["phi"] = getfield(out, :phi)
