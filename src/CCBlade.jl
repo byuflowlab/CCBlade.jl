@@ -308,7 +308,6 @@ function residual(phi, section, inflow, rotor)
 
     # angle of attack
     alpha = phi - theta
-    # @show theta
 
     # Reynolds number
     W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
