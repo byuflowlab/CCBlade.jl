@@ -50,8 +50,8 @@ struct Rotor{TF, TI, TB}
 end
 
 # convenience constructor for no precone and no pitch
-Rotor(Rhub, Rtip, B, turbine) = Rotor(Rhub, Rtip, B, turbine, 0.0, 0.0)
-Rotor(Rhub, Rtip, B, turbine, pitch) = Rotor(Rhub, Rtip, B, turbine, pitch, 0.0)
+Rotor(Rhub, Rtip, B, turbine) = Rotor(Rhub, Rtip, B, turbine, zero(Rhub), zero(Rhub))
+Rotor(Rhub, Rtip, B, turbine, pitch) = Rotor(Rhub, Rtip, B, turbine, pitch, zero(Rhub))
 
 """
     Section(r, chord, theta, af)
@@ -104,7 +104,7 @@ struct OperatingPoint{TF}
 end
 
 # convenience constructor when Re and Mach are not used.
-OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, 1.0, 1.0) 
+OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, one(rho), one(rho)) 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{OperatingPoint{TF}}, sym::Symbol) where TF
@@ -134,7 +134,7 @@ Outputs from the BEM solver along the radius.
 - `F::Vector{Float64}`: hub/tip loss correction
 - `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
 """
-struct Outputs{TF}
+struct Outputs{TF, TState}
 
     Np::TF
     Tp::TF
@@ -142,7 +142,7 @@ struct Outputs{TF}
     ap::TF
     u::TF
     v::TF
-    phi::TF
+    phi::TState  # Temporary type to facilitate dual numbers when differentiating through solver
     alpha::TF
     W::TF
     cl::TF
@@ -158,7 +158,7 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where {TF}
+function Base.getproperty(obj::Vector{Outputs{TF, TState}}, sym::Symbol) where {TF, TState}
     return getfield.(obj, sym)
 end
 
@@ -750,7 +750,7 @@ Uniform inflow through rotor.  Returns an Inflow object.
 - `asounnd::Float`: air speed of sound (m/s)
 - `precone::Float64`: precone angle (rad)
 """
-function simple_op(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+function simple_op(Vinf, Omega, r, rho, mu=one(rho), asound=one(rho), precone=zero(Vinf))
 
     # error handling
     if typeof(r) <: Vector
@@ -846,7 +846,7 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
 # function thrusttorque(rotor, sections, outputs)
-function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
+function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF, TState}}) where {TF, TState}
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rfull = [rotor.Rhub; sections.r; rotor.Rtip]
@@ -857,8 +857,8 @@ function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
     thrust = Npfull*cos(rotor.precone)
     torque = Tpfull.*rfull*cos(rotor.precone)
 
-    T = rotor.B * trapz(rfull, thrust)
-    Q = rotor.B * trapz(rfull, torque)
+    T = rotor.B * FLOWMath.trapz(rfull, thrust)
+    Q = rotor.B * FLOWMath.trapz(rfull, torque)
 
     return T, Q
 end
@@ -871,7 +871,7 @@ Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
 outputs[i, j] corresponds to sections[i], azimuth[j].  Integrates across azimuth
 """
-function thrusttorque(rotor, sections, outputs::Array{Outputs{TF}, 2}) where TF
+function thrusttorque(rotor, sections, outputs::Array{Outputs{TF, TState}, 2}) where {TF, TState}
 
     T = 0.0
     Q = 0.0
