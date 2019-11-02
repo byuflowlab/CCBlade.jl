@@ -1,4 +1,4 @@
-DU25 airfoil with an aspect ratio of 17.  Original -180 to 180deg Cl, Cd, and Cm versus AOA data taken from Appendix A of DOWEC document 10046_009.pdf (numerical values obtained from Koert Lindenburg of ECN). Cl and Cd values corrected for rotational stall delay and Cd values corrected using the Viterna method for 0 to 90deg AOA by Jason Jonkman using AirfoilPrep_v2p0.xls. Re = 1 million.
+DU25 airfoil with an aspect ratio of 17.  Original -180 to 180deg Cl, Cd, and Cm versus AOA data taken from Appendix A of DOWEC document 10046_009.pdf (numerical values obtained from Koert Lindenburg of ECN). Cl and Cd values corrected for rotational stall delay and Cd values corrected using the Viterna method for 0 to 90deg AOA by Jason Jonkman using AirfoilPrep_v2p0.xls.
 -180.00    0.000   0.0202   0.0000
 -175.00    0.368   0.0324   0.1845
 -170.00    0.735   0.0943   0.3701
@@ -41,7 +41,6 @@ DU25 airfoil with an aspect ratio of 17.  Original -180 to 180deg Cl, Cd, and Cm
  -16.00   -0.905   0.1256   0.0208
  -15.00   -0.932   0.1020   0.0060
  -14.00   -0.959   0.0789  -0.0091
- -13.00   -0.985   0.0567  -0.0243
  -13.00   -0.985   0.0567  -0.0243
  -12.01   -0.953   0.0271  -0.0349
  -11.00   -0.900   0.0303  -0.0361
