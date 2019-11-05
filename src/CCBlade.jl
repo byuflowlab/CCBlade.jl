@@ -95,19 +95,19 @@ Vx and Vy vary radially at same locations as `r` in the rotor definition.
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct OperatingPoint{TF}
+struct OperatingPoint{TF, TF2}
     Vx::TF
     Vy::TF
-    rho::TF
-    mu::TF
-    asound::TF
+    rho::TF2  # different type to accomodate ReverseDiff
+    mu::TF2
+    asound::TF2
 end
 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, one(rho), one(rho)) 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{OperatingPoint{TF}}, sym::Symbol) where TF
+function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) where {TF, TF2}
     return getfield.(obj, sym)
 end
 
@@ -134,7 +134,7 @@ Outputs from the BEM solver along the radius.
 - `F::Vector{Float64}`: hub/tip loss correction
 - `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
 """
-struct Outputs{TF, TState}
+struct Outputs{TF}
 
     Np::TF
     Tp::TF
@@ -142,7 +142,7 @@ struct Outputs{TF, TState}
     ap::TF
     u::TF
     v::TF
-    phi::TState  # Temporary type to facilitate dual numbers when differentiating through solver
+    phi::TF
     alpha::TF
     W::TF
     cl::TF
@@ -158,7 +158,7 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Outputs{TF, TState}}, sym::Symbol) where {TF, TState}
+function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF
     return getfield.(obj, sym)
 end
 
@@ -695,6 +695,10 @@ function solve(rotor, section, op)
         #         backwardsearch = true
         #     end
         # end
+        
+        # force to dual numbers if necessary
+        phimin = phimin*one(section.chord)
+        phimax = phimax*one(section.chord)
 
         # find bracket
         success, phiL, phiU = firstbracket(R, phimin, phimax, npts, backwardsearch)
@@ -846,7 +850,7 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
 # function thrusttorque(rotor, sections, outputs)
-function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF, TState}}) where {TF, TState}
+function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rfull = [rotor.Rhub; sections.r; rotor.Rtip]
@@ -871,7 +875,7 @@ Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
 outputs[i, j] corresponds to sections[i], azimuth[j].  Integrates across azimuth
 """
-function thrusttorque(rotor, sections, outputs::Array{Outputs{TF, TState}, 2}) where {TF, TState}
+function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
 
     T = 0.0
     Q = 0.0
