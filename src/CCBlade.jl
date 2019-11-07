@@ -339,8 +339,8 @@ function afalphaMach(alpha, Re, Mach, cl, cd)
         cd = cd[:, 1, :]
     end
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, Mach_pt)[1], 
-                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, Mach_pt)[1]
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, M_pt)[1], 
+                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, M_pt)[1]
     return afeval
 end
 
@@ -353,8 +353,8 @@ function afalphaReMach(alpha, Re, Mach, cl, cd)
     nRe = length(Re)
     nMach = length(Mach)
     
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, Mach_pt)[1], 
-                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, Mach_pt)[1]
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, M_pt)[1], 
+                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, M_pt)[1]
     return afeval
 end
 
