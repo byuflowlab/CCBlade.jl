@@ -82,7 +82,7 @@ class CCBladeGroup(om.Group):
         # Stole this from John Hwang's OpenBEMT code.
         this_dir = os.path.split(__file__)[0]
         file_path = os.path.join(this_dir, 'airfoils', af_filename)
-        af = CCBlade.af_from_file(file_path, use_interpolations_jl=True)
+        af = CCBlade.af_from_files([file_path])
 
         julia_comp_data = CCBlade.CCBladeResidualComp(
             num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades,

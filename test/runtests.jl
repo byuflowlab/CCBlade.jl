@@ -41,9 +41,8 @@ end
 n = length(r)
 airfoils = fill(affunc, n)
 
-rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip_eff, B, turbine)
-
-# sections = Section.(r, chord, theta, affunc)
+rotor = Rotor(Rhub, Rtip_eff, B, turbine)
+sections = Section.(r, chord, theta, airfoils)
 
 
 # --- inflow definitions ---
@@ -53,11 +52,11 @@ tsr = 8
 Omega = tsr*Vinf/Rtip
 rho = 1.0
 
-op = simple_op(Vinf, Omega, r, rho)
+ops = simple_op.(Vinf, Omega, r, rho)
 
 # --- evaluate ---
 
-out = solve(rotor, op)
+out = solve.(Ref(rotor), sections, ops)
 
 ivec = out.phi*180/pi .- theta*180/pi
 betavec = 90 .- out.phi*180/pi
@@ -138,7 +137,7 @@ B = 2  # number of blades
 # --- section definitions ---
 
 R = D/2.0
-r = collect(range(R/10, stop=R, length=11))
+r = range(R/10, stop=R, length=11)
 theta = atan.(pitch./(2*pi*r))
 
 
@@ -153,11 +152,13 @@ end
 n = length(r)
 airfoils = fill(affunc, n)
 
-chord = chord*ones(n)
-rho = rho
+# chord = chord*ones(n)
+# rho = rho
 
-rotor_no_F = Rotor(r, chord, theta, airfoils, Rhub_eff, Rtip_eff, B, turbine)
-rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip, B, turbine)
+
+rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B, turbine)
+rotor = Rotor(Rhub, Rtip, B, turbine)
+sections = Section.(r, chord, theta, airfoils)
 
 
 # --- inflow definitions ---
@@ -170,12 +171,12 @@ for i = 1:60
   Vinf = float(i)
   Omega = RPM * pi/30 
 
-  op = simple_op(Vinf, Omega, r, rho)
+  ops = simple_op.(Vinf, Omega, r, rho)
 
 
   # --- evaluate ---
 
-  out = solve(rotor_no_F, op)
+  out = solve.(Ref(rotor_no_F), sections, ops)
 
   # Np, Tp = loads(outputs)
 
@@ -193,9 +194,9 @@ end
 Vinf = 20.0
 Omega = RPM * pi/30
 
-op = simple_op(Vinf, Omega, r, rho)
+op = simple_op.(Vinf, Omega, r, rho)
 
-out = solve(rotor_no_F, op)
+out = solve.(Ref(rotor_no_F), sections, op)
 
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B

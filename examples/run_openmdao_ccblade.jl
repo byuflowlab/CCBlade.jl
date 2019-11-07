@@ -13,7 +13,7 @@ num_blades = 3
 num_radial = 15
 
 af_filename = "airfoils/mh117.dat"
-af = af_from_file(af_filename, use_interpolations_jl=true)
+af = af_from_files([af_filename])
 
 num_cp = 6
 chord = 10.0
