@@ -59,10 +59,10 @@ Rotor(Rhub, Rtip, B, turbine, pitch) = Rotor(Rhub, Rtip, B, turbine, pitch, zero
 Define sectional properties for one station along rotor
     
 **Arguments**
-- `r::Float64`: radial location along turbine (Rhub < r < Rtip)
+- `r::Float64`: radial location along turbine (`Rhub < r < Rtip`)
 - `chord::Float64`: corresponding local chord length
 - `theta::Float64`: corresponding twist angle (radians)
-- `af::function`: a function of the form: cl, cd = af(alpha, Re, Mach)
+- `af::function`: a function of the form: `cl, cd = af(alpha, Re, Mach)`
 """
 struct Section{TF, TAF}
     
@@ -132,7 +132,7 @@ Outputs from the BEM solver along the radius.
 - `cn::Vector{Float64}`: normal force coefficient
 - `ct::Vector{Float64}`: tangential force coefficient
 - `F::Vector{Float64}`: hub/tip loss correction
-- `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
+- `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: `u = Vx * a * G, v = Vy * ap * G`
 """
 struct Outputs{TF}
 
@@ -220,16 +220,16 @@ end
 Read airfoil file(s) and return a function of the form `cl, cd = func(alpha, Re, M)`
 
 If filenames is just one file, then Re and Mach are ignored (just aoa variation).
-af_file_files("somefile.dat")
+`af_file_files("somefile.dat")`
 
 If filenames is a vector then there is variation with either Re or Mach (both not both).
-af_file_files(["f1.dat", "f2.dat", "f3.dat"], Mach=[0.5, 0.6, 0.7])
+`af_file_files(["f1.dat", "f2.dat", "f3.dat"], Mach=[0.5, 0.6, 0.7])`
 
 Filenames can be a matrix for variation with both.
-af_file_files(filematrix, Re=[3e6, 5e6], Mach=[0.5, 0.6, 0.7])
-where filematrix[i, j] correspnds to Re[i], Mach[j]
+`af_file_files(filematrix, Re=[3e6, 5e6], Mach=[0.5, 0.6, 0.7])`
+where `filematrix[i, j]` correspnds to `Re[i]`, `Mach[j]`
 
-Uses the af_from_data function.
+Uses the `af_from_data` function.
 """
 function af_from_files(filenames; Re=[], Mach=[])
 
@@ -362,19 +362,19 @@ end
 """
 Create an airfoil function directly from alpha, cl, and cd arrays.
 The function of the form `cl, cd = func(alpha, Re, M)`
-alpha should be in radians.  Uses an akima spline.  af_from_files calls this function.
+alpha should be in radians.  Uses an akima spline.  `af_from_files` calls this function.
 
-cl[i, j, k] corresponds to alpha[i], Re[j], Mach[k]
+`cl[i, j, k]` corresponds to `alpha[i]`, `Re[j]`, `Mach[k]`
 
-If Mach=[]
-cl[i, j] corresponds to alpha[i], Re[j]
-size(cl) = (length(alpha), length(Re))
+If `Mach=[]`
+`cl[i, j]` corresponds to `alpha[i]`, `Re[j]`
+`size(cl) = (length(alpha), length(Re))`
 But you can use a singleton dimension for the constant Mach if desired.
-size(cl) = (length(alpha), length(Re), 1)
-The above also applies for Re=[] where variation is with alpha and Mach.
+`size(cl) = (length(alpha), length(Re), 1)`
+The above also applies for `Re=[]` where variation is with alpha and Mach.
 
 There is also a convenience method for vector data with just aoa variation
-af_from_data(alpha, cl, cd) which just corresponds to af_from_data(alpha, Re=[], Mach=[], cl, cd)
+`af_from_data(alpha, cl, cd)` which just corresponds to `af_from_data(alpha, Re=[], Mach=[], cl, cd)`
 """
 function af_from_data(alpha, Re, Mach, cl, cd)
 
@@ -744,19 +744,18 @@ end
 
 
 """
-    simple_op(Vinf, Omega, r, rho, pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
+    simple_op(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
 
 Uniform inflow through rotor.  Returns an Inflow object.
 
 **Arguments**
 - `Vinf::Float`: freestream speed (m/s)
 - `Omega::Float`: rotation speed (rad/s)
-- `r::Float{Float64, 1}`: radial location where inflow is computed (m)
+- `r::Float`: radial location where inflow is computed (m)
 - `rho::Float`: air density (kg/m^3)
-- `pitch::Float`: pitch (rad)
 - `mu::Float`: air viscosity (Pa * s)
 - `asounnd::Float`: air speed of sound (m/s)
-- `precone::Float64`: precone angle (rad)
+- `precone::Float`: precone angle (rad)
 """
 function simple_op(Vinf, Omega, r, rho, mu=one(rho), asound=one(rho), precone=zero(Vinf))
 
@@ -782,7 +781,6 @@ and orientation of turbine.  See Documentation for angle definitions.
 **Arguments**
 - `Vhub::Float64`: freestream speed at hub (m/s)
 - `Omega::Float64`: rotation speed (rad/s)
-- `pitch::Float64`: pitch angle (rad)
 - `r::Float64`: radial location where inflow is computed (m)
 - `precone::Float64`: precone angle (rad)
 - `yaw::Float64`: yaw angle (rad)
@@ -792,7 +790,7 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `shearExp::Float64`: power law shear exponent
 - `rho::Float64`: air density (kg/m^3)
 - `mu::Float64`: air viscosity (Pa * s)
-- `asounnd::Float64`: air speed of sound (m/s)
+- `asound::Float64`: air speed of sound (m/s)
 """
 function windturbine_op(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
@@ -877,7 +875,7 @@ end
 
 Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
-outputs[i, j] corresponds to sections[i], azimuth[j].  Integrates across azimuth
+`outputs[i, j]` corresponds to `sections[i], azimuth[j]`.  Integrates across azimuth
 """
 function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
 

@@ -13,13 +13,13 @@ using PyPlot
 
 ## Wind Turbine
 
-First, we need to define the geometric parameterization.  
+First, we need to define the geometric parameterization.  This example approximately corresponds to the NREL 5MW reference wind turbine.  There are two structs to define the geometry, the first is for the whole rotor, and the second defines properties that vary along the blade radius.  The first is the rotor:
 
 ```@docs
 Rotor
 ```
 
-Note that ``r`` is the distance along the blade, rather than in the rotor plane.  Rhub/Rtip define the hub and tip radius and are used for hub/tip corrections, for integration of loads, and for nondimensionalization.    The parameter `turbine` just changes the input/output conventions.  If `turbine=true` then the following positive directions for inputs, induced velocities, and loads are used as shown in the figure below.  
+Rhub/Rtip define the hub and tip radius and are used for hub/tip corrections, for integration of loads, and for nondimensionalization.    The parameter `turbine` just changes the input/output conventions.  If `turbine=true` then the following positive directions for inputs, induced velocities, and loads are used as shown in the figure below.  
 
 ![](turbine.png)
 
@@ -27,23 +27,41 @@ The definition for the precone is shown below.  Note that there is a convenience
 
 ![](precone.png)
 
-Let's define the rotor, except the airfoils which require a bit more explanation.  This example corresponds to the NREL 5MW reference wind turbine.
+Let's define these rotor properties:
 
 ```@example wt
 
-# --- rotor definition ---
+Rhub = 1.5
+Rtip = 63.0
+B = 3
+turbine = true
+pitch = 0.0
+precone = 2.5*pi/180
+
+rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+
+nothing # hide
+```
+
+Next we need to define the section properties that vary along the blade radius.  The section object defines a single radial station:
+
+```@docs
+Section
+```
+
+Note that ``r`` is the distance along the blade, rather than in the rotor plane.  
+
+We'll define all these properties now, except for the airfoils as those will take more explanation
+
+```@example wt
+
 r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
     28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
     56.1667, 58.9000, 61.6333]
 chord = [3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249, 4.007, 3.748,
     3.502, 3.256, 3.010, 2.764, 2.518, 2.313, 2.086, 1.419]
-theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795, 
+theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
     6.544, 5.361, 4.188, 3.125, 2.319, 1.526, 0.863, 0.370, 0.106]
-Rhub = 1.5
-Rtip = 63.0
-B = 3  # number of blades
-turbine = true
-precone = 2.5*pi/180
 
 nothing # hide
 ```
@@ -52,10 +70,9 @@ nothing # hide
     You must have Rhub < r < Rtip for all r.  These are strict inequalities (not equal to).
 
 
+The airfoil input is any function of the form: `cl, cd = airfoil(alpha, Re, Mach)` where `cl` and `cd` are the lift and drag coefficient respectively, `alpha` is the angle of attack in radians, `Re` is the Reynolds number, and `Mach` is the Mach number.  Some of the inputs can be ignored if desired (e.g., Mach number).  While users can supply any function, two convenience methods exist for creating these functions.  One takes data from files, the other uses input arrays.  Both convert the data into a smooth spline (currently an Akima spline, or recursive Akima splines in higher dimensions).
 
-The airfoil input is any function of the form: `cl, cd = airfoil(alpha, Re, Mach)` where `cl` and `cd` are the lift and drag coefficient respectively, `alpha` is the angle of attack in radians, `Re` is the Reynolds number, and `Mach` is the Mach number.  Some of the inputs can be ignored if desired (e.g., Mach number).  While users can supply any function, two convenience methods exist for creating these functions.  One takes data from a file, the other uses input arrays.  Both convert the data into a smooth cubic spline, with some smoothing to prevent spurious jumps, as a function of angle of attack (Re and Mach currently ignored).  
-
-The required file format contains one header line that is ignored in parsing.  Its purpose is to allow you to record any information you want about the data in that file (e.g., where it came from, type of corrections applied, Reynolds number, etc.).  The rest of the file contains data in columns split by  whitespace (not commas) in the following order: alpha, cl, cd.  You can add additional columns of data (e.g., cm), but they will be ignored in this module.  Currently, only one Reynolds number is allowed.
+The required file format contains one header line that is ignored in parsing.  Its purpose is to allow you to record any information you want about the data in that file (e.g., where it came from, type of corrections applied, Reynolds number, etc.).  The rest of the file contains data in columns split by  whitespace (not commas) in the following order: alpha, cl, cd.  You can add additional columns of data (e.g., cm), but they will be ignored in this module.  One file corresponds to one Reynolds number and one Mach number.
 
 For example, a simple file (a cylinder section) would look like:
 ```
@@ -65,14 +82,46 @@ Cylinder section with a Cd of 0.50.  Re = 1 million.
 180.0    0.000   0.5000   0.000
 ```
 
-The function call is given by:
+There are three options for constructing from files.  
 
 ```@docs
-af_from_file(filename)
+af_from_files(filenames; Re=[], Mach=[])
 ```
+
+The first is a single file.  In that case the data varies only with with angle of attack.  
+
+```
+afexample = af_from_files("airfoil.dat")
+```
+
+The second case is a list of files that correspond to different Reynolds numbers, or different Mach numbers.  In this case the variation is with angle of attack and either Re or Mach.
+
+```
+afexample = af_from_files(["airfoil_Re1.dat", "airfoil_Re2.dat"], Re=[1e5, 2e5])
+```
+
+or
+
+```
+afexample = af_from_files(["airfoil_M6.dat", "airfoil_M7.dat"], Mach=[0.6, 0.7])
+```
+
+The last case is a matrix of files to allow for simultaneous variation in angle of attack, Reynolds number, and Mach number.
+
+```
+afexample = af_from_files([["af_Re1_M6.dat" "af_Re1_M68.dat" "af_Re1_M7.dat"]; 
+    ["af_Re2_M6.dat" "af_Re2_M68.dat" "af_Re2_M7.dat"]], 
+    Re=[1e5, 2e5], Mach=[0.6, 0.68, 0.7])
+```
+
 Alternatively, if you have the alpha, cl, cd data already in vectors you can initialize directly from the vectors:
 
 ```@docs
+af_from_data(alpha, Re, Mach, cl, cd)
+```
+
+There is also a convenience method for cases with only variation in angle of attack.
+```
 af_from_data(alpha, cl, cd)
 ```
 
@@ -82,14 +131,14 @@ In this example, we will initialize from files since the data arrays would be ra
 # Define airfoils.  In this case we have 8 different airfoils that we load into an array.
 # These airfoils are defined in files.
 aftypes = Array{Any}(undef, 8)
-aftypes[1] = af_from_file("airfoils/Cylinder1.dat")
-aftypes[2] = af_from_file("airfoils/Cylinder2.dat")
-aftypes[3] = af_from_file("airfoils/DU40_A17.dat")
-aftypes[4] = af_from_file("airfoils/DU35_A17.dat")
-aftypes[5] = af_from_file("airfoils/DU30_A17.dat")
-aftypes[6] = af_from_file("airfoils/DU25_A17.dat")
-aftypes[7] = af_from_file("airfoils/DU21_A17.dat")
-aftypes[8] = af_from_file("airfoils/NACA64_A17.dat")
+aftypes[1] = af_from_files("airfoils/Cylinder1.dat")
+aftypes[2] = af_from_files("airfoils/Cylinder2.dat")
+aftypes[3] = af_from_files("airfoils/DU40_A17.dat")
+aftypes[4] = af_from_files("airfoils/DU35_A17.dat")
+aftypes[5] = af_from_files("airfoils/DU30_A17.dat")
+aftypes[6] = af_from_files("airfoils/DU25_A17.dat")
+aftypes[7] = af_from_files("airfoils/DU21_A17.dat")
+aftypes[8] = af_from_files("airfoils/NACA64_A17.dat")
 
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
@@ -100,20 +149,20 @@ airfoils = aftypes[af_idx]
 nothing # hide
 ```
 
-We can now define the rotor geometry.
+We can now define the sections using this airfoil data.  Since Section is defined for one section, and we'd like to define them all simultaneously, we use broadcasting (see the dot after Section).
 
 ```@example wt
-rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip, B, turbine, precone)
+sections = Section.(r, chord, theta, airfoils)
 nothing # hide
 ```
 
-Next, we need to specify the operating conditions.  At a basic level the inflow conditions need to be defined as a struct defined by OperatingPoint.  The parameters `mu` and `asound` are optional if Reynolds number and Mach number respectively are used in the airfoil functions.
+Next, we need to specify the operating conditions.  At a basic level the inflow conditions need to be defined as a struct defined by OperatingPoint.  The parameters `mu` and `asound` are optional if Reynolds number and Mach number respectively are not used in the airfoil functions.
 
 ```@docs
 OperatingPoint
 ```
 
-The coordinate system for Vx and Vy is shown at the top of [Wind Turbine](@ref).  In general, different inflow conditions will exist at every location along the blade, which is why Vx and Vy are arrays that should correspond to the radial `r` locations. The above type allows one to specify an arbitrary input definition, however, convenience methods exist for a few typical inflow conditions.  For a typical wind turbine operating point you can use the `windturbine_op_` function, which is based on the angles and equations shown below.
+The coordinate system for Vx and Vy is shown at the top of [Wind Turbine](@ref).  In general, different inflow conditions will exist at every location along the blade. The above type allows one to specify an arbitrary input definition, however, convenience methods exist for a few typical inflow conditions.  For a typical wind turbine operating point you can use the `windturbine_op` function, which is based on the angles and equations shown below.
 
 ![](angles.png)
 
@@ -138,7 +187,7 @@ V_y &= V_{shear} (\cos \gamma \sin \Theta\sin \psi - \sin \gamma \cos \psi) + \O
 windturbine_op
 ```
 
-We will use this function for this example, at a tip-speed ratio of 7.55.  
+We will use this function for this example, at a tip-speed ratio of 7.55.  We again use broadcasting because the velocities will vary at each radial station `r`.
 
 ```@example wt
 
@@ -154,9 +203,8 @@ rotorR = Rtip*cos(precone)
 Omega = Vinf*tsr/rotorR
 azimuth = 0.0*pi/180
 rho = 1.225
-pitch = 0.0
 
-op = windturbine_op(Vinf, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+op = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
 nothing # hide
 ```
@@ -173,15 +221,15 @@ The output result is a struct defined below. The positive directions for the nor
 Outputs
 ```
 
-Note that we use broadcasting to solve all sections in one call.  
+Note that we use broadcasting to solve all sections in one call.  However, since rotor is not an Array, we wrap it in Ref so that it can broadcast as a "scalar".
 
 ```@example wt
-out = solve(rotor, op)
+out = solve.(Ref(rotor), sections, op)
 
 nothing # hide
 ```
 
-Let's plot the distributed loads.
+Let's now plot the distributed loads.
 
 
 ```@example wt
@@ -201,22 +249,28 @@ savefig("loads-turbine.svg"); nothing # hide
 We are likely also interested in integrated loads, like thrust and torque, which are provided by the function `thrusttorque`.
 
 ```@docs
-thrusttorque
+thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
 ```
 
 ```@example wt
-T, Q = thrusttorque(rotor, out)
+T, Q = thrusttorque(rotor, sections, out)
 ```
 
-As used in the above example, this would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you would compute multiple inflow conditions with different azimuth angles and then average the resulting forces.  This can be conveniently done with broadcasting.  We don't want to broadcast across `r` (we are broadcasting across the four different azimuth angles) so we need to wrap `r` in a `Ref()` statement.  Similarly, we don't want to broadcast the solve across rotor objects.  If uncomforable with broadcasting, this could all be done easily with a for loop.  The `thrusttorque` function is overloaded with a version that accepts an array of outputs rather than a single output and performs an integration using averaging across the conditions.
+As used in the above example, this would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you would compute multiple inflow conditions with different azimuth angles and then average the resulting forces.  This can be conveniently done with broadcasting.  
+
+To do this we are broadcast across `r` and `az_angles` as a matrix of conditions. We will transpose `az_angles` into a row vector to make this happen.  If uncomforable with broadcasting, all of these could all be done easily with for loops.  The `thrusttorque` function is overloaded with a version that accepts a matrix of outputs where outputs[i, j] corresponds to r[i], azimuth[j] then performs an integration using averaging across the azimuthal conditions.
+
+```@docs
+thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
+```
 
 
 ```@example wt
 azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
-ops = windturbine_op.(Vinf, Omega, pitch, Ref(r), precone, yaw, tilt, azangles, hubHt, shearExp, rho)
-outs = solve.(Ref(rotor), ops)
+ops = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
+outs = solve.(Ref(rotor), sections, ops)
 
-T, Q = thrusttorque(rotor, outs)
+T, Q = thrusttorque(rotor, sections, outs)
 ```
 
 One final convenience function is to nondimensionalize the outputs.  The nondimensionalization uses different conventions depending on the application.  For a wind turbine the nondimensionalization is:
@@ -260,9 +314,9 @@ azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
 for i = 1:ntsr
     Omega = Vinf*tsrvec[i]/rotorR
 
-    ops = windturbine_op.(Vinf, Omega, pitch, Ref(r), precone, yaw, tilt, azangles, hubHt, shearExp, rho)
-    outs = solve.(Ref(rotor), ops)
-    T, Q = thrusttorque(rotor, outs)
+    ops = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
+    outs = solve.(Ref(rotor), sections, ops)
+    T, Q = thrusttorque(rotor, sections, outs)
 
     cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor)
 end
@@ -314,10 +368,11 @@ theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
                    12.8685, 12.5233, 12.2138]
 
-af = af_from_file("airfoils/NACA64_A17.dat")
+af = af_from_files("airfoils/NACA64_A17.dat")
 airfoils = fill(af, length(r))
 
-rotor = Rotor(r, chord, theta, airfoils, Rhub, Rtip, B, turbine)
+rotor = Rotor(Rhub, Rtip, B, turbine)
+sections = Section.(r, chord, theta, airfoils)
 nothing # hide
 ```
 
@@ -327,23 +382,22 @@ Next, we define the operating point.  For a propeller, it typically doesn't oper
 simple_op
 ```
 
-In this example, we assume simple inflow.  
+In this example, we assume simple inflow, and broadcast across the different radial stations.  
 
 ```@example prop
 
 rho = 1.225
-
 Vinf = 10.0
 Omega = 8000.0*pi/30.0
 
-op = simple_op(Vinf, Omega, r, rho)
+op = simple_op.(Vinf, Omega, r, rho)
 nothing # hide
 ```
 
 We can now computed distributed loads and induced velocities.  
 
 ```@example prop
-outputs = solve(rotor, op)
+outputs = solve.(Ref(rotor), sections, op)
 
 figure()
 plot(r/Rtip, outputs.Np)
@@ -357,7 +411,7 @@ savefig("loads-prop.svg"); nothing # hide
 ![](loads-prop.svg)
 
 
-This time we will also look at the induced velocities.  This is usually not of interest for wind turbines, but for propellers can be useful to assess, for example, prop-on-wing interactions.
+This time we will also look at the induced velocities.  This is usually not of interest for wind turbines, but for propellers can be useful to assess, for example, prop-on-wing interactions.  These wake velocities have hub/tip corrections applied, whereas intermediate calculations like `a` do not.  Thus: `u` does not equal `Vx * a`.
 
 ```@example prop
 figure()
@@ -413,9 +467,9 @@ CQ = zeros(nJ)
 for i = 1:nJ
     Vinf = J[i] * D * n
 
-    op = simple_op(Vinf, Omega, r, rho)
-    outputs = solve(rotor, op)
-    T, Q = thrusttorque(rotor, outputs)
+    op = simple_op.(Vinf, Omega, r, rho)
+    outputs = solve.(Ref(rotor), sections, op)
+    T, Q = thrusttorque(rotor, sections, outputs)
     eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor)
 
 end
