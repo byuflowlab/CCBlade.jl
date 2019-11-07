@@ -249,7 +249,7 @@ savefig("loads-turbine.svg"); nothing # hide
 We are likely also interested in integrated loads, like thrust and torque, which are provided by the function `thrusttorque`.
 
 ```@docs
-thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
+thrusttorque
 ```
 
 ```@example wt
@@ -259,10 +259,6 @@ T, Q = thrusttorque(rotor, sections, out)
 As used in the above example, this would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you would compute multiple inflow conditions with different azimuth angles and then average the resulting forces.  This can be conveniently done with broadcasting.  
 
 To do this we are broadcast across `r` and `az_angles` as a matrix of conditions. We will transpose `az_angles` into a row vector to make this happen.  If uncomforable with broadcasting, all of these could all be done easily with for loops.  The `thrusttorque` function is overloaded with a version that accepts a matrix of outputs where outputs[i, j] corresponds to r[i], azimuth[j] then performs an integration using averaging across the azimuthal conditions.
-
-```@docs
-thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
-```
 
 
 ```@example wt
@@ -490,3 +486,153 @@ savefig("eta-prop.svg"); nothing # hide
 
 ![](ctcp-prop.svg)
 ![](eta-prop.svg)
+
+
+
+## Derivatives
+
+To code is written in a generic enough way to allow for algorithmic differentiation through the entirety of the code.  This derivative workflow is not embeded in the package for a few reasons: 1) there are many different possible input/output combinations and trying to handle the most general cases would create a lot of extra data that may not be of interest, 2) there are many different AD packages one might want to use, 3) the code is often connected to others and one might want to AD a longer chain than just around CCBlade.  In any case, setting this is up is not too difficult.  Below is an example using `ForwardDiff` and `ReverseDiff`.
+
+First, let's import some needed packages.
+
+```@example deriv
+import ForwardDiff
+import ReverseDiff
+using CCBlade
+```
+
+Next, let's define the data for a simple propeller geometry.
+
+```@example deriv
+
+D = 1.6
+R = D/2.0
+Rhub = 0.01
+Rtip = D/2
+r = range(R/10, stop=9/10*R, length=11)
+chord = 0.1*ones(length(r))
+proppitch = 1.0  # pitch distance in meters.
+theta = atan.(proppitch./(2*pi*r))
+
+function affunc(alpha, Re, M)
+
+    cl = 6.2*alpha
+    cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+    return cl, cd
+end 
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+B = 2  # number of blades
+turbine = false
+pitch = 0.0
+precone = 0.0
+
+rho = 1.225
+Vinf = 30.0
+RPM = 2100
+Omega = RPM * pi/30 
+
+nothing # hide
+```
+
+Both `ForwardDiff` and `ReverseDiff` expect a function with a vector input and a vector output.  So we will need to create a wrapper function that takes in a vector x, which we will then parse for our variables.  In this case we will run a case where we are interested in thrust and torque.  This of course can be customized to any outputs of interest.  A few parameters: `af, B, turbine` are not things we will differentiate through so we allow them passthrough from the outer scope.  This would be best wrapped in a function, not coming from global scope, but is kept simple for the example.
+
+```@example deriv
+
+# parameters that passthrough: af, B, turbine
+function ccbladewrapper(x)
+    
+    # unpack
+    nall = length(x)
+    nvec = nall - 7
+    n = nvec ÷ 3
+
+    r = x[1:n]
+    chord = x[n+1:2*n]
+    theta = x[2*n+1:3*n]
+    Rhub = x[3*n+1]
+    Rtip = x[3*n+2]
+    pitch = x[3*n+3]
+    precone = x[3*n+4]
+    Vinf = x[3*n+5]
+    Omega = x[3*n+6]
+    rho = x[3*n+7]
+
+    rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+    sections = Section.(r, chord, theta, airfoils)
+    ops = simple_op.(Vinf, Omega, r, rho)
+
+    outputs = solve.(Ref(rotor), sections, ops)
+
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T; Q]
+end
+
+nothing # hide
+```
+
+We can now evaluate the Jacobian using forward mode AD.
+
+```@example deriv
+
+x = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
+J = ForwardDiff.jacobian(ccbladewrapper, x)
+```
+
+The Jacobian in this case is a 2 x 40 matrix because we have 2 outputs and 40 inputs.
+
+We could calculate the Jacobian with reverse mode AD instead.  Note that below is not the most efficient way to evaluate in reverse mode, especially if the derivatives will be computed repeatedly for more inputs (see `ReverseDiff` documentation).
+
+```@example deriv
+J2 = ReverseDiff.jacobian(ccbladewrapper, x)
+```
+
+We can check that these matricies are nearly identical:
+
+```@example deriv
+println(maximum(abs.(J - J2)))
+```
+
+Generally, we should compare these derivatives against complex step, but the code is not currently complex safe, so we'll instead compare against central differencing.
+
+```@example deriv
+
+import FLOWMath
+import Statistics: mean
+J3 = FLOWMath.centraldiff(ccbladewrapper, x)
+
+println(maximum(abs.(J - J3)))
+println(mean(abs.(J - J3)))
+```
+
+We can't expect as high of accuracy in comparing these Jacobians due to the limitations of finite differencing.
+
+Depending on the use case, it might be more convenient to parse out the Jacobian to make it more readable.  Right now it is in terms of f (outputs) vs x (inputs) and we have a mix of various inputs.  Using the same indexing to parse x we can create a named tuple to parse out the elements of J.
+
+```@example deriv
+Jout = (
+        T=(
+            r=J[1, 1:n], chord=J[1, n+1:2*n], theta=J[1, 2*n+1:3*n],
+            Rhub=J[1, 3*n+1], Rtip=J[1, 3*n+2], pitch=J[1, 3*n+3], 
+            precone=J[1, 3*n+4], Vinf=J[1, 3*n+5], Omega=J[1, 3*n+6], 
+            rho=J[1, 3*n+7]
+        ), 
+        Q=(
+            r=J[2, 1:n], chord=J[2, n+1:2*n], theta=J[2, 2*n+1:3*n],
+            Rhub=J[2, 3*n+1], Rtip=J[2, 3*n+2], pitch=J[2, 3*n+3], 
+            precone=J[2, 3*n+4], Vinf=J[2, 3*n+5], Omega=J[2, 3*n+6], 
+            rho=J[2, 3*n+7]
+        )
+)
+nothing #hide
+```
+
+Now for example we can see elements more easily, like the derivative of thrust with respect to chord:
+
+```@example deriv
+Jout.T.chord
+```
