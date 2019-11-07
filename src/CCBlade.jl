@@ -234,11 +234,15 @@ Uses the af_from_data function.
 function af_from_files(filenames; Re=[], Mach=[])
 
     # evalutae first file to determine size
-    sz = size(filenames)
+    if isa(filenames, Array)
+        sz = size(filenames)
+    else
+        sz = 0
+    end
     nRe = length(Re)
     nMach = length(Mach)
 
-    if length(sz) == 0  # just one file
+    if sz == 0  # just one file
         alpha, cl, cd = parse_af_file(filenames)
 
     elseif length(sz) == 1  # list of files
@@ -286,7 +290,7 @@ function afalpha(alpha, Re, Mach, cl, cd)
 
     nRe = length(Re)
     nMach = length(Mach)
-    
+
     # squeeze out singleton dimensions if necessary
     if nRe == 1 && nMach == 1  # could be cases with 1, 0, but this would be inconcistent input and I'm not going to bother handlingn it.
         cl = cl[:, 1, 1]
@@ -296,8 +300,8 @@ function afalpha(alpha, Re, Mach, cl, cd)
     afcl = FLOWMath.akima_setup(alpha, cl)
     afcd = FLOWMath.akima_setup(alpha, cd)
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.akima_interp(alpha_pt, afcl), 
-                                    FLOWMath.akima_interp(alpha_pt, afcd)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.akima_interp(alpha_pt, afcl)[1], 
+                                    FLOWMath.akima_interp(alpha_pt, afcd)[1]
     return afeval
 end
 
@@ -315,8 +319,8 @@ function afalphaRe(alpha, Re, Mach, cl, cd)
         cd = cd[:, :, 1]
     end
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cl, alpha_pt, Re_pt), 
-                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cd, alpha_pt, Re_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cl, alpha_pt, Re_pt)[1], 
+                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cd, alpha_pt, Re_pt)[1]
     return afeval
 
 end
@@ -335,8 +339,8 @@ function afalphaMach(alpha, Re, Mach, cl, cd)
         cd = cd[:, 1, :]
     end
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, Mach_pt), 
-                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, Mach_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, Mach_pt)[1], 
+                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, Mach_pt)[1]
     return afeval
 end
 
@@ -349,8 +353,8 @@ function afalphaReMach(alpha, Re, Mach, cl, cd)
     nRe = length(Re)
     nMach = length(Mach)
     
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, Mach_pt), 
-                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, Mach_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, Mach_pt)[1], 
+                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, Mach_pt)[1]
     return afeval
 end
 
@@ -378,13 +382,13 @@ function af_from_data(alpha, Re, Mach, cl, cd)
     nMach = length(Mach)
 
     if nRe <= 1 && nMach <= 1
-        afalpha(alpha, Re, Mach, cl, cd)
+        return afalpha(alpha, Re, Mach, cl, cd)
     elseif nMach <= 1
-        afalphaRe(alpha, Re, Mach, cl, cd)
+        return afalphaRe(alpha, Re, Mach, cl, cd)
     elseif nRe <= 1
-        afalphaMach(alpha, Re, Mach, cl, cd)
+        return afalphaMach(alpha, Re, Mach, cl, cd)
     else
-        afalphaReMach(alpha, Re, Mach, cl, cd)
+        return afalphaReMach(alpha, Re, Mach, cl, cd)
     end
 end
 
@@ -883,8 +887,8 @@ function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
 
     for j = 1:naz
         Tsub, Qsub = thrusttorque(rotor, sections, outputs[:, j])
-        T += Tsub / n
-        Q += Qsub / n
+        T += Tsub / naz
+        Q += Qsub / naz
     end
 
     return T, Q
