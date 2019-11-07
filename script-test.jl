@@ -195,3 +195,92 @@ xlabel(L"J")
 ylabel(L"\eta")
 # savefig("eta-prop.svg"); nothing # hide
 # gcf()
+
+
+
+# --------
+
+import ForwardDiff
+import ReverseDiff
+using CCBlade
+
+D = 1.6
+R = D/2.0
+Rhub = 0.01
+Rtip = D/2
+r = range(R/10, stop=9/10*R, length=11)
+chord = 0.1*ones(length(r))
+proppitch = 1.0  # pitch distance in meters.
+theta = atan.(proppitch./(2*pi*r))
+
+function affunc(alpha, Re, M)
+
+    cl = 6.2*alpha
+    cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+    return cl, cd
+end 
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+B = 2  # number of blades
+turbine = false
+pitch = 0.0
+precone = 0.0
+
+rho = 1.225
+Vinf = 30.0
+RPM = 2100
+Omega = RPM * pi/30 
+
+
+# parameters that passthrough: af, B, turbine
+function ccbladewrapper(x)
+    
+    # unpack
+    nall = length(x)
+    nvec = nall - 7
+    n = nvec ÷ 3
+
+    r = x[1:n]
+    chord = x[n+1:2*n]
+    theta = x[2*n+1:3*n]
+    Rhub = x[3*n+1]
+    Rtip = x[3*n+2]
+    pitch = x[3*n+3]
+    precone = x[3*n+4]
+    Vinf = x[3*n+5]
+    Omega = x[3*n+6]
+    rho = x[3*n+7]
+
+    rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+    sections = Section.(r, chord, theta, airfoils)
+    ops = simple_op.(Vinf, Omega, r, rho)
+
+    outputs = solve.(Ref(rotor), sections, ops)
+
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T; Q]
+end
+
+
+x = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
+J = ForwardDiff.jacobian(ccbladewrapper, x)
+
+Jout = (
+        T=(
+            r=J[1, 1:n], chord=J[1, n+1:2*n], theta=J[1, 2*n+1:3*n],
+            Rhub=J[1, 3*n+1], Rtip=J[1, 3*n+2], pitch=J[1, 3*n+3], 
+            precone=J[1, 3*n+4], Vinf=J[1, 3*n+5], Omega=J[1, 3*n+6], 
+            rho=J[1, 3*n+7]
+        ), 
+        Q=(
+            r=J[2, 1:n], chord=J[2, n+1:2*n], theta=J[2, 2*n+1:3*n],
+            Rhub=J[2, 3*n+1], Rtip=J[2, 3*n+2], pitch=J[2, 3*n+3], 
+            precone=J[2, 3*n+4], Vinf=J[2, 3*n+5], Omega=J[2, 3*n+6], 
+            rho=J[2, 3*n+7]
+        )
+)
+    # J2 = FLOWMath.centraldiff(ccbladewrapper, x)
