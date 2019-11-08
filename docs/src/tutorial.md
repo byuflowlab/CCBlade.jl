@@ -229,6 +229,12 @@ out = solve.(Ref(rotor), sections, op)
 nothing # hide
 ```
 
+There are many outputs, and although the return variable is an array of structs, convenience methods are provided to access the fields as if it was a struct of arrays.  For example, we can access the angles of attack as:
+
+```@example wt
+out.alpha
+```
+
 Let's now plot the distributed loads.
 
 
@@ -538,7 +544,7 @@ Omega = RPM * pi/30
 nothing # hide
 ```
 
-Both `ForwardDiff` and `ReverseDiff` expect a function with a vector input and a vector output.  So we will need to create a wrapper function that takes in a vector x, which we will then parse for our variables.  In this case we will run a case where we are interested in thrust and torque.  This of course can be customized to any outputs of interest.  A few parameters: `af, B, turbine` are not things we will differentiate through so we allow them passthrough from the outer scope.  This would be best wrapped in a function, not coming from global scope, but is kept simple for the example.
+Both `ForwardDiff` and `ReverseDiff` expect a function with a vector input and a vector output.  So we will need to create a wrapper function that takes in a vector x, which we parse into the variables of interest.  In this case we will compute thrust and torque.  This of course can be customized to any outputs of interest.  A few parameters: `af, B, turbine` are discrete, and cannot be differentiated, so we allow them to passthrough from the outer scope.  This part would be best wrapped in a function, rather than coming from global scope, but we're not worried about performance for this example.
 
 ```@example deriv
 
@@ -611,28 +617,12 @@ println(mean(abs.(J - J3)))
 
 We can't expect as high of accuracy in comparing these Jacobians due to the limitations of finite differencing.
 
-Depending on the use case, it might be more convenient to parse out the Jacobian to make it more readable.  Right now it is in terms of f (outputs) vs x (inputs) and we have a mix of various inputs.  Using the same indexing to parse x we can create a named tuple to parse out the elements of J.
+The Jacobian is in terms of f (outputs) vs x (inputs).  For example, if wanted to know dT/dchord we would use the same indexing we used when parsing `x`:
+
+
 
 ```@example deriv
-Jout = (
-        T=(
-            r=J[1, 1:n], chord=J[1, n+1:2*n], theta=J[1, 2*n+1:3*n],
-            Rhub=J[1, 3*n+1], Rtip=J[1, 3*n+2], pitch=J[1, 3*n+3], 
-            precone=J[1, 3*n+4], Vinf=J[1, 3*n+5], Omega=J[1, 3*n+6], 
-            rho=J[1, 3*n+7]
-        ), 
-        Q=(
-            r=J[2, 1:n], chord=J[2, n+1:2*n], theta=J[2, 2*n+1:3*n],
-            Rhub=J[2, 3*n+1], Rtip=J[2, 3*n+2], pitch=J[2, 3*n+3], 
-            precone=J[2, 3*n+4], Vinf=J[2, 3*n+5], Omega=J[2, 3*n+6], 
-            rho=J[2, 3*n+7]
-        )
-)
-nothing #hide
+
+dTdchord = J[1, n+1:2*n]
 ```
 
-Now for example we can see elements more easily, like the derivative of thrust with respect to chord:
-
-```@example deriv
-Jout.T.chord
-```
