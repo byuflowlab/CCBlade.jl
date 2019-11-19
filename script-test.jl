@@ -283,4 +283,13 @@ Jout = (
             rho=J[2, 3*n+7]
         )
 )
-    # J2 = FLOWMath.centraldiff(ccbladewrapper, x)
+    
+import FLOWMath
+import Statistics: mean
+J2 = FLOWMath.centraldiff(ccbladewrapper, x)
+J3 = ReverseDiff.jacobian(ccbladewrapper, x)
+
+println(maximum(abs.(J - J2)))
+println(mean(abs.(J - J2)))
+
+println(maximum(abs.(J - J3)))
