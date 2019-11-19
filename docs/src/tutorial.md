@@ -626,3 +626,323 @@ The Jacobian is in terms of f (outputs) vs x (inputs).  For example, if wanted t
 dTdchord = J[1, n+1:2*n]
 ```
 
+## Derivatives with OpenMDAO.jl
+
+[OpenMDAO](https://openmdao.org) is a great platform, particularly for computing system level derivatives across multiple components.  We've created a small Julia wrapper to OpenMDAO called [OpenMDAO.jl](https://github.com/byuflowlab/OpenMDAO.jl).  CCBlade contains a nested solve (Brent's method), and in the above example, we've just use AD through the solve.  That works fine, and is actually more efficient in this case, but for larger internal solves is usually less efficient.  This example acts as an example of how to use OpenMDAO.jl, and assumes prior experience with OpenMDAO.
+
+First, we import the modules we need.  We import OpenMDAO rather than `using` in order to make all the calls explicit.  We will use `ForwardDiff` to compute the partial derivatives. We import `diag` in order to extract the diagonal part of the Jacobian (this could be more efficient by not computing those off-diagonal parts in the first place, but sparse Jacobians are not yet supported in `ForwardDiff`).
+
+```@example openmdao
+
+using CCBlade
+import OpenMDAO
+import ForwardDiff
+import LinearAlgebra: diag
+```
+
+Next, we define a type.  The type's main purpose is dispatch, but can also be used to define fixed parameters, or "options" using the OpenMDAO vocabulary.  In this case we are going to create an implicit component because of the nested solve.
+
+```@example openmdao
+struct RotorComp{TAF, TI, TB} <: OpenMDAO.AbstractImplicitComp
+    af::TAF
+    B::TI
+    turbine::TB
+end
+```
+
+Now we define the setup function, dispatching based on our type.  The input/output data is expected to be in arrays, even for size 1, because it allows for easier data passing between Julia/Python.  If you leave off shape and val the default is a scalar.  In the below example, four of the partial derivatives have sparse Jacobians (diagonal in this case).  The indices must be specified using Python syntax (0-based).  In this case there are n residuals associated with phi.  The other two scalar outputs are explicitly known but are included for convenience.
+
+```@example openmdao
+
+function OpenMDAO.setup(rc::RotorComp)
+ 
+    n = length(rc.af)
+
+    inputs = [
+        OpenMDAO.VarData("r", shape=[n], val=ones(n)),
+        OpenMDAO.VarData("chord", shape=[n], val=ones(n)),
+        OpenMDAO.VarData("theta", shape=[n], val=ones(n)),
+        OpenMDAO.VarData("Rhub"),
+        OpenMDAO.VarData("Rtip"),
+        OpenMDAO.VarData("pitch"),
+        OpenMDAO.VarData("precone"),
+        OpenMDAO.VarData("Vinf"),
+        OpenMDAO.VarData("Omega"),
+        OpenMDAO.VarData("rho")
+    ]
+
+    outputs = [
+        OpenMDAO.VarData("phi", shape=[n], val=ones(n)),
+        OpenMDAO.VarData("T", shape=[1], val=[1.0]),
+        OpenMDAO.VarData("Q", shape=[1], val=[1.0])
+    ]
+
+    idx = range(0, n-1, step=1)
+    partials = [
+        OpenMDAO.PartialsData("phi", "r", rows=idx, cols=idx),
+        OpenMDAO.PartialsData("phi", "chord", rows=idx, cols=idx),
+        OpenMDAO.PartialsData("phi", "theta", rows=idx, cols=idx),
+        OpenMDAO.PartialsData("phi", "phi", rows=idx, cols=idx),
+        OpenMDAO.PartialsData("phi", "Rhub"),
+        OpenMDAO.PartialsData("phi", "Rtip"),
+        OpenMDAO.PartialsData("phi", "pitch"),
+        OpenMDAO.PartialsData("phi", "precone"),
+        OpenMDAO.PartialsData("phi", "Vinf"),
+        OpenMDAO.PartialsData("phi", "Omega"),
+        OpenMDAO.PartialsData("phi", "rho"),
+        OpenMDAO.PartialsData("phi", "T"),
+        OpenMDAO.PartialsData("phi", "Q"),
+        OpenMDAO.PartialsData("T", "r"),
+        OpenMDAO.PartialsData("T", "chord"),
+        OpenMDAO.PartialsData("T", "theta"),
+        OpenMDAO.PartialsData("T", "phi"),
+        OpenMDAO.PartialsData("T", "Rhub"),
+        OpenMDAO.PartialsData("T", "Rtip"),
+        OpenMDAO.PartialsData("T", "pitch"),
+        OpenMDAO.PartialsData("T", "precone"),
+        OpenMDAO.PartialsData("T", "Vinf"),
+        OpenMDAO.PartialsData("T", "Omega"),
+        OpenMDAO.PartialsData("T", "rho"),
+        OpenMDAO.PartialsData("T", "T"),
+        OpenMDAO.PartialsData("T", "Q"),
+        OpenMDAO.PartialsData("Q", "r"),
+        OpenMDAO.PartialsData("Q", "chord"),
+        OpenMDAO.PartialsData("Q", "theta"),
+        OpenMDAO.PartialsData("Q", "phi"),
+        OpenMDAO.PartialsData("Q", "Rhub"),
+        OpenMDAO.PartialsData("Q", "Rtip"),
+        OpenMDAO.PartialsData("Q", "pitch"),
+        OpenMDAO.PartialsData("Q", "precone"),
+        OpenMDAO.PartialsData("Q", "Vinf"),
+        OpenMDAO.PartialsData("Q", "Omega"),
+        OpenMDAO.PartialsData("Q", "rho"),
+        OpenMDAO.PartialsData("Q", "T"),
+        OpenMDAO.PartialsData("Q", "Q")
+    ]
+
+    return inputs, outputs, partials
+end
+```
+
+OpenMDAO is going to require providing the residuals for a given set of inputs.  Since we will also need derivatives of the residuals we will reuse these same computations and so I pull it out into a convenience function.  In this case where we are computing the residuals at all n stations at once we add a for loop.  The multiplicatation of `phi[i]*one(Vinf)` is just to ensure that `phi` has the write type when using AD later.
+
+```@example openmdao
+
+function instantaneous_thrusttorque(Rhub, Rtip, B, turbine, pitch, precone,
+        r, chord, theta, af, Vinf, Omega, rho, phi)
+
+    rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+    sections = Section.(r, chord, theta, af)
+    ops = simple_op.(Vinf, Omega, r, rho)
+
+    R = Vector{eltype(Vinf)}(undef, n)
+    out = Vector{Outputs{eltype(Vinf)}}(undef, n)
+    for i = 1:n
+        R[i], out[i] = CCBlade.residual(phi[i]*one(Vinf), rotor, sections[i], ops[i])
+    end
+
+    T, Q = thrusttorque(rotor, sections, out)
+
+    return R, T, Q
+end
+
+nothing # hide
+```
+
+We can now write the apply_nonlinear method for OpenMDAO dispatching based no our type.  Because OpenMDAO.jl uses arrays in communicating via python we are indexing them, `[1]`, so that scalars are passed through.  We then set the residuals.  The residuals for thrust and torque are simple as these are explicit calculations that will match the outputs.  We need to use the dot syntax when assigning residuals because we are modifying arrays in place.
+
+```@example openmdao
+
+function OpenMDAO.apply_nonlinear!(rc::RotorComp, inputs, outputs, residuals)
+
+    R, T, Q = instantaneous_thrusttorque(inputs["Rhub"][1], inputs["Rtip"][1], rc.B, rc.turbine, inputs["pitch"][1], inputs["precone"][1],
+        inputs["r"], inputs["chord"], inputs["theta"], rc.af, inputs["Vinf"][1], inputs["Omega"][1], inputs["rho"][1],
+        outputs["phi"])
+
+    residuals["phi"] .= R
+    residuals["T"] .= T .- outputs["T"]
+    residuals["Q"] .= Q .- outputs["Q"]
+
+end
+```
+
+We now provide the partial derivatives of this function.  We do this similar to what we did with AD before, except this time we take only partial derivatives of the residuals (i.e., we did not differentiate through the solve).
+
+```@example openmdao
+
+function OpenMDAO.linearize!(rc::RotorComp, inputs, outputs, partials)
+
+    B = rc.B
+    turbine = rc.turbine
+    af = rc.af
+  
+    function ccbladewrapper2(x)
+    
+        # unpack
+        nall = length(x)
+        nvec = nall - 7
+        n = nvec ÷ 4
+
+        r = x[1:n]
+        chord = x[n+1:2*n]
+        theta = x[2*n+1:3*n]
+        phi = x[3*n+1:4*n]
+        Rhub = x[4*n+1]
+        Rtip = x[4*n+2]
+        pitch = x[4*n+3]
+        precone = x[4*n+4]
+        Vinf = x[4*n+5]
+        Omega = x[4*n+6]
+        rho = x[4*n+7]
+
+        R, T, Q = instantaneous_thrusttorque(Rhub, Rtip, B, turbine, pitch, precone,
+            r, chord, theta, af, Vinf, Omega, rho, phi)
+
+        return [R; T; Q]
+    end
+
+    x = [inputs["r"]; inputs["chord"]; inputs["theta"]; outputs["phi"]; inputs["Rhub"]; inputs["Rtip"]; 
+        inputs["pitch"]; inputs["precone"]; inputs["Vinf"]; inputs["Omega"]; inputs["rho"]]
+
+    J = ForwardDiff.jacobian(ccbladewrapper2, x)
+
+    n = length(inputs["r"])
+    partials["phi", "r"] .= diag(J[1:n, 1:n])
+    partials["phi", "chord"] .= diag(J[1:n, n+1:2*n])
+    partials["phi", "theta"] .= diag(J[1:n, 2*n+1:3*n])
+    partials["phi", "phi"] .= diag(J[1:n, 3*n+1:4*n])
+    partials["phi", "Rhub"] .= J[1:n, 4*n+1]
+    partials["phi", "Rtip"] .= J[1:n, 4*n+2]
+    partials["phi", "pitch"] .= J[1:n, 4*n+3]
+    partials["phi", "precone"] .= J[1:n, 4*n+4]
+    partials["phi", "Vinf"] .= J[1:n, 4*n+5]
+    partials["phi", "Omega"] .= J[1:n, 4*n+6]
+    partials["phi", "rho"] .= J[1:n, 4*n+7]
+    partials["phi", "T"] .= 0.0
+    partials["phi", "Q"] .= 0.0
+
+    partials["T", "r"] .= J[n+1, 1:n]'
+    partials["T", "chord"] .= J[n+1, n+1:2*n]'
+    partials["T", "theta"] .= J[n+1, 2*n+1:3*n]'
+    partials["T", "phi"] .= J[n+1, 3*n+1:4*n]'
+    partials["T", "Rhub"] .= J[n+1, 4*n+1]'
+    partials["T", "Rtip"] .= J[n+1, 4*n+2]'
+    partials["T", "pitch"] .= J[n+1, 4*n+3]'
+    partials["T", "precone"] .= J[n+1, 4*n+4]'
+    partials["T", "Vinf"] .= J[n+1, 4*n+5]'
+    partials["T", "Omega"] .= J[n+1, 4*n+6]'
+    partials["T", "rho"] .= J[n+1, 4*n+7]'
+    partials["T", "T"] .= -1.0
+    partials["T", "Q"] .= 0.0
+
+    partials["Q", "r"] .= J[n+2, 1:n]'
+    partials["Q", "chord"] .= J[n+2, n+1:2*n]'
+    partials["Q", "theta"] .= J[n+2, 2*n+1:3*n]'
+    partials["Q", "phi"] .= J[n+2, 3*n+1:4*n]'
+    partials["Q", "Rhub"] .= J[n+2, 4*n+1]'
+    partials["Q", "Rtip"] .= J[n+2, 4*n+2]'
+    partials["Q", "pitch"] .= J[n+2, 4*n+3]'
+    partials["Q", "precone"] .= J[n+2, 4*n+4]'
+    partials["Q", "Vinf"] .= J[n+2, 4*n+5]'
+    partials["Q", "Omega"] .= J[n+2, 4*n+6]'
+    partials["Q", "rho"] .= J[n+2, 4*n+7]'
+    partials["Q", "T"] .= 0.0
+    partials["Q", "Q"] .= -1.0
+
+end
+
+```
+
+We could let OpenMDAO solve this system, but we have an efficient solver specific to this problem in place already and so will implement the `solve_nonlinear` method ourselves.
+
+```@example openmdao
+function OpenMDAO.solve_nonlinear!(rc::RotorComp, inputs, outputs)
+
+    rotor = Rotor(inputs["Rhub"][1], inputs["Rtip"][1], rc.B, rc.turbine, inputs["pitch"][1], inputs["precone"][1])
+    sections = Section.(inputs["r"], inputs["chord"], inputs["theta"], rc.af)
+    ops = simple_op.(inputs["Vinf"][1], inputs["Omega"][1], inputs["r"], inputs["rho"][1])
+
+    out = solve.(Ref(rotor), sections, ops)
+    T, Q = thrusttorque(rotor, sections, out)
+
+    outputs["phi"] .= out.phi
+    outputs["T"] .= T
+    outputs["Q"] .= Q
+end
+```
+
+Now we are ready to solve the system and its derivatives.  We use the same example as the AD case.
+
+```@example openmdao
+
+D = 1.6
+R = D/2.0
+Rhub = 0.01
+Rtip = D/2
+r = range(R/10, stop=9/10*R, length=11)
+chord = 0.1*ones(length(r))
+proppitch = 1.0  # pitch distance in meters.
+theta = atan.(proppitch./(2*pi*r))
+
+function affunc(alpha, Re, M)
+
+    cl = 6.2*alpha
+    cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+    return cl, cd
+end 
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+B = 2  # number of blades
+turbine = false
+pitch = 0.0
+precone = 0.0
+
+rho = 1.225
+Vinf = 30.0
+RPM = 2100
+Omega = RPM * pi/30 
+
+nothing # hide
+```
+
+Now we use the OpenMDAO API (we are directly calling the Python module) to create the problem and run it.  This follows exactly the syntax in OpenMDAO, except we need to use the `make_component` function to transform the Julia struct into a Python object.
+
+```@example openmdao
+
+prob = OpenMDAO.om.Problem()
+
+ivc = OpenMDAO.om.IndepVarComp()
+ivc.add_output("r", r)
+ivc.add_output("chord", chord)
+ivc.add_output("theta", theta)
+ivc.add_output("Rhub", Rhub)
+ivc.add_output("Rtip", Rtip)
+ivc.add_output("pitch", pitch)
+ivc.add_output("precone", precone)
+ivc.add_output("Vinf", Vinf)
+ivc.add_output("Omega", Omega)
+ivc.add_output("rho", rho)
+prob.model.add_subsystem("ivc", ivc, promotes=["*"])
+
+comp = OpenMDAO.make_component(RotorComp(airfoils, B, turbine))
+prob.model.add_subsystem("rotorresid", comp, promotes=["*"])
+
+prob.model.linear_solver = OpenMDAO.om.DirectSolver()
+
+prob.setup()
+prob.run_model()
+
+nothing #hide
+```
+
+We can extract all the same partial derivatives that we got in the AD case.
+
+```@example openmdao
+
+J = prob.compute_totals(of=["T", "Q"], wrt=["r", "chord", "theta", "Rhub", "Rtip", "pitch", "precone", "Vinf", "Omega", "rho"])
+```
+
+Using BenchmarkTools shows that the AD version is 4x faster than the OpenMDAO.jl version, but is not likely to be faster for more complex solves.
