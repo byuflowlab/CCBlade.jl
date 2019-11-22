@@ -81,7 +81,7 @@ comp = om.ExecComp("Vy = omega*radii*cos(precone)",
 group.add_subsystem("Vy_comp", comp, promotes=["*"])
 
 ccblade_residual_comp_data = CCBlade.CCBladeResidualComp(
-    num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false, debug_print=true)
+    num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false)
 comp = make_component(ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)

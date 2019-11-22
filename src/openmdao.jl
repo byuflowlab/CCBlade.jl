@@ -9,13 +9,12 @@ struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
     af
     B
     turbine
-    debug_print
     rotors
     sections
     ops
 end
 
-function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_print)
+function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine)
     # Check if the airfoil interpolation passed is a num_radial-length array.
     try
         num_af = length(af)
@@ -27,7 +26,7 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
     catch e
         if isa(e, MethodError)
             # af is not an array of stuff, so assume it's just a single
-            # function, and make it have shape (num_nodes, num_radial).
+            # function, and make it have shape (1, num_radial).
             af = fill(af, 1, num_radial)
         else
             # Some other error happened, so rethrow it.
@@ -53,7 +52,7 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine, debug_prin
     asound = fill(1., num_nodes, 1)
     ops = OperatingPoint.(Vx, Vy, rho, mu, asound)
 
-    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, debug_print, rotors, sections, ops)
+    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, rotors, sections, ops)
 end
 
 function OpenMDAO.setup(self::CCBladeResidualComp)
@@ -131,48 +130,6 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
 
     return input_data, output_data, partials_data
 end
-
-# function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
-#     # Rotor parameters.
-#     setfield!.(self.rotors, :Rhub, inputs["Rhub"])
-#     setfield!.(self.rotors, :Rtip, inputs["Rtip"])
-#     setfield!.(self.rotors, :pitch, inputs["pitch"])
-#     setfield!.(self.rotors, :precone, inputs["precone"])
-
-#     # Blade section parameters.
-#     setfield!.(self.sections, :r, inputs["r"])
-#     setfield!.(self.sections, :chord, inputs["chord"])
-#     setfield!.(self.sections, :theta, inputs["theta"])
-
-#     # Operating point parameters.
-#     setfield!.(self.ops, :Vx, inputs["Vx"])
-#     setfield!.(self.ops, :Vy, inputs["Vy"])
-#     setfield!.(self.ops, :rho, inputs["rho"])
-#     setfield!.(self.ops, :mu, inputs["mu"])
-#     setfield!.(self.ops, :asound, inputs["asound"])
-
-#     phis = outputs["phi"]
-
-#     # Get the residual, and the outputs. The `out` variable is
-#     # two-dimensional array of length-two tuples. The first tuple
-#     # entry is the residual, and the second is the `Outputs`
-#     # struct.
-#     # out = CCBlade.residual.(phis, self.sections, self.ops, self.rotors)
-#     out = CCBlade.residual.(phis, self.rotors, self.sections, self.ops)
-
-#     # Store the residual.
-#     @. residuals["phi"] = getindex(out, 1)
-
-#     # Get the other outputs.
-#     for str in keys(outputs)
-#         if str != "phi"
-#             sym = Symbol(str)
-#             @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
-#         end
-#     end
-
-#     return nothing
-# end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
     num_nodes = self.num_nodes

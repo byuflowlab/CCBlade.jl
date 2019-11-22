@@ -396,14 +396,6 @@ end
 af_from_data(alpha, cl, cd) = af_from_data(alpha, Re=[], Mach=[], cl, cd)
 
 
-
-# ---------------------------------
-
-
-
-
-
-
 # ------------ BEM core ------------------
 
 
