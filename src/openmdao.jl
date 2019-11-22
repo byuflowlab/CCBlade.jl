@@ -67,34 +67,34 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
     num_radial = self.num_radial
 
     input_data = [
-        VarData("r", [num_nodes, num_radial], 1., "m"),
-        VarData("chord", [num_nodes, num_radial], 1., "m"),
-        VarData("theta", [num_nodes, num_radial], 1., "rad"),
-        VarData("Vx", [num_nodes, num_radial], 1., "m/s"),
-        VarData("Vy", [num_nodes, num_radial], 1., "m/s"),
-        VarData("rho", [num_nodes, 1], 1., "kg/m**3"),
-        VarData("mu", [num_nodes, 1], 1., "N/m**2*s"),
-        VarData("asound", [num_nodes, 1], 1., "m/s"),
-        VarData("Rhub", [num_nodes, 1], 1., "m"),
-        VarData("Rtip", [num_nodes, 1], 1., "m"),
-        VarData("pitch", [num_nodes, 1], 1., "rad"),
-        VarData("precone", [num_nodes, 1], 1., "rad")]
+        VarData("r", shape=(num_nodes, num_radial), val=1., units="m"),
+        VarData("chord", shape=(num_nodes, num_radial), val=1., units="m"),
+        VarData("theta", shape=(num_nodes, num_radial), val=1., units="rad"),
+        VarData("Vx", shape=(num_nodes, num_radial), val=1., units="m/s"),
+        VarData("Vy", shape=(num_nodes, num_radial), val=1., units="m/s"),
+        VarData("rho", shape=(num_nodes, 1), val=1., units="kg/m**3"),
+        VarData("mu", shape=(num_nodes, 1), val=1., units="N/m**2*s"),
+        VarData("asound", shape=(num_nodes, 1), val=1., units="m/s"),
+        VarData("Rhub", shape=(num_nodes, 1), val=1., units="m"),
+        VarData("Rtip", shape=(num_nodes, 1), val=1., units="m"),
+        VarData("pitch", shape=(num_nodes, 1), val=1., units="rad"),
+        VarData("precone", shape=(num_nodes, 1), val=1., units="rad")]
 
     output_data = [
-        VarData("phi", [num_nodes, num_radial], 1., "rad"),
-        VarData("Np", [num_nodes, num_radial], 1., "N/m"),
-        VarData("Tp", [num_nodes, num_radial], 1., "N/m"),
-        VarData("a", [num_nodes, num_radial], 1.),
-        VarData("ap", [num_nodes, num_radial], 1.),
-        VarData("u", [num_nodes, num_radial], 1., "m/s"),
-        VarData("v", [num_nodes, num_radial], 1., "m/s"),
-        VarData("W", [num_nodes, num_radial], 1., "m/s"),
-        VarData("cl", [num_nodes, num_radial], 1.),
-        VarData("cd", [num_nodes, num_radial], 1.),
-        VarData("cn", [num_nodes, num_radial], 1.),
-        VarData("ct", [num_nodes, num_radial], 1.),
-        VarData("F", [num_nodes, num_radial], 1.),
-        VarData("G", [num_nodes, num_radial], 1.)]
+        VarData("phi", shape=(num_nodes, num_radial), val=1., units="rad"),
+        VarData("Np", shape=(num_nodes, num_radial), val=1., units="N/m"),
+        VarData("Tp", shape=(num_nodes, num_radial), val=1., units="N/m"),
+        VarData("a", shape=(num_nodes, num_radial), val=1.),
+        VarData("ap", shape=(num_nodes, num_radial), val=1.),
+        VarData("u", shape=(num_nodes, num_radial), val=1., units="m/s"),
+        VarData("v", shape=(num_nodes, num_radial), val=1., units="m/s"),
+        VarData("W", shape=(num_nodes, num_radial), val=1., units="m/s"),
+        VarData("cl", shape=(num_nodes, num_radial), val=1.),
+        VarData("cd", shape=(num_nodes, num_radial), val=1.),
+        VarData("cn", shape=(num_nodes, num_radial), val=1.),
+        VarData("ct", shape=(num_nodes, num_radial), val=1.),
+        VarData("F", shape=(num_nodes, num_radial), val=1.),
+        VarData("G", shape=(num_nodes, num_radial), val=1.)]
 
     partials_data = Vector{PartialsData}()
 
@@ -132,47 +132,47 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
     return input_data, output_data, partials_data
 end
 
-function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
-    # Rotor parameters.
-    setfield!.(self.rotors, :Rhub, inputs["Rhub"])
-    setfield!.(self.rotors, :Rtip, inputs["Rtip"])
-    setfield!.(self.rotors, :pitch, inputs["pitch"])
-    setfield!.(self.rotors, :precone, inputs["precone"])
+# function OpenMDAO.apply_nonlinear!(self::CCBladeResidualComp, inputs, outputs, residuals)
+#     # Rotor parameters.
+#     setfield!.(self.rotors, :Rhub, inputs["Rhub"])
+#     setfield!.(self.rotors, :Rtip, inputs["Rtip"])
+#     setfield!.(self.rotors, :pitch, inputs["pitch"])
+#     setfield!.(self.rotors, :precone, inputs["precone"])
 
-    # Blade section parameters.
-    setfield!.(self.sections, :r, inputs["r"])
-    setfield!.(self.sections, :chord, inputs["chord"])
-    setfield!.(self.sections, :theta, inputs["theta"])
+#     # Blade section parameters.
+#     setfield!.(self.sections, :r, inputs["r"])
+#     setfield!.(self.sections, :chord, inputs["chord"])
+#     setfield!.(self.sections, :theta, inputs["theta"])
 
-    # Operating point parameters.
-    setfield!.(self.ops, :Vx, inputs["Vx"])
-    setfield!.(self.ops, :Vy, inputs["Vy"])
-    setfield!.(self.ops, :rho, inputs["rho"])
-    setfield!.(self.ops, :mu, inputs["mu"])
-    setfield!.(self.ops, :asound, inputs["asound"])
+#     # Operating point parameters.
+#     setfield!.(self.ops, :Vx, inputs["Vx"])
+#     setfield!.(self.ops, :Vy, inputs["Vy"])
+#     setfield!.(self.ops, :rho, inputs["rho"])
+#     setfield!.(self.ops, :mu, inputs["mu"])
+#     setfield!.(self.ops, :asound, inputs["asound"])
 
-    phis = outputs["phi"]
+#     phis = outputs["phi"]
 
-    # Get the residual, and the outputs. The `out` variable is
-    # two-dimensional array of length-two tuples. The first tuple
-    # entry is the residual, and the second is the `Outputs`
-    # struct.
-    # out = CCBlade.residual.(phis, self.sections, self.ops, self.rotors)
-    out = CCBlade.residual.(phis, self.rotors, self.sections, self.ops)
+#     # Get the residual, and the outputs. The `out` variable is
+#     # two-dimensional array of length-two tuples. The first tuple
+#     # entry is the residual, and the second is the `Outputs`
+#     # struct.
+#     # out = CCBlade.residual.(phis, self.sections, self.ops, self.rotors)
+#     out = CCBlade.residual.(phis, self.rotors, self.sections, self.ops)
 
-    # Store the residual.
-    @. residuals["phi"] = getindex(out, 1)
+#     # Store the residual.
+#     @. residuals["phi"] = getindex(out, 1)
 
-    # Get the other outputs.
-    for str in keys(outputs)
-        if str != "phi"
-            sym = Symbol(str)
-            @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
-        end
-    end
+#     # Get the other outputs.
+#     for str in keys(outputs)
+#         if str != "phi"
+#             sym = Symbol(str)
+#             @. residuals[str] = outputs[str] - getfield(getindex(out, 2), sym)
+#         end
+#     end
 
-    return nothing
-end
+#     return nothing
+# end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
     num_nodes = self.num_nodes

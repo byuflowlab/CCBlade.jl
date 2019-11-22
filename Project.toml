@@ -4,6 +4,7 @@ authors = ["Andrew Ning <aning@byu.edu>"]
 version = "0.1.0"
 
 [deps]
+CompositeArrays = "a5494894-06f3-11ea-09b4-23103990cafc"
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
