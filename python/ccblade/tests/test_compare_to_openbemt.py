@@ -259,8 +259,8 @@ class OpenBEMTTestCase(unittest.TestCase):
         openbemt_normal_load /= dradii
         openbemt_circum_load /= dradii
 
-        assert_rel_error(self, ccblade_normal_load, openbemt_normal_load, 5e-5)
-        assert_rel_error(self, ccblade_circum_load, openbemt_circum_load, 5e-5)
+        assert_rel_error(self, ccblade_normal_load, openbemt_normal_load, 1e-2)
+        assert_rel_error(self, ccblade_circum_load, openbemt_circum_load, 1e-2)
 
 
 if __name__ == "__main__":

@@ -45,7 +45,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 raise ValueError(msg)
             self._af = af
 
-        # self.add_input('B', val=3)
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
         self.add_input('chord', shape=(num_nodes, num_radial), units='m')
         self.add_input('theta', shape=(num_nodes, num_radial), units='rad')
@@ -57,6 +56,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         self.add_input('hub_radius', shape=(num_nodes, 1), units='m')
         self.add_input('prop_radius', shape=(num_nodes, 1), units='m')
         self.add_input('precone', shape=(num_nodes, 1), units='rad')
+        self.add_input('pitch', shape=(num_nodes, 1), units='rad')
 
         self.add_output('phi', shape=(num_nodes, num_radial), units='rad')
         self.add_output('Np', shape=(num_nodes, num_radial), units='N/m')
@@ -65,10 +65,14 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         self.add_output('ap', shape=(num_nodes, num_radial))
         self.add_output('u', shape=(num_nodes, num_radial), units='m/s')
         self.add_output('v', shape=(num_nodes, num_radial), units='m/s')
+        self.add_output('alpha', shape=(num_nodes, num_radial), units='rad')
         self.add_output('W', shape=(num_nodes, num_radial), units='m/s')
         self.add_output('cl', shape=(num_nodes, num_radial))
         self.add_output('cd', shape=(num_nodes, num_radial))
+        self.add_output('cn', shape=(num_nodes, num_radial))
+        self.add_output('ct', shape=(num_nodes, num_radial))
         self.add_output('F', shape=(num_nodes, num_radial))
+        self.add_output('G', shape=(num_nodes, num_radial))
 
         self.declare_partials('*', '*')
 
@@ -97,7 +101,6 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         phi = outputs['phi']
 
         # check if turbine or propeller and change input sign if necessary
-        # swapsign = turbine ? 1 : -1
         swapsign = 1 if turbine else -1
         theta = swapsign * inputs['theta']
         Vx = swapsign * inputs['Vx']
@@ -137,7 +140,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # sec parameters
         k = cn*sigma_p/(4.0*F*sphi*sphi)
         kp = ct*sigma_p/(4.0*F*sphi*cphi)
-        k[phi < 0.] *= -1.
+
+        # parameters used in Vx=0 and Vy=0 cases
+        k0 = cn*sigma_p/(4.0*F*sphi*cphi)
+        k0p = ct*sigma_p/(4.0*F*sphi*sphi)
 
         ####################################
         # Original Julia Code
@@ -157,19 +163,45 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         ####################################
         # Slow Pythonized Code
         ####################################
+        u = np.zeros_like(phi)
+        v = np.zeros_like(phi)
         a = np.zeros_like(phi)
+        ap = np.zeros_like(phi)
         for i in range(num_nodes):
             for j in range(num_radial):
-                if k[i, j] <= 2./3.:
-                    a[i, j] = k[i, j]/(1 + k[i, j])
+                if np.isclose(Vx[i, j], 0.0, atol=1e-6):
+                    u[i, j] = np.sign(phi[i, j])*k0[i, j]*Vy[i, j]
+                    v[i, j] = 0.0
+                    a[i, j] = 0.0
+                    ap[i, j] = 0.0
+                elif np.isclose(Vy[i, j], 0.0, atol=1e-6):
+                    u[i, j] = 0.0
+                    v[i, j] = k0p[i, j]*abs_cs(Vx[i, j])
+                    a[i, j] = 0.0
+                    ap[i, j] = 0.0
                 else:
-                    g1 = 2.0*F[i, j]*k[i, j] - (10.0/9-F[i, j])
-                    g2 = 2.0*F[i, j]*k[i, j] - (4.0/3-F[i, j])*F[i, j]
-                    g3 = 2.0*F[i, j]*k[i, j] - (25.0/9-2*F[i, j])
-                    if np.isclose(g3, 0.0, atol=1e-6):
-                        a[i, j] = 1.0 - 1.0/(2.0*np.sqrt(g2))
-                    else:
-                        a[i, j] = (g1 - np.sqrt(g2)) / g3
+                    if phi[i, j] < 0.0:
+                        k[i, j] *= -1.0
+
+                    if k[i, j] <= 2./3.:  # momentum region
+                        a[i, j] = k[i, j]/(1 + k[i, j])
+                    else:  # empirical region
+                        g1 = 2.0*F[i, j]*k[i, j] - (10.0/9-F[i, j])
+                        g2 = 2.0*F[i, j]*k[i, j] - (4.0/3-F[i, j])*F[i, j]
+                        g3 = 2.0*F[i, j]*k[i, j] - (25.0/9-2*F[i, j])
+                        if np.isclose(g3, 0.0, atol=1e-6):  # avoid singularity
+                            a[i, j] = 1.0 - 1.0/(2.0*np.sqrt(g2))
+                        else:
+                            a[i, j] = (g1 - np.sqrt(g2)) / g3
+
+                    u[i, j] = a[i, j] * Vx[i, j]
+
+                    # -------- tangential induction ----------
+                    if Vx[i, j] < 0:
+                        kp[i, j] *= -1.0
+
+                    ap[i, j] = kp[i, j]/(1 - kp[i, j])
+                    v[i, j] = ap[i, j] * Vy[i, j]
 
         ####################################
         # Fast Pythonized Code
@@ -190,39 +222,49 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # mask_mask = np.logical_and(emp_mask, np.logical_not(sing_mask))
         # a[mask_mask] = (g1[mask_mask] - np.sqrt(g2[mask_mask])) / g3[mask_mask]
 
-        u = a * Vx
-
         # -------- tangential induction ----------
-        kp[Vx < 0.] *= -1.
+        # kp[Vx < 0.] *= -1.
 
-        ap = kp/(1 - kp)
-        v = ap * Vy
+        # ap = kp/(1 - kp)
+        # v = ap * Vy
 
         # ------- residual function -------------
         residuals['phi'] = np.sin(phi)/(Vx - u) - np.cos(phi)/(Vy + v)
 
-        # if np.isclose(kp, 1.0, atol=1e-6):  # state corresopnds to Vy=0, return any nonzero residual
-        #     return 1.0, Outputs()
-        residuals['phi'][np.isclose(kp, 1.0, atol=1e-6)] = 1.
-
-        # if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-        #     return 1.0, Outputs()
-        residuals['phi'][np.isclose(k, -1.0, atol=1e-6)] = 1.
-
         # ------- loads ---------
-        W2 = (Vx - u)**2 + (Vy + v)**2
-        residuals['Np'] = cn*0.5*rho*W2*chord - outputs['Np']
-        residuals['Tp'] = ct*0.5*rho*W2*chord*swapsign - outputs['Tp']
+        W = np.sqrt((Vx - u)**2 + (Vy + v)**2)
+        Np = cn*0.5*rho*W*W*chord
+        Tp = ct*0.5*rho*W*W*chord
+
+        Tp *= swapsign
+        v *= swapsign
+
+        # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.
+        # This is the most common way to implement a BEM, but it means that the raw velocities are misleading
+        # as they do not contain any hub/tip loss corrections.
+        # To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.
+        # In other words:
+        # CT = 4 a (1 - a) F = 4 a G (1 - a G)\n
+        # This is solved for G, then multiplied against the wake velocities.
+        G = (1.0 - np.sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
+        u *= G
+        v *= G
 
         # Other residuals.
+        residuals['Np'] = Np - outputs['Np']
+        residuals['Tp'] = Tp - outputs['Tp']
         residuals['a'] = a - outputs['a']
         residuals['ap'] = ap - outputs['ap']
         residuals['u'] = u - outputs['u']
-        residuals['v'] = v*swapsign - outputs['v']
-        residuals['W'] = np.sqrt(W2) - outputs['W']
+        residuals['v'] = v - outputs['v']
+        residuals['alpha'] = alpha - outputs['alpha']
+        residuals['W'] = W - outputs['W']
         residuals['cl'] = cl - outputs['cl']
         residuals['cd'] = cd - outputs['cd']
+        residuals['cn'] = cn - outputs['cn']
+        residuals['ct'] = ct - outputs['ct']
         residuals['F'] = F - outputs['F']
+        residuals['G'] = G - outputs['G']
 
     def solve_nonlinear(self, inputs, outputs):
         method = self.options['solve_nonlinear']
