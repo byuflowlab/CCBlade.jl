@@ -59,7 +59,7 @@ Rotor(Rhub, Rtip, B, turbine, pitch) = Rotor(Rhub, Rtip, B, turbine, pitch, zero
 Define sectional properties for one station along rotor
     
 **Arguments**
-- `r::Float64`: radial location along turbine (`Rhub < r < Rtip`)
+- `r::Float64`: radial location along blade (`Rhub < r < Rtip`)
 - `chord::Float64`: corresponding local chord length
 - `theta::Float64`: corresponding twist angle (radians)
 - `af::function`: a function of the form: `cl, cd = af(alpha, Re, Mach)`
@@ -417,17 +417,12 @@ function residual(phi, rotor, section, op)
     Rhub = rotor.Rhub
     Rtip = rotor.Rtip
     B = rotor.B
+    turbine = rotor.turbine
     pitch = rotor.pitch
     Vx = op.Vx
     Vy = op.Vy
     rho = op.rho
     
-    # check if turbine or propeller and change input sign if necessary
-    setsign = rotor.turbine ? 1 : -1
-    theta *= setsign
-    pitch *= setsign
-    Vx *= setsign
-
     # constants
     sigma_p = B*chord/(2.0*pi*r)
     sphi = sin(phi)
@@ -444,7 +439,12 @@ function residual(phi, rotor, section, op)
     Mach = W0/op.asound  # also ignoring induction
 
     # airfoil cl/cd
-    cl, cd = af(alpha, Re, Mach)
+    if turbine
+        cl, cd = af(alpha, Re, Mach)
+    else
+        cl, cd = af(-alpha, Re, Mach)
+        cl *= -1
+    end
 
     # resolve into normal and tangential forces
     cn = cl*cphi + cd*sphi
@@ -533,10 +533,6 @@ function residual(phi, rotor, section, op)
     Np = cn*0.5*rho*W^2*chord
     Tp = ct*0.5*rho*W^2*chord
 
-    # ---- swap output signs as needed -----
-    Tp *= setsign
-    v *= setsign
-
     # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
     # This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
     # as they do not contain any hub/tip loss corrections.
@@ -548,7 +544,11 @@ function residual(phi, rotor, section, op)
     u *= G
     v *= G
 
-    return R, Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    if turbine
+        return R, Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    else
+        return R, Outputs(-Np, -Tp, -a, -ap, -u, -v, phi, -alpha, W, -cl, cd, -cn, -ct, F, G)
+    end
 
 end
 
@@ -610,11 +610,9 @@ function solve(rotor, section, op)
     npts = 20  # number of discretization points to find bracket in residual solve
 
     # unpack
-    setsign = rotor.turbine ? 1 : -1
-    Vx = op.Vx * setsign  # TODO: ideally should do sign swap only in one place
+    Vx = op.Vx
     Vy = op.Vy
-    # theta = section.theta * setsign
-    # pitch = op.pitch * setsign
+
 
     # ---- determine quadrants based on case -----
     # Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
@@ -710,10 +708,6 @@ function solve(rotor, section, op)
         # once bracket is found, solve root finding problem and compute loads
         if success
 
-            # phistar = Roots.fzero(R, phiL, phiU)
-            
-            # so = PyCall.pyimport("scipy.optimize")
-            # phistar = so.brentq(R, phiL, phiU)
             phistar = FLOWMath.brent(R, phiL, phiU)
             _, outputs = residual(phistar, rotor, section, op)
             return outputs
@@ -728,15 +722,6 @@ function solve(rotor, section, op)
     return Outputs()
 end
 
-
-# function solve(rotor::Rotor, op::AbstractArray{OperatingPoint, 1})
-#     n = length(op)
-#     output_array = Array{Outputs, n}
-
-#     for i = 1:n
-#         output_array[i] = solve(rotor, op[i])
-#     end
-# end
 
 
 # ------------ inflow ------------------

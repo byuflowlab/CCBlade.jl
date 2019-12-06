@@ -168,25 +168,23 @@ qsim = 1e2*[0.803638686218187, 0.806984572453978, 0.809709290183008, 0.811743686
 
 for i = 1:60
 
-  Vinf = float(i)
-  Omega = RPM * pi/30 
+    Vinf = float(i)
+    Omega = RPM * pi/30 
 
-  ops = simple_op.(Vinf, Omega, r, rho)
+    ops = simple_op.(Vinf, Omega, r, rho)
 
+    # --- evaluate ---
 
-  # --- evaluate ---
+    out = solve.(Ref(rotor_no_F), sections, ops)
 
-  out = solve.(Ref(rotor_no_F), sections, ops)
+    # Np, Tp = loads(outputs)
+    # T, Q = thrusttorque(r[1], r, r[end], Np, Tp, B)
+    # their spreadsheet did not use trapzezoidal rule, so just do a rect sum.
+    T = sum(out.Np*(r[2]-r[1]))*B
+    Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 
-  # Np, Tp = loads(outputs)
-
-  # T, Q = thrusttorque(r[1], r, r[end], Np, Tp, B)
-  # their spreadsheet did not use trapzezoidal rule, so just do a rect sum.
-  T = sum(out.Np*(r[2]-r[1]))*B
-  Q = sum(r.*out.Tp*(r[2]-r[1]))*B
-
-  @test isapprox(T, tsim[i], atol=1e-2)  # 2 decimal places
-  @test isapprox(Q, qsim[i], atol=2e-3)
+    @test isapprox(T, tsim[i], atol=1e-2)  # 2 decimal places
+    @test isapprox(Q, qsim[i], atol=2e-3)
 
 end
 
@@ -209,6 +207,66 @@ eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
 
 
 # ---------------------------------------------
+
+
+# ------ camber ----------
+
+alpha0 = -3*pi/180
+
+function affunc(alpha, Re, M)
+
+    cl = 6.2*(alpha - alpha0)
+    cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+    return cl, cd
+end 
+
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+# theta .-= 3*pi/180
+
+sections = Section.(r, chord, theta, airfoils)
+
+Vinf = 5.0
+Omega = RPM * pi/30 
+ops = simple_op.(Vinf, Omega, r, rho)
+
+out = solve.(Ref(rotor_no_F), sections, ops)
+
+T = sum(out.Np*(r[2]-r[1]))*B
+Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+
+@test isapprox(T, 1223.0506862888788, atol=1e-8)
+@test isapprox(Q, 113.79919472569034, atol=1e-8)
+
+@test isapprox(out[4].Np, 427.3902632382494, atol=1e-8)
+@test isapprox(out[4].Tp, 122.38414345762305, atol=1e-8)
+@test isapprox(out[4].a, 2.2845512476210943, atol=1e-8)
+@test isapprox(out[4].ap, 0.05024950801920044, atol=1e-8)
+@test isapprox(out[4].u, 11.422756238105471, atol=1e-8)
+@test isapprox(out[4].v, 3.2709314141649575, atol=1e-8)
+@test isapprox(out[4].phi, 0.2596455971546484, atol=1e-8)
+@test isapprox(out[4].alpha, 0.23369406105568025, atol=1e-8)
+@test isapprox(out[4].W, 63.96697566502531, atol=1e-8)
+@test isapprox(out[4].cl, 1.773534419416163, atol=1e-8)
+@test isapprox(out[4].cd, 0.03413364011028978, atol=1e-8)
+@test isapprox(out[4].cn, 1.7053239640124302, atol=1e-8)
+@test isapprox(out[4].ct, 0.48832327407767123, atol=1e-8)
+@test isapprox(out[4].F, 1.0, atol=1e-8)
+@test isapprox(out[4].G, 1.0, atol=1e-8)
+
+theta = atan.(pitch./(2*pi*r)) .- 3*pi/180
+
+sections = Section.(r, chord, theta, airfoils)
+out = solve.(Ref(rotor_no_F), sections, ops)
+T = sum(out.Np*(r[2]-r[1]))*B
+Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+
+@test isapprox(T, 1e3*0.962407923825140, atol=1e-3)
+@test isapprox(Q, 1e2*0.813015017103876, atol=1e-4)
+
 
 
 
