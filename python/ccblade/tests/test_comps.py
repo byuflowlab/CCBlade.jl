@@ -4,8 +4,9 @@ import numpy as np
 
 import openmdao.api as om
 from openmdao.utils.assert_utils import assert_rel_error
-from ccblade.inflow import SimpleInflow
+from ccblade.inflow import SimpleInflow, WindTurbineInflow
 from ccblade import ccblade_py as ccb
+from ccblade.utils import af_from_files
 
 
 def dummy_airfoil(alpha, Re, Mach):
@@ -17,29 +18,43 @@ def dummy_airfoil(alpha, Re, Mach):
 
 class SeparateCompTestCase(unittest.TestCase):
 
-    def test_local_inflow_implicit_solve_turbine(self):
+    def test_turbine_grant_ingram(self):
+        # Copied from CCBlade.jl/test/runtests.jl
+
+        # --- verification using example from "Wind Turbine Blade Analysis using the Blade Element Momentum Method"
+        # --- by Grant Ingram: https://community.dur.ac.uk/g.l.ingram/download/wind_turbine_design.pdf
+
+        # Note: There were various problems with the pdf data. Fortunately the excel
+        # spreadsheet was provided: http://community.dur.ac.uk/g.l.ingram/download.php
+
+        # - They didn't actually use the NACA0012 data.  According to the spreadsheet they just used cl = 0.084*alpha with alpha in degrees.
+        # - There is an error in the spreadsheet where CL at the root is always 0.7.  This is because the classical approach doesn't converge properly at that station.
+        # - the values for gamma and chord were rounded in the pdf.  The spreadsheet has more precise values.
+        # - the tip is not actually converged (see significant error for Delta A).  I converged it further using their method.
 
         num_nodes = 1
-        B = 3  # number of blades
-        precone = 0.
+
+        # --- rotor definition ---
         turbine = True
         hub_radius = 0.01
         prop_radius = 5.0
         prop_radius_eff = 500.0
-        r = np.array([0.2, 1, 2, 3, 4, 5])[np.newaxis, :]
-        num_radial = r.size
+        B = 3  # number of blades
+        precone = 0.
 
-        gamma = np.array([61.0, 74.31002131, 84.89805553, 89.07195504,
-                          91.25038415, 92.58003871])
+        r = np.array([0.2, 1, 2, 3, 4, 5])[np.newaxis, :]
+        gamma = np.array([61.0, 74.31002131, 84.89805553, 89.07195504, 91.25038415, 92.58003871])
         theta = ((90.0 - gamma)*np.pi/180)[np.newaxis, :]
-        chord = np.array([0.7, 0.706025153, 0.436187551, 0.304517933,
-                          0.232257636, 0.187279622])[np.newaxis, :]
+        chord = np.array([0.7, 0.706025153, 0.436187551, 0.304517933, 0.232257636, 0.187279622])[np.newaxis, :]
+
+        num_radial = r.size
 
         def affunc(alpha, Re, M):
             cl = 0.084*alpha*180/np.pi
 
             return cl, np.zeros_like(cl)
 
+        # --- inflow definitions ---
         Vinf = np.array([7.0]).reshape((num_nodes, 1))
         tsr = 8
         omega = tsr*Vinf/prop_radius
@@ -73,6 +88,7 @@ class SeparateCompTestCase(unittest.TestCase):
         prob['ccblade.hub_radius'] = hub_radius
         prob['ccblade.prop_radius'] = prop_radius_eff
         prob['ccblade.precone'] = precone
+        prob['ccblade.pitch'] = 0.0
 
         prob.run_model()
 
@@ -87,14 +103,15 @@ class SeparateCompTestCase(unittest.TestCase):
         expected_ap = np.array([0.0676, 0.0180, 0.0081, 0.0046, 0.0030])
         assert_rel_error(self, prob['ccblade.ap'][0, 1:], expected_ap, 5e-3)
 
-    def test_local_inflow_implicit_solve_propeller(self):
+    def test_propeller_example(self):
+        # Example from the tutorial in the CCBlade documentation.
 
         num_nodes = 1
-        af = dummy_airfoil
         turbine = False
 
         Rhub = np.array([0.5 * 0.0254]).reshape((1, 1))
         Rtip = np.array([3.0 * 0.0254]).reshape((1, 1))
+        num_blades = 2
         precone = np.array([0.0]).reshape((1, 1))
 
         r = 0.0254*np.array(
@@ -104,7 +121,6 @@ class SeparateCompTestCase(unittest.TestCase):
              2.4678, 2.5475, 2.6273, 2.7070, 2.7867, 2.8661, 2.9410]).reshape(
                  1, -1)
         num_radial = r.shape[-1]
-        r = np.array(r).reshape((1, num_radial))
 
         chord = 0.0254*np.array(
             [0.6270, 0.6255, 0.6231, 0.6199, 0.6165, 0.6125, 0.6054, 0.5973,
@@ -120,21 +136,23 @@ class SeparateCompTestCase(unittest.TestCase):
              15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
              12.8685, 12.5233, 12.2138]).reshape((1, num_radial))
 
+        rho = np.array([1.125]).reshape((num_nodes, 1))
+        Vinf = np.array([10.0]).reshape((num_nodes, 1))
         omega = np.array([8000.0*(2*np.pi/60.0)]).reshape((num_nodes, 1))
 
-        Vinf = np.array([10.0]).reshape((num_nodes, 1))
         Vy = omega*r*np.cos(precone)
         Vx = np.tile(Vinf * np.cos(precone), (1, num_radial))
-
-        rho = np.array([1.125]).reshape((num_nodes, 1))
         mu = np.array([1.]).reshape((num_nodes, 1))
         asound = np.array([1.]).reshape((num_nodes, 1))
+
+        # Airfoil interpolator.
+        af = af_from_files(["airfoils/NACA64_A17.dat"])[0]
 
         prob = om.Problem()
 
         comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
                                         num_radial=num_radial,
-                                        num_blades=3,
+                                        num_blades=num_blades,
                                         airfoil_interp=af,
                                         turbine=turbine,
                                         debug_print=False)
@@ -156,21 +174,128 @@ class SeparateCompTestCase(unittest.TestCase):
         prob['ccblade.hub_radius'] = Rhub
         prob['ccblade.prop_radius'] = Rtip
         prob['ccblade.precone'] = precone
+        prob['ccblade.pitch'] = 0.0
 
         prob.run_model()
 
-        expected_phi = np.array([-0.63890233, -0.6121064 , -0.58740212, -0.56450533, -0.54329884,
-                                 -0.52111391, -0.48818073, -0.45717514, -0.42966735, -0.40510076,
-                                 -0.38302422, -0.36308034, -0.34496445, -0.32845977, -0.31336418,
-                                 -0.29949603, -0.28672351, -0.27492358, -0.26399077, -0.25384599,
-                                 -0.24441014, -0.23561878, -0.22742504, -0.21978496, -0.21267805,
-                                 -0.20608672, -0.20001685, -0.19453287, -0.18977539, -0.18584404,
-                                 -0.18203572])
-
+        expected_phi = [-0.663508, -0.635027, -0.608894, -0.584768, -0.562531,
+                        -0.539378, -0.505253, -0.473411, -0.445406, -0.420581,
+                        -0.398406, -0.378458, -0.360392, -0.343968, -0.328962,
+                        -0.315186, -0.302510, -0.290800, -0.279961, -0.269915,
+                        -0.260587, -0.251916, -0.243869, -0.236407, -0.229533,
+                        -0.223257, -0.217634, -0.212815, -0.209137, -0.206866,
+                        -0.204341]
         assert_rel_error(self, expected_phi, prob['ccblade.phi'][0], 1e-5)
 
+    def test_turbine_example(self):
+        # Example from the tutorial in the CCBlade documentation.
+
+        num_nodes = 1
+        turbine = True
+
+        Rhub = np.array([1.5]).reshape((num_nodes, 1))
+        Rtip = np.array([63.0]).reshape((num_nodes, 1))
+        num_blades = 3
+        precone = np.array([2.5*np.pi/180.0]).reshape((num_nodes, 1))
+
+        r = np.array(
+            [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500,
+             24.0500, 28.1500, 32.2500, 36.3500, 40.4500, 44.5500,
+             48.6500, 52.7500, 56.1667, 58.9000, 61.6333]).reshape(num_nodes, -1)
+        num_radial = r.shape[-1]
+
+        chord = np.array([3.542, 3.854, 4.167, 4.557, 4.652, 4.458, 4.249,
+                          4.007, 3.748, 3.502, 3.256, 3.010, 2.764, 2.518,
+                          2.313, 2.086, 1.419]).reshape((num_nodes, num_radial))
+
+        theta = np.pi/180*np.array([13.308, 13.308, 13.308, 13.308, 11.480,
+                                    10.162, 9.011, 7.795, 6.544, 5.361, 4.188,
+                                    3.125, 2.319, 1.526, 0.863, 0.370,
+                                    0.106]).reshape((num_nodes, num_radial))
+
+        rho = np.array([1.225]).reshape((num_nodes, 1))
+        vhub = np.array([10.0]).reshape((num_nodes, 1))
+        tsr = 7.55
+        rotorR = Rtip*np.cos(precone)
+        omega = vhub*tsr/rotorR
+
+        yaw = np.array([0.0]).reshape((num_nodes, 1))
+        tilt = np.array([5.0*np.pi/180.0]).reshape((num_nodes, 1))
+        hub_height = np.array([90.0]).reshape((num_nodes, 1))
+        shear_exp = np.array([0.2]).reshape((num_nodes, 1))
+        azimuth = np.array([0.0]).reshape((num_nodes, 1))
+        pitch = np.array([0.0]).reshape((num_nodes, 1))
+
+        mu = np.array([1.]).reshape((num_nodes, 1))
+        asound = np.array([1.]).reshape((num_nodes, 1))
+
+        # Define airfoils. In this case we have 8 different airfoils that we
+        # load into an array. These airfoils are defined in files.
+        airfoil_fnames = ["airfoils/Cylinder1.dat", "airfoils/Cylinder2.dat",
+                          "airfoils/DU40_A17.dat", "airfoils/DU35_A17.dat",
+                          "airfoils/DU30_A17.dat", "airfoils/DU25_A17.dat",
+                          "airfoils/DU21_A17.dat", "airfoils/NACA64_A17.dat"]
+        aftypes = af_from_files(airfoil_fnames)
+
+        # indices correspond to which airfoil is used at which station
+        af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
+
+        # create airfoil array, adjusting for Python's zero-based indexing.
+        airfoils = [aftypes[i-1] for i in af_idx]
+
+        prob = om.Problem()
+
+        comp = om.IndepVarComp()
+        comp.add_output('vhub', val=vhub, units='m/s')
+        comp.add_output('omega', val=omega, units='rad/s')
+        comp.add_output('radii', val=r, units='m')
+        comp.add_output('chord', val=chord, units='m')
+        comp.add_output('theta', val=theta, units='rad')
+        comp.add_output('rho', val=rho, units='kg/m**3')
+        comp.add_output('mu', val=mu, units='N/m**2*s')
+        comp.add_output('asound', val=asound, units='m/s')
+        comp.add_output('precone', val=precone, units='rad')
+        comp.add_output('yaw', val=yaw, units='rad')
+        comp.add_output('tilt', val=tilt, units='rad')
+        comp.add_output('hub_height', val=hub_height, units='m')
+        comp.add_output('shear_exp', val=shear_exp)
+        comp.add_output('azimuth', val=azimuth, units='rad')
+        comp.add_output('hub_radius', val=Rhub, units='m')
+        comp.add_output('prop_radius', val=Rtip, units='m')
+        comp.add_output('pitch', val=pitch, units='rad')
+        prob.model.add_subsystem('ivc', comp, promotes=['*'])
+
+        comp = WindTurbineInflow(num_nodes=num_nodes,
+                                 num_radial=num_radial)
+        prob.model.add_subsystem('inflow', comp, promotes=['*'])
+
+        comp = ccb.LocalInflowAngleComp(num_nodes=num_nodes,
+                                        num_radial=num_radial,
+                                        num_blades=num_blades,
+                                        airfoil_interp=airfoils,
+                                        turbine=turbine,
+                                        debug_print=False)
+
+        prob.model.add_subsystem('ccblade', comp, promotes=['*'])
+
+        prob.setup()
+        prob.final_setup()
+
+        prob.run_model()
+
+        expected_phi = np.array([1.24151, 0.984853, 0.794433, 0.474428,
+                                 0.360879, 0.306092, 0.261674, 0.221899,
+                                 0.19487, 0.170476, 0.151866, 0.142013,
+                                 0.129982, 0.118756, 0.108178, 0.0976137,
+                                 0.0887128])
+        print(f"phi = {prob['ccblade.phi'][0, 0]}")
+        assert_rel_error(self, expected_phi, prob['ccblade.phi'][0, :], 1e-5)
+
     def test_propeller_aero4students(self):
-        # From test/runtests.jl
+        # Copied from CCBlade.jl/test/runtests.jl
+
+        # -------- verification: propellers.  using script at http://www.aerodynamics4students.com/propulsion/blade-element-propeller-theory.php ------
+        # I increased their tolerance to 1e-6
 
         # inputs
         chord = 0.10

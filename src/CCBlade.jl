@@ -76,7 +76,7 @@ mutable struct Section{TF, TAF}
 end
 
 # make rotor broadcastable as a single entity
-# Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
+Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{Section{TF, TAF}}, sym::Symbol) where {TF, TAF}
@@ -156,7 +156,7 @@ struct Outputs{TF}
 end
 
 # convenience constructor to initialize
-Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.1, 0.1, -5.0*pi/180.0, 0.0, 0.0, 0.0, 0.0)
+Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.1, 0.1, -5.0*pi/180.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF

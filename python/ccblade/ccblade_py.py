@@ -385,11 +385,11 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         turbine = self.options['turbine']
 
         # parameters
-        npts = 10  # number of discretization points to find bracket in residual solve
+        npts = 20  # number of discretization points to find bracket in residual solve
 
         swapsign = 1 if turbine else -1
         Vx = inputs['Vx'] * swapsign
-        theta = inputs['theta'] * swapsign
+        # theta = inputs['theta'] * swapsign
         Vy = inputs['Vy']
 
         # quadrants
@@ -400,8 +400,8 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         q4 = [-np.pi+epsilon, -np.pi/2]
 
         # ---- determine quadrants based on case -----
-        Vx_is_zero = np.isclose(Vx, 0.0, atol=1e-6)
-        Vy_is_zero = np.isclose(Vy, 0.0, atol=1e-6)
+        # Vx_is_zero = np.isclose(Vx, 0.0, atol=1e-6)
+        # Vy_is_zero = np.isclose(Vy, 0.0, atol=1e-6)
 
         # I'll just be lame for now and use loops.
         phi_1 = np.zeros((num_nodes, num_radial))
@@ -410,60 +410,20 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         for i in range(num_nodes):
             for j in range(num_radial):
 
-                if Vx_is_zero[i, j] and Vy_is_zero[i, j]:
-                    success[i, j] = False
-                    continue
-
-                elif Vx_is_zero[i, j]:
-
-                    startfrom90 = False  # start bracket search from 90 deg instead of 0 deg.
-
-                    if Vy[i, j] > 0 and theta[i, j] > 0:
-                        order = (q1, q2)
-                    elif Vy[i, j] > 0 and theta[i, j] < 0:
-                        order = (q2, q1)
-                    elif Vy[i, j] < 0 and theta[i, j] > 0:
-                        order = (q3, q4)
-                    else:  # Vy < 0 and theta < 0
-                        order = (q4, q3)
-
-                elif Vy_is_zero[i, j]:
-
-                    startfrom90 = True  # start bracket search from 90 deg
-
-                    if Vx[i, j] > 0 and abs(theta[i, j]) < np.pi/2:
-                        order = (q1, q3)
-                    elif Vx[i, j] < 0 and abs(theta[i, j]) < np.pi/2:
-                        order = (q2, q4)
-                    elif Vx[i, j] > 0 and abs(theta[i, j]) > np.pi/2:
-                        order = (q3, q1)
-                    else:  # Vx[i, j] < 0 and abs(theta[i, j]) > np.pi/2
-                        order = (q4, q2)
-
-                else:  # normal case
-
-                    startfrom90 = False
-
-                    if Vx[i, j] > 0 and Vy[i, j] > 0:
-                        order = (q1, q2, q3, q4)
-                    elif Vx[i, j] < 0 and Vy[i, j] > 0:
-                        order = (q2, q1, q4, q3)
-                    elif Vx[i, j] > 0 and Vy[i, j] < 0:
-                        order = (q3, q4, q1, q2)
-                    else:  # Vx < 0 and Vy < 0
-                        order = (q4, q3, q2, q1)
+                if Vx[i, j] > 0 and Vy[i, j] > 0:
+                    order = (q1, q2, q3, q4)
+                elif Vx[i, j] < 0 and Vy[i, j] > 0:
+                    order = (q2, q1, q4, q3)
+                elif Vx[i, j] > 0 and Vy[i, j] < 0:
+                    order = (q3, q4, q1, q2)
+                else:  # Vx[i, j] < 0 and Vy[i, j] < 0
+                    order = (q4, q3, q2, q1)
 
                 for (phimin, phimax) in order:  # quadrant orders.  In most cases it should find root in first quadrant searched.
 
-                    # check to see if it would be faster to reverse the bracket search direction
                     backwardsearch = False
-                    if not startfrom90:
-                        # if phimin == -pi/2 || phimax == -pi/2:  # q2 or q4
-                        if np.isclose(phimin, -np.pi/2) or np.isclose(phimax, -np.pi/2):  # q2 or q4
-                            backwardsearch = True
-                    else:
-                        if np.isclose(phimax, np.pi/2):  # q1
-                            backwardsearch = True
+                    if np.isclose(phimin, -np.pi/2) or np.isclose(phimax, -np.pi/2):  # q2 or q4
+                        backwardsearch = True
 
                     # find bracket
                     found, p1, p2 = self._first_bracket_search(
@@ -485,12 +445,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         if backwardsearch:  # start from xmax and work backwards
             xvec = xvec[::-1]
 
-        # fprev = f(xvec[1])
         outputs['phi'][i, j] = xvec[0]
         self.apply_nonlinear(inputs, outputs, residuals)
         fprev = residuals['phi'][i, j]
         for k in range(1, n):
-            # fnext = f(xvec[i])
             outputs['phi'][i, j] = xvec[k]
             self.apply_nonlinear(inputs, outputs, residuals)
             fnext = residuals['phi'][i, j]
