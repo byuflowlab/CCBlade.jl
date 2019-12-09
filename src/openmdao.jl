@@ -132,29 +132,14 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
 end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
-    num_nodes = self.num_nodes
-    num_radial = self.num_radial
-
-    # Rotor parameters.
-    setfield!.(self.rotors, :Rhub, inputs["Rhub"])
-    setfield!.(self.rotors, :Rtip, inputs["Rtip"])
-    setfield!.(self.rotors, :pitch, inputs["pitch"])
-    setfield!.(self.rotors, :precone, inputs["precone"])
-
-    # Blade section parameters.
-    setfield!.(self.sections, :r, inputs["r"])
-    setfield!.(self.sections, :chord, inputs["chord"])
-    setfield!.(self.sections, :theta, inputs["theta"])
-
-    # Inflow parameters.
-    setfield!.(self.ops, :Vx, inputs["Vx"])
-    setfield!.(self.ops, :Vy, inputs["Vy"])
-    setfield!.(self.ops, :rho, inputs["rho"])
-    setfield!.(self.ops, :mu, inputs["mu"])
-    setfield!.(self.ops, :asound, inputs["asound"])
+    # Copy the data in `inputs` to the array of structs in `self`.
+    set_inputs!(self, inputs)
 
     # Phi, the implicit variable.
     phis = outputs["phi"]
+
+    num_nodes = self.num_nodes
+    num_radial = self.num_radial
 
     # Get the derivatives of the residual. This will have size (num_nodes,
     # num_radial).
@@ -203,9 +188,23 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
-    num_nodes = self.num_nodes
-    num_radial = self.num_radial
+    # Copy the data in `inputs` to the array of structs in `self`.
+    set_inputs!(self, inputs)
 
+    # When called this way, CCBlade.solve will return a 2D array of `Outputs`
+    # objects.
+    out = CCBlade.solve.(self.rotors, self.sections, self.ops)
+
+    # Set the outputs.
+    for out_str in keys(outputs)
+        out_sym = Symbol(out_str)
+        @. outputs[out_str] = getfield(out, out_sym)
+    end
+
+    return nothing
+end
+
+function set_inputs!(self::CCBladeResidualComp, inputs)
     # Rotor parameters.
     setfield!.(self.rotors, :Rhub, inputs["Rhub"])
     setfield!.(self.rotors, :Rtip, inputs["Rtip"])
@@ -222,35 +221,6 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
     setfield!.(self.ops, :rho, inputs["rho"])
     setfield!.(self.ops, :mu, inputs["mu"])
     setfield!.(self.ops, :asound, inputs["asound"])
-
-    # When called this way, CCBlade.solve will return a 2D array of `Outputs`
-    # objects. Not anymore. Now it will return a 2D array of length-2 tuples.
-    # The first entry in the tuple is a boolean indicating if the solve for phi
-    # was successful, and the second is the Output struct.
-    # success_outputs = CCBlade.solve.(self.rotors, self.sections, self.ops)
-    out = CCBlade.solve.(self.rotors, self.sections, self.ops)
-
-    # Get an array of success booleans.
-    # success = getindex.(success_outputs, 1)
-
-    # Get an array of Output structs.
-    # out = getindex.(success_outputs, 2)
-
-    # Set the outputs.
-    @. outputs["phi"] = getfield(out, :phi)
-    @. outputs["Np"] = getfield(out, :Np)
-    @. outputs["Tp"] = getfield(out, :Tp)
-    @. outputs["a"] = getfield(out, :a)
-    @. outputs["ap"] = getfield(out, :ap)
-    @. outputs["u"] = getfield(out, :u)
-    @. outputs["v"] = getfield(out, :v)
-    @. outputs["W"] = getfield(out, :W)
-    @. outputs["cl"] = getfield(out, :cl)
-    @. outputs["cd"] = getfield(out, :cd)
-    @. outputs["cn"] = getfield(out, :cn)
-    @. outputs["ct"] = getfield(out, :ct)
-    @. outputs["F"] = getfield(out, :F)
-    @. outputs["G"] = getfield(out, :G)
 
     return nothing
 end

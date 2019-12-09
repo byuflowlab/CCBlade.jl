@@ -288,7 +288,6 @@ class SeparateCompTestCase(unittest.TestCase):
                                  0.19487, 0.170476, 0.151866, 0.142013,
                                  0.129982, 0.118756, 0.108178, 0.0976137,
                                  0.0887128])
-        print(f"phi = {prob['ccblade.phi'][0, 0]}")
         assert_rel_error(self, expected_phi, prob['ccblade.phi'][0, :], 1e-5)
 
     def test_propeller_aero4students(self):
