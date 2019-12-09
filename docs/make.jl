@@ -1,16 +1,17 @@
 using Documenter, CCBlade
 
 makedocs(
+    modules = [CCBlade],
     format = Documenter.HTML(),
-    sitename = "CCBlade Documentation",
     pages = [
-        "index.md",
-        "tutorial.md"
+        "Intro" => "index.md",
+        "Guide" => "tutorial.md"
     ],
-    modules = [CCBlade]
+    repo="https://github.com/byuflowlab/CCBlade.jl/blob/{commit}{path}#L{line}",
+    sitename="CCBlade.jl",
+    authors="Andrew Ning <aning@byu.edu>",
 )
 
-
-# deploydocs(
-#     repo = "github.com/byuflowlab/CCBlade.jl.git"
-# )
+deploydocs(
+    repo = "github.com/byuflowlab/CCBlade.jl.git"
+)
