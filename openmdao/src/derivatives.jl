@@ -1,5 +1,7 @@
 import ForwardDiff
 
+using CCBlade: residual, Outputs, Rotor, Section, OperatingPoint
+
 struct PartialsWrt{TF}
     phi::TF
 

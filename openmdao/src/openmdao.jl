@@ -1,7 +1,7 @@
 import Base.convert
 using PyCall
 using OpenMDAO
-using LinearAlgebra: norm
+using CCBlade: solve
 
 struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
     num_nodes
@@ -143,7 +143,7 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 
     # Get the derivatives of the residual. This will have size (num_nodes,
     # num_radial).
-    residual_derivs = CCBlade.residual_partials.(phis, self.rotors, self.sections, self.ops)
+    residual_derivs = residual_partials.(phis, self.rotors, self.sections, self.ops)
 
     # Copy the derivatives of the residual to the partials dict. First do the
     # derivative of the phi residual wrt phi.
@@ -159,7 +159,7 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     end
 
     # Get the derivatives of the explicit outputs.
-    output_derivs = CCBlade.output_partials.(phis, self.rotors, self.sections, self.ops)
+    output_derivs = output_partials.(phis, self.rotors, self.sections, self.ops)
 
     # Copy the derivatives of the explicit outputs into the partials dict.
     for of_str in keys(outputs)
@@ -193,7 +193,7 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
 
     # When called this way, CCBlade.solve will return a 2D array of `Outputs`
     # objects.
-    out = CCBlade.solve.(self.rotors, self.sections, self.ops)
+    out = solve.(self.rotors, self.sections, self.ops)
 
     # Set the outputs.
     for out_str in keys(outputs)

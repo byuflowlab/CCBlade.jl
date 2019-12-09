@@ -1,7 +1,8 @@
 using OpenMDAO
 using PyCall
-using CCBlade
 using PyPlot
+using CCBlade: af_from_files
+using CCBladeOpenMDAOExample
 
 om = pyimport("openmdao.api")
 pyccblade = pyimport("ccblade.ccblade_jl")
@@ -80,7 +81,7 @@ comp = om.ExecComp("Vy = omega*radii*cos(precone)",
                    Vy=Dict("units" => "m/s", "shape" => (num_nodes, num_radial)))
 group.add_subsystem("Vy_comp", comp, promotes=["*"])
 
-ccblade_residual_comp_data = CCBlade.CCBladeResidualComp(
+ccblade_residual_comp_data = CCBladeOpenMDAOExample.CCBladeResidualComp(
     num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false)
 comp = make_component(ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)

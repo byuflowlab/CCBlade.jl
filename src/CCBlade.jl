@@ -21,8 +21,8 @@ export simple_op, windturbine_op
 export solve, thrusttorque, nondim
 
 
-include("derivatives.jl")
-include("openmdao.jl")
+# include("derivatives.jl")
+# include("openmdao.jl")
 
 # --------- structs -------------
 
