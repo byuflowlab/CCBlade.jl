@@ -2,7 +2,7 @@
 
 This section contains two examples, one for a wind turbine and one for a propeller.  Each function in the module is introduced along the way.  Because the workflow for the propeller is essentially the same as that for the wind turbine (except the operating point), the propeller example does not repeat the same level of detail or comments.
 
-To start, we import CCBlade as well as a plotting module.  I prefer to use `import` rather than `using` as it makes the namespace clear when multiple modules exist (except with plotting where it is obvious), but for the purposes of keeping this example concise I will use `using`.
+The propeller and wind turbine use different conventions for inputs/outpus/normalization based on what is typical in the respective fields. 
 
 All angles should be in radians.  The only exception is the airfoil input file, which has angle of attack in degrees for readability.
 
@@ -343,7 +343,7 @@ using CCBlade
 using PyPlot
 ```
 
-Again, we first define the geometry, including the airfoils (which are the same along the blade in this case).  The positive conventions for a propeller (`turbine=false`) are shown in the figure below.  The underlying theory is unified across the two methods, but the input/output conventions differ to match common usage in the respective domains.
+Again, we first define the geometry, including the airfoils (which are the same along the blade in this case).  The positive conventions for a propeller (`turbine=false`) are shown in the figure below [^1].  
 
 ![](propeller.png)
 
@@ -659,9 +659,9 @@ function OpenMDAO.setup(rc::RotorComp)
     n = length(rc.af)
 
     inputs = [
-        OpenMDAO.VarData("r", shape=[n], val=ones(n)),
-        OpenMDAO.VarData("chord", shape=[n], val=ones(n)),
-        OpenMDAO.VarData("theta", shape=[n], val=ones(n)),
+        OpenMDAO.VarData("r", shape=n, val=ones(n)),
+        OpenMDAO.VarData("chord", shape=n, val=ones(n)),
+        OpenMDAO.VarData("theta", shape=n, val=ones(n)),
         OpenMDAO.VarData("Rhub"),
         OpenMDAO.VarData("Rtip"),
         OpenMDAO.VarData("pitch"),
@@ -672,9 +672,9 @@ function OpenMDAO.setup(rc::RotorComp)
     ]
 
     outputs = [
-        OpenMDAO.VarData("phi", shape=[n], val=ones(n)),
-        OpenMDAO.VarData("T", shape=[1], val=[1.0]),
-        OpenMDAO.VarData("Q", shape=[1], val=[1.0])
+        OpenMDAO.VarData("phi", shape=n, val=ones(n)),
+        OpenMDAO.VarData("T", shape=1, val=1.0),
+        OpenMDAO.VarData("Q", shape=1, val=1.0)
     ]
 
     idx = range(0, n-1, step=1)
@@ -941,8 +941,11 @@ nothing #hide
 We can extract all the same partial derivatives that we got in the AD case.
 
 ```@example openmdao
-
 J = prob.compute_totals(of=["T", "Q"], wrt=["r", "chord", "theta", "Rhub", "Rtip", "pitch", "precone", "Vinf", "Omega", "rho"])
 ```
 
 Using BenchmarkTools shows that the AD version is 4x faster than the OpenMDAO.jl version, but is not likely to be faster for more complex solves.
+
+
+
+[^1]: The underlying computations/theory is unified across the two methods, but the output conventions differ to match common usage in the respective domains.  The only input that is changed internally is the direction of positive camber.  Most outputs are negated to follow propeller conventions.  See theory guide if interested in more detail.  If the airfoils were symmetric then for the most part the propeller is just the turbine outputs but with flipped signs.
