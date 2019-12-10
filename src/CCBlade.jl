@@ -61,10 +61,10 @@ Rotor(Rhub, Rtip, B, turbine, pitch) = Rotor(Rhub, Rtip, B, turbine, pitch, zero
 Define sectional properties for one station along rotor
     
 **Arguments**
-- `r::Float64`: radial location along turbine (Rhub < r < Rtip)
+- `r::Float64`: radial location along blade (`Rhub < r < Rtip`)
 - `chord::Float64`: corresponding local chord length
 - `theta::Float64`: corresponding twist angle (radians)
-- `af::function`: a function of the form: cl, cd = af(alpha, Re, Mach)
+- `af::function`: a function of the form: `cl, cd = af(alpha, Re, Mach)`
 """
 mutable struct Section{TF, TAF}
     
@@ -133,7 +133,7 @@ Outputs from the BEM solver.
 - `cn::Vector{Float64}`: normal force coefficient
 - `ct::Vector{Float64}`: tangential force coefficient
 - `F::Vector{Float64}`: hub/tip loss correction
-- `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: u = Vx * a * G, v = Vy * ap * G
+- `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: `u = Vx * a * G, v = Vy * ap * G`
 """
 struct Outputs{TF}
 
@@ -221,25 +221,29 @@ end
 Read airfoil file(s) and return a function of the form `cl, cd = func(alpha, Re, M)`
 
 If filenames is just one file, then Re and Mach are ignored (just aoa variation).
-af_file_files("somefile.dat")
+`af_file_files("somefile.dat")`
 
 If filenames is a vector then there is variation with either Re or Mach (both not both).
-af_file_files(["f1.dat", "f2.dat", "f3.dat"], Mach=[0.5, 0.6, 0.7])
+`af_file_files(["f1.dat", "f2.dat", "f3.dat"], Mach=[0.5, 0.6, 0.7])`
 
 Filenames can be a matrix for variation with both.
-af_file_files(filematrix, Re=[3e6, 5e6], Mach=[0.5, 0.6, 0.7])
-where filematrix[i, j] correspnds to Re[i], Mach[j]
+`af_file_files(filematrix, Re=[3e6, 5e6], Mach=[0.5, 0.6, 0.7])`
+where `filematrix[i, j]` correspnds to `Re[i]`, `Mach[j]`
 
-Uses the af_from_data function.
+Uses the `af_from_data` function.
 """
 function af_from_files(filenames; Re=[], Mach=[])
 
     # evalutae first file to determine size
-    sz = size(filenames)
+    if isa(filenames, Array)
+        sz = size(filenames)
+    else
+        sz = 0
+    end
     nRe = length(Re)
     nMach = length(Mach)
 
-    if length(sz) == 0  # just one file
+    if sz == 0  # just one file
         alpha, cl, cd = parse_af_file(filenames)
 
     elseif length(sz) == 1  # list of files
@@ -300,8 +304,8 @@ function afalpha(alpha, Re, Mach, cl, cd)
     afcl = FLOWMath.akima_setup(alpha, cl)
     afcd = FLOWMath.akima_setup(alpha, cd)
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.akima_interp(alpha_pt, afcl), 
-                                    FLOWMath.akima_interp(alpha_pt, afcd)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.akima_interp(alpha_pt, afcl)[1], 
+                                    FLOWMath.akima_interp(alpha_pt, afcd)[1]
     return afeval
 end
 
@@ -319,8 +323,8 @@ function afalphaRe(alpha, Re, Mach, cl, cd)
         cd = cd[:, :, 1]
     end
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cl, alpha_pt, Re_pt), 
-                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cd, alpha_pt, Re_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cl, alpha_pt, Re_pt)[1], 
+                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Re, cd, alpha_pt, Re_pt)[1]
     return afeval
 
 end
@@ -339,8 +343,8 @@ function afalphaMach(alpha, Re, Mach, cl, cd)
         cd = cd[:, 1, :]
     end
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, Mach_pt), 
-                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, Mach_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cl, alpha_pt, M_pt)[1], 
+                                    FLOWMath.interp2d(FLOWMath.akima, alpha, Mach, cd, alpha_pt, M_pt)[1]
     return afeval
 end
 
@@ -353,8 +357,8 @@ function afalphaReMach(alpha, Re, Mach, cl, cd)
     nRe = length(Re)
     nMach = length(Mach)
     
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, Mach_pt), 
-                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, Mach_pt)
+    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cl, alpha_pt, Re_pt, M_pt)[1], 
+                                    FLOWMath.interp3d(FLOWMath.akima, alpha, Re, Mach, cd, alpha_pt, Re_pt, M_pt)[1]
     return afeval
 end
 
@@ -362,19 +366,19 @@ end
 """
 Create an airfoil function directly from alpha, cl, and cd arrays.
 The function of the form `cl, cd = func(alpha, Re, M)`
-alpha should be in radians.  Uses an akima spline.  af_from_files calls this function.
+alpha should be in radians.  Uses an akima spline.  `af_from_files` calls this function.
 
-cl[i, j, k] corresponds to alpha[i], Re[j], Mach[k]
+`cl[i, j, k]` corresponds to `alpha[i]`, `Re[j]`, `Mach[k]`
 
-If Mach=[]
-cl[i, j] corresponds to alpha[i], Re[j]
-size(cl) = (length(alpha), length(Re))
+If `Mach=[]`
+`cl[i, j]` corresponds to `alpha[i]`, `Re[j]`
+`size(cl) = (length(alpha), length(Re))`
 But you can use a singleton dimension for the constant Mach if desired.
-size(cl) = (length(alpha), length(Re), 1)
-The above also applies for Re=[] where variation is with alpha and Mach.
+`size(cl) = (length(alpha), length(Re), 1)`
+The above also applies for `Re=[]` where variation is with alpha and Mach.
 
 There is also a convenience method for vector data with just aoa variation
-af_from_data(alpha, cl, cd) which just corresponds to af_from_data(alpha, Re=[], Mach=[], cl, cd)
+`af_from_data(alpha, cl, cd)` which just corresponds to `af_from_data(alpha, Re=[], Mach=[], cl, cd)`
 """
 function af_from_data(alpha, Re, Mach, cl, cd)
 
@@ -382,13 +386,13 @@ function af_from_data(alpha, Re, Mach, cl, cd)
     nMach = length(Mach)
 
     if nRe <= 1 && nMach <= 1
-        afalpha(alpha, Re, Mach, cl, cd)
+        return afalpha(alpha, Re, Mach, cl, cd)
     elseif nMach <= 1
-        afalphaRe(alpha, Re, Mach, cl, cd)
+        return afalphaRe(alpha, Re, Mach, cl, cd)
     elseif nRe <= 1
-        afalphaMach(alpha, Re, Mach, cl, cd)
+        return afalphaMach(alpha, Re, Mach, cl, cd)
     else
-        afalphaReMach(alpha, Re, Mach, cl, cd)
+        return afalphaReMach(alpha, Re, Mach, cl, cd)
     end
 end
 
@@ -417,32 +421,29 @@ function residual(phi, rotor, section, op)
     Vx = op.Vx
     Vy = op.Vy
     rho = op.rho
-    mu = op.mu
-    asound = op.asound
-
-    # check if turbine or propeller and change input sign if necessary
-    setsign = turbine ? 1 : -1
-    theta *= setsign
-    Vx *= setsign
-
+    
     # constants
     sigma_p = B*chord/(2.0*pi*r)
     sphi = sin(phi)
     cphi = cos(phi)
 
     # angle of attack
-    alpha = phi - theta
+    alpha = phi - (theta + pitch)
 
     # Reynolds number
     W0 = sqrt(Vx^2 + Vy^2)  # ignoring induction, which is generally a very minor difference and only affects Reynolds/Mach number
-    Re = rho * W0 * chord / mu
+    Re = rho * W0 * chord / op.mu
 
     # Mach number
-    Mach = W0/asound  # also ignoring induction
+    Mach = W0/op.asound  # also ignoring induction
 
     # airfoil cl/cd
-    cl_, cd_ = af(alpha, Re, Mach)
-    cl, cd = cl_[1], cd_[1]
+    if turbine
+        cl, cd = af(alpha, Re, Mach)
+    else
+        cl, cd = af(-alpha, Re, Mach)
+        cl *= -1
+    end
 
     # resolve into normal and tangential forces
     cn = cl*cphi + cd*sphi
@@ -465,65 +466,66 @@ function residual(phi, rotor, section, op)
 
 
     # --- solve for induced velocities ------
-    if isapprox(Vx, 0.0, atol=1e-6)
+    # if isapprox(Vx, 0.0, atol=1e-6)
 
-        u = sign(phi)*k0*Vy
-        v = zero(phi)
-        a = zero(phi)
-        ap = zero(phi)
+    #     u = sign(phi)*k0*Vy
+    #     v = zero(phi)
+    #     a = zero(phi)
+    #     ap = zero(phi)
 
-    elseif isapprox(Vy, 0.0, atol=1e-6)
+    # elseif isapprox(Vy, 0.0, atol=1e-6)
         
-        # u = 0.0
-        # v = k0p*abs(Vx)
-        # a = 0.0
-        # ap = 0.0
+    #     # u = 0.0
+    #     # v = k0p*abs(Vx)
+    #     # a = 0.0
+    #     # ap = 0.0
 
-        u = zero(phi)
-        v = k0p*abs(Vx)
-        a = zero(phi)
-        ap = zero(phi)
+    #     u = zero(phi)
+    #     v = k0p*abs(Vx)
+    #     a = zero(phi)
+    #     ap = zero(phi)
     
-    else
+    # else
 
-        if phi < 0
-            k = -k
-        end
-
-        # if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-        #     return 1.0, Outputs()
-        # end
-
-        if k <= 2.0/3  # momentum region
-            a = k/(1 + k)
-
-        else  # empirical region
-            g1 = 2.0*F*k - (10.0/9-F)
-            g2 = 2.0*F*k - (4.0/3-F)*F
-            g3 = 2.0*F*k - (25.0/9-2*F)
-
-            if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-                a = 1.0 - 1.0/(2.0*sqrt(g2))
-            else
-                a = (g1 - sqrt(g2)) / g3
-            end
-        end
-
-        u = a * Vx
-
-        # -------- tangential induction ----------
-        if Vx < 0
-            kp = -kp
-        end
-
-        # if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-        #     return 1.0, Outputs()
-        # end
-
-        ap = kp/(1 - kp)
-        v = ap * Vy
-
+    if phi < 0
+        k *= -1
     end
+
+    if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+        return 1.0, Outputs()
+    end
+
+    if k <= 2.0/3  # momentum region
+        a = k/(1 + k)
+
+    else  # empirical region
+        g1 = 2.0*F*k - (10.0/9-F)
+        g2 = 2.0*F*k - (4.0/3-F)*F
+        g3 = 2.0*F*k - (25.0/9-2*F)
+
+        if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
+            a = 1.0 - 1.0/(2.0*sqrt(g2))
+        else
+            a = (g1 - sqrt(g2)) / g3
+        end
+    end
+
+    u = a * Vx
+
+    # -------- tangential induction ----------
+    if Vx < 0
+        kp *= -1
+    end
+
+    if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+        return 1.0, Outputs()
+    end
+
+    ap = kp/(1 - kp)
+    v = ap * Vy
+
+
+    # end
 
 
     # ------- residual function -------------
@@ -536,10 +538,6 @@ function residual(phi, rotor, section, op)
     Np = cn*0.5*rho*W^2*chord
     Tp = ct*0.5*rho*W^2*chord
 
-    # ---- swap output signs as needed -----
-    Tp *= setsign
-    v *= setsign
-
     # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
     # This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
     # as they do not contain any hub/tip loss corrections.
@@ -551,7 +549,11 @@ function residual(phi, rotor, section, op)
     u *= G
     v *= G
 
-    return R, Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    if turbine
+        return R, Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    else
+        return R, Outputs(-Np, -Tp, -a, -ap, -u, -v, phi, -alpha, W, -cl, cd, -cn, -ct, F, G)
+    end
 
 end
 
@@ -612,11 +614,9 @@ function solve(rotor, section, op)
     npts = 20  # number of discretization points to find bracket in residual solve
 
     # unpack
-    setsign = rotor.turbine ? 1 : -1
-    Vx = op.Vx * setsign  # TODO: ideally should do sign swap only in one place
+    Vx = op.Vx
     Vy = op.Vy
-    # theta = section.theta * setsign
-    # pitch = op.pitch * setsign
+
 
     # ---- determine quadrants based on case -----
     # Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
@@ -700,10 +700,6 @@ function solve(rotor, section, op)
         # once bracket is found, solve root finding problem and compute loads
         if success
 
-            # phistar = Roots.fzero(R, phiL, phiU)
-            
-            # so = PyCall.pyimport("scipy.optimize")
-            # phistar = so.brentq(R, phiL, phiU)
             phistar = FLOWMath.brent(R, phiL, phiU)
             _, outputs = residual(phistar, rotor, section, op)
             return outputs
@@ -719,21 +715,24 @@ function solve(rotor, section, op)
 end
 
 
+
 # ------------ inflow ------------------
 
 
 
 """
-    simpleinflow(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
+    simple_op(Vinf, Omega, r, rho, mu=1.0, asound=1.0, precone=0.0)
 
 Uniform inflow through rotor.  Returns an Inflow object.
 
 **Arguments**
-- `Vinf::Float64`: freestream speed (m/s)
-- `Omega::Float64`: rotation speed (rad/s)
-- `r::Float64`: radial location where inflow is computed (m)
-- `precone::Float64`: precone angle (rad)
-- `rho::Float64`: air density (kg/m^3)
+- `Vinf::Float`: freestream speed (m/s)
+- `Omega::Float`: rotation speed (rad/s)
+- `r::Float`: radial location where inflow is computed (m)
+- `rho::Float`: air density (kg/m^3)
+- `mu::Float`: air viscosity (Pa * s)
+- `asounnd::Float`: air speed of sound (m/s)
+- `precone::Float`: precone angle (rad)
 """
 function simple_op(Vinf, Omega, r, rho, mu=one(rho), asound=one(rho), precone=zero(Vinf))
 
@@ -759,7 +758,6 @@ and orientation of turbine.  See Documentation for angle definitions.
 **Arguments**
 - `Vhub::Float64`: freestream speed at hub (m/s)
 - `Omega::Float64`: rotation speed (rad/s)
-- `pitch::Float64`: pitch angle (rad)
 - `r::Float64`: radial location where inflow is computed (m)
 - `precone::Float64`: precone angle (rad)
 - `yaw::Float64`: yaw angle (rad)
@@ -769,7 +767,7 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `shearExp::Float64`: power law shear exponent
 - `rho::Float64`: air density (kg/m^3)
 - `mu::Float64`: air viscosity (Pa * s)
-- `asounnd::Float64`: air speed of sound (m/s)
+- `asound::Float64`: air speed of sound (m/s)
 """
 function windturbine_op(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
@@ -866,7 +864,7 @@ end
 
 Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
-outputs[i, j] corresponds to sections[i], azimuth[j].  Integrates across azimuth
+`outputs[i, j]` corresponds to `sections[i], azimuth[j]`.  Integrates across azimuth
 """
 function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
 
@@ -876,8 +874,8 @@ function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
 
     for j = 1:naz
         Tsub, Qsub = thrusttorque(rotor, sections, outputs[:, j])
-        T += Tsub / n
-        Q += Qsub / n
+        T += Tsub / naz
+        Q += Qsub / naz
     end
 
     return T, Q
