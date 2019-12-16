@@ -114,7 +114,7 @@ end
 
 
 """
-    Outputs(Np, Tp, a, ap, u, v, phi, W, cl, cd, F)
+    Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
 
 Outputs from the BEM solver.
 
