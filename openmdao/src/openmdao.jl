@@ -56,12 +56,6 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine)
 end
 
 function OpenMDAO.setup(self::CCBladeResidualComp)
-    # Putting these two lines at the top level of this file doesn't work:
-    # get_rows_cols will be a "Null" PyObject, and then the first call to
-    # get_rows_cols will give a nasty segfault.
-    pyccblade = pyimport("ccblade.ccblade_jl")
-    get_rows_cols = pyccblade.get_rows_cols
-
     num_nodes = self.num_nodes
     num_radial = self.num_radial
 
@@ -99,9 +93,8 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
 
     of_names = ["phi", "Np", "Tp", "a", "ap", "u", "v", "W", "cl", "cd", "cn", "ct", "F", "G"]
 
-    rows, cols = get_rows_cols(
-        of_shape=(num_nodes, num_radial), of_ss="ij",
-        wrt_shape=(num_nodes,), wrt_ss="i")
+    ss_sizes = Dict(:i=>num_nodes, :j=>num_radial)
+    rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss=[:i, :j], wrt_ss=[:i])
     for name in of_names
         push!(partials_data, PartialsData(name, "Rhub", rows=rows, cols=cols))
         push!(partials_data, PartialsData(name, "Rtip", rows=rows, cols=cols))
@@ -112,9 +105,7 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
         push!(partials_data, PartialsData(name, "asound", rows=rows, cols=cols))
     end
 
-    rows, cols = get_rows_cols(
-        of_shape=(num_nodes, num_radial), of_ss="ij",
-        wrt_shape=(num_nodes, num_radial), wrt_ss="ij")
+    rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss=[:i, :j], wrt_ss=[:i, :j])
     for name in of_names
         push!(partials_data, PartialsData(name, "r", rows=rows, cols=cols))
         push!(partials_data, PartialsData(name, "chord", rows=rows, cols=cols))
