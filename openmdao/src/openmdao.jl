@@ -1,5 +1,4 @@
 import Base.convert
-using PyCall
 using OpenMDAO
 using CCBlade: solve
 
