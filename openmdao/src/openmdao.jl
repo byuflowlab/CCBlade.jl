@@ -138,10 +138,9 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
     # Copy the derivatives of the residual to the partials dict. First do the
     # derivative of the phi residual wrt phi.
     deriv = transpose(reshape(partials["phi", "phi"], (num_radial, num_nodes)))
-    @. deriv = getfield(residual_derivs, :phi)
+    deriv .= residual_derivs.phi
 
     # Copy the derivatives of the residual wrt each input.
-    # for i in self.inputs
     for str in keys(inputs)
         sym = Symbol(str)
         deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
@@ -196,21 +195,21 @@ end
 
 function set_inputs!(self::CCBladeResidualComp, inputs)
     # Rotor parameters.
-    setfield!.(self.rotors, :Rhub, inputs["Rhub"])
-    setfield!.(self.rotors, :Rtip, inputs["Rtip"])
-    setfield!.(self.rotors, :precone, inputs["precone"])
+    self.rotors.Rhub = inputs["Rhub"]
+    self.rotors.Rtip = inputs["Rtip"]
+    self.rotors.precone = inputs["precone"]
 
     # Blade section parameters.
-    setfield!.(self.sections, :r, inputs["r"])
-    setfield!.(self.sections, :chord, inputs["chord"])
-    setfield!.(self.sections, :theta, inputs["theta"])
+    self.sections.r = inputs["r"]
+    self.sections.chord = inputs["chord"]
+    self.sections.theta = inputs["theta"]
 
     # Inflow parameters.
-    setfield!.(self.ops, :Vx, inputs["Vx"])
-    setfield!.(self.ops, :Vy, inputs["Vy"])
-    setfield!.(self.ops, :rho, inputs["rho"])
-    setfield!.(self.ops, :mu, inputs["mu"])
-    setfield!.(self.ops, :asound, inputs["asound"])
+    self.ops.Vx = inputs["Vx"]
+    self.ops.Vy = inputs["Vy"]
+    self.ops.rho = inputs["rho"]
+    self.ops.mu = inputs["mu"]
+    self.ops.asound = inputs["asound"]
 
     return nothing
 end

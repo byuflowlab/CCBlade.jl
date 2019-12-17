@@ -25,6 +25,10 @@ end
 # Need this for the mapslices call in output_partials.
 PartialsWrt(x::AbstractArray) = PartialsWrt(x...)
 
+# Convenience function to access fields within an array of structs, from Andrew
+# Ning.
+Base.getproperty(obj::Array{PartialsWrt{TF}, N}, sym::Symbol) where {TF, N} = getfield.(obj, sym)
+
 function pack_inputs(phi, rotor, section, op)
     r = section.r
     chord = section.chord

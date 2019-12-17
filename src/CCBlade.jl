@@ -13,6 +13,7 @@ Some unique features:
 
 module CCBlade
 
+
 import FLOWMath
 
 export Rotor, Section, OperatingPoint, Outputs
@@ -21,11 +22,8 @@ export simple_op, windturbine_op
 export solve, thrusttorque, nondim
 
 
-# include("derivatives.jl")
-# include("openmdao.jl")
 
 # --------- structs -------------
-
 
 """
     Rotor(Rhub, Tip, B, turbine, pitch, precone)
@@ -41,7 +39,7 @@ Scalar parameters defining the rotor.
 - `precone::Float64`: precone angle
 """
 mutable struct Rotor{TF, TI, TB}
-    
+
     Rhub::TF
     Rtip::TF
     B::TI
@@ -78,16 +76,29 @@ end
 # make rotor broadcastable as a single entity
 Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
 
+# convenience function to set fields within an array of structs
+function Base.setproperty!(obj::Array{Rotor{TF, TI, TB}, N}, sym::Symbol, x) where {TF, TI, TB, N}
+    setfield!.(obj, sym, x)
+end
+
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Section{TF, TAF}}, sym::Symbol) where {TF, TAF}
+function Base.getproperty(obj::Array{Section{TF, TAF}, N}, sym::Symbol) where {TF, TAF, N}
     return getfield.(obj, sym)
+end
+
+# convenience function to set fields within an array of structs
+function Base.setproperty!(obj::Array{Section{TF, TAF}, N}, sym::Symbol, x) where {TF, TAF, N}
+    setfield!.(obj, sym, x)
 end
 
 
 """
     OperatingPoint(Vx, Vy, rho, mu=1.0, asound=1.0)
 
-Operation point for a rotor.  The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  See Documentation for more detail on coordinate systems.
+Operation point for a rotor.  
+The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
+See Documentation for more detail on coordinate systems.
+Vx and Vy vary radially at same locations as `r` in the rotor definition.
 
 **Arguments**
 - `Vx::Float64`: velocity in x-direction along blade
@@ -108,15 +119,20 @@ end
 OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, one(rho), one(rho)) 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) where {TF, TF2}
+function Base.getproperty(obj::Array{OperatingPoint{TF, TF2}, N}, sym::Symbol) where {TF, TF2, N}
     return getfield.(obj, sym)
+end
+
+# convenience function to set fields within an array of structs
+function Base.setproperty!(obj::Array{OperatingPoint{TF, TF2}, N}, sym::Symbol, x) where {TF, TF2, N}
+    setfield!.(obj, sym, x)
 end
 
 
 """
     Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
 
-Outputs from the BEM solver.
+Outputs from the BEM solver along the radius.
 
 **Arguments**
 - `Np::Vector{Float64}`: normal force per unit length
@@ -159,7 +175,7 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.1, 0.1, -5.0*pi/180.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF
+function Base.getproperty(obj::Array{Outputs{TF}, N}, sym::Symbol) where {TF, N}
     return getfield.(obj, sym)
 end
 
@@ -400,6 +416,11 @@ end
 af_from_data(alpha, cl, cd) = af_from_data(alpha, Re=[], Mach=[], cl, cd)
 
 
+
+# ---------------------------------
+
+
+
 # ------------ BEM core ------------------
 
 
@@ -460,30 +481,25 @@ function residual(phi, rotor, section, op)
     k = cn*sigma_p/(4.0*F*sphi*sphi)
     kp = ct*sigma_p/(4.0*F*sphi*cphi)
 
-    # parameters used in Vx=0 and Vy=0 cases
-    k0 = cn*sigma_p/(4.0*F*sphi*cphi)
-    k0p = ct*sigma_p/(4.0*F*sphi*sphi)
+    # # parameters used in Vx=0 and Vy=0 cases
+    # k0 = cn*sigma_p/(4.0*F*sphi*cphi)
+    # k0p = ct*sigma_p/(4.0*F*sphi*sphi)
 
 
     # --- solve for induced velocities ------
     # if isapprox(Vx, 0.0, atol=1e-6)
 
     #     u = sign(phi)*k0*Vy
-    #     v = zero(phi)
-    #     a = zero(phi)
-    #     ap = zero(phi)
+    #     v = 0.0
+    #     a = 0.0
+    #     ap = 0.0
 
     # elseif isapprox(Vy, 0.0, atol=1e-6)
         
-    #     # u = 0.0
-    #     # v = k0p*abs(Vx)
-    #     # a = 0.0
-    #     # ap = 0.0
-
-    #     u = zero(phi)
+    #     u = 0.0
     #     v = k0p*abs(Vx)
-    #     a = zero(phi)
-    #     ap = zero(phi)
+    #     a = 0.0
+    #     ap = 0.0
     
     # else
 
@@ -527,11 +543,10 @@ function residual(phi, rotor, section, op)
 
     # end
 
-
     # ------- residual function -------------
-    # R = sin(phi)*(Vy + v) - cos(phi)*(Vx - u)
     # R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
     R = sin(phi)/(Vx - u) - cos(phi)/(Vy + v)
+
 
     # ------- loads ---------
     W = sqrt((Vx - u)^2 + (Vy + v)^2)
@@ -556,6 +571,7 @@ function residual(phi, rotor, section, op)
     end
 
 end
+
 
 
 """
@@ -647,6 +663,18 @@ function solve(rotor, section, op)
     #     end
 
     # elseif Vy_is_zero
+
+    #     startfrom90 = true  # start bracket search from 90 deg
+
+    #     if Vx > 0 && abs(theta) < pi/2
+    #         order = (q1, q3)
+    #     elseif Vx < 0 && abs(theta) < pi/2
+    #         order = (q2, q4)
+    #     elseif Vx > 0 && abs(theta) > pi/2
+    #         order = (q3, q1)
+    #     else  # Vx < 0 && abs(theta) > pi/2
+    #         order = (q4, q2)
+    #     end
 
     # else  # normal case
     
@@ -750,7 +778,7 @@ end
 
 
 """
-    windturbineinflow(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+    windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
 
 Compute relative wind velocity components along blade accounting for inflow conditions
 and orientation of turbine.  See Documentation for angle definitions.
@@ -762,7 +790,7 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `precone::Float64`: precone angle (rad)
 - `yaw::Float64`: yaw angle (rad)
 - `tilt::Float64`: tilt angle (rad)
-- `azimuth::Float64`: azimuth angle (rad)
+- `azimuth::Float64`: azimuth angle to evaluate at (rad)
 - `hubHt::Float64`: hub height (m) - used for shear
 - `shearExp::Float64`: power law shear exponent
 - `rho::Float64`: air density (kg/m^3)
@@ -807,18 +835,6 @@ function windturbine_op(Vhub, Omega, r, precone, yaw, tilt, azimuth, hubHt, shea
     return OperatingPoint(Vx, Vy, rho, mu, asound)
 
 end
-
-
-function windturbineinflow_az(Vhub, Omega, r, precone, yaw, tilt, azimuth_array, hubHt, shearExp, rho, mu=1.0, asound=1.0)
-
-    azinflows = Array{Array{Inflow}}(undef, 4)
-    for i = 1:4
-        azinflows[i] = windturbineinflow.(Vhub, Omega, r, precone, yaw, tilt, azimuth_array[i], hubHt, shearExp, rho)
-    end
-
-    return azinflows
-end
-
 
 # -------------------------------------
 
