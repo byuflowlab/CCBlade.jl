@@ -297,11 +297,11 @@ function afalpha(alpha, Re, Mach, cl, cd)
         cd = cd[:, 1, 1]
     end
 
-    afcl = FLOWMath.akima_setup(alpha, cl)
-    afcd = FLOWMath.akima_setup(alpha, cd)
+    afcl = FLOWMath.Akima(alpha, cl)
+    afcd = FLOWMath.Akima(alpha, cd)
 
-    afeval(alpha_pt, Re_pt, M_pt) = FLOWMath.akima_interp(alpha_pt, afcl)[1], 
-                                    FLOWMath.akima_interp(alpha_pt, afcd)[1]
+    afeval(alpha_pt, Re_pt, M_pt) = afcl(alpha_pt)[1], 
+                                    afcd(alpha_pt)[1]
     return afeval
 end
 
