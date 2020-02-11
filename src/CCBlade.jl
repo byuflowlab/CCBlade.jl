@@ -468,16 +468,19 @@ function residual(phi, rotor, section, op)
     # --- solve for induced velocities ------
     if isapprox(Vx, 0.0, atol=1e-6)
 
-        u = sign(phi)*k0*Vy*F
+        # u = sign(phi)*k0*Vy*F
+        u = sign(phi)*k0*Vy
         v = 0.0
         a = 0.0
         ap = 0.0
-        R = sin(phi)^2 + sign(phi)*cn*sigma_p/(4.0*F^2)
+        # R = sin(phi)^2 + sign(phi)*cn*sigma_p/(4.0*F^2)
+        R = sin(phi)^2 + sign(phi)*cn*sigma_p/(4.0*F)
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
         
         u = 0.0
-        v = k0p*abs(Vx)*F
+        # v = k0p*abs(Vx)*F
+        v = k0p*abs(Vx)
         a = 0.0
         ap = 0.0
         R = sign(Vx)*4*F*sphi*cphi - ct*sigma_p
