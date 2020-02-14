@@ -276,6 +276,7 @@ end
 @testset "qualitative check" begin
 
 # cd(joinpath(dirname(pathof(CCBlade))))
+println(pwd())
 
 
 # --------- qualitative --------------
