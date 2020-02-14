@@ -462,70 +462,69 @@ function residual(phi, rotor, section, op)
     kp = ct*sigma_p/(4.0*F*sphi*cphi)
 
     # # parameters used in Vx=0 and Vy=0 cases
-    # k0 = cn*sigma_p/(4.0*F*sphi*cphi)
-    # k0p = ct*sigma_p/(4.0*F*sphi*sphi)
-
+    k0 = cn*sigma_p/(4.0*F*sphi*cphi)
+    k0p = ct*sigma_p/(4.0*F*sphi*sphi)
 
     # --- solve for induced velocities ------
-    # if isapprox(Vx, 0.0, atol=1e-6)
+    if isapprox(Vx, 0.0, atol=1e-6)
 
-    #     u = sign(phi)*k0*Vy
-    #     v = 0.0
-    #     a = 0.0
-    #     ap = 0.0
+        u = sign(phi)*k0*Vy
+        v = 0.0
+        a = 0.0
+        ap = 0.0
+        R = sin(phi)^2 + sign(phi)*cn*sigma_p/(4.0*F)
 
-    # elseif isapprox(Vy, 0.0, atol=1e-6)
+    elseif isapprox(Vy, 0.0, atol=1e-6)
         
-    #     u = 0.0
-    #     v = k0p*abs(Vx)
-    #     a = 0.0
-    #     ap = 0.0
+        u = 0.0
+        v = k0p*abs(Vx)
+        a = 0.0
+        ap = 0.0
+        R = sign(Vx)*4*F*sphi*cphi - ct*sigma_p
     
-    # else
+    else
 
-    if phi < 0
-        k *= -1
-    end
-
-    if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-        return 1.0
-    end
-
-    if k <= 2.0/3  # momentum region
-        a = k/(1 + k)
-
-    else  # empirical region
-        g1 = 2.0*F*k - (10.0/9-F)
-        g2 = 2.0*F*k - (4.0/3-F)*F
-        g3 = 2.0*F*k - (25.0/9-2*F)
-
-        if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-            a = 1.0 - 1.0/(2.0*sqrt(g2))
-        else
-            a = (g1 - sqrt(g2)) / g3
+        if phi < 0
+            k *= -1
         end
+
+        if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
+            return 1.0
+        end
+
+        if k <= 2.0/3  # momentum region
+            a = k/(1 + k)
+
+        else  # empirical region
+            g1 = 2.0*F*k - (10.0/9-F)
+            g2 = 2.0*F*k - (4.0/3-F)*F
+            g3 = 2.0*F*k - (25.0/9-2*F)
+
+            if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
+                a = 1.0 - 1.0/(2.0*sqrt(g2))
+            else
+                a = (g1 - sqrt(g2)) / g3
+            end
+        end
+
+        u = a * Vx
+
+        # -------- tangential induction ----------
+        if Vx < 0
+            kp *= -1
+        end
+
+        if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
+            return 1.0
+        end
+
+        ap = kp/(1 - kp)
+        v = ap * Vy
+
+
+        # ------- residual function -------------
+        R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
     end
-
-    u = a * Vx
-
-    # -------- tangential induction ----------
-    if Vx < 0
-        kp *= -1
-    end
-
-    if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-        return 1.0
-    end
-
-    ap = kp/(1 - kp)
-    v = ap * Vy
-
-
-    # end
-
-    # ------- residual function -------------
-    # R = sin(phi)/(1 - a) - Vx/Vy*cos(phi)/(1 + ap)
-    R = sin(phi)/(Vx - u) - cos(phi)/(Vy + v)
 
 
     # ------- loads ---------
@@ -540,7 +539,14 @@ function residual(phi, rotor, section, op)
     # In other words:
     # CT = 4 a (1 - a) F = 4 a G (1 - a G)\n
     # This is solved for G, then multiplied against the wake velocities.
-    G = (1.0 - sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
+    
+    if isapprox(Vx, 0.0, atol=1e-6)
+        G = sqrt(F)
+    elseif isapprox(Vy, 0.0, atol=1e-6)
+        G = F
+    else
+        G = (1.0 - sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
+    end
     u *= G
     v *= G
 
@@ -612,11 +618,11 @@ function solve(rotor, section, op)
     # unpack
     Vx = op.Vx
     Vy = op.Vy
-
+    theta = section.theta + rotor.pitch
 
     # ---- determine quadrants based on case -----
-    # Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
-    # Vy_is_zero = isapprox(Vy, 0.0, atol=1e-6)
+    Vx_is_zero = isapprox(Vx, 0.0, atol=1e-6)
+    Vy_is_zero = isapprox(Vy, 0.0, atol=1e-6)
 
     # quadrants
     epsilon = 1e-6
@@ -625,52 +631,54 @@ function solve(rotor, section, op)
     q3 = [pi/2, pi-epsilon]
     q4 = [-pi+epsilon, -pi/2]
 
-    # if Vx_is_zero && Vy_is_zero
-    #     return Outputs()
+    if Vx_is_zero && Vy_is_zero
+        return Outputs()
 
-    # elseif Vx_is_zero
+    elseif Vx_is_zero
 
-    #     startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
+        startfrom90 = false  # start bracket search from 90 deg instead of 0 deg.
 
-    #     if Vy > 0 && theta > 0
-    #         order = (q1, q2)
-    #     elseif Vy > 0 && theta < 0
-    #         order = (q2, q1)
-    #     elseif Vy < 0 && theta > 0
-    #         order = (q3, q4)
-    #     else  # Vy < 0 && theta < 0
-    #         order = (q4, q3)
-    #     end
+        if Vy > 0 && theta > 0
+            order = (q1, q2)
+        elseif Vy > 0 && theta < 0
+            order = (q2, q1)
+        elseif Vy < 0 && theta > 0
+            order = (q3, q4)
+        else  # Vy < 0 && theta < 0
+            order = (q4, q3)
+        end
 
-    # elseif Vy_is_zero
+    elseif Vy_is_zero
 
-    #     startfrom90 = true  # start bracket search from 90 deg
+        startfrom90 = true  # start bracket search from 90 deg
 
-    #     if Vx > 0 && abs(theta) < pi/2
-    #         order = (q1, q3)
-    #     elseif Vx < 0 && abs(theta) < pi/2
-    #         order = (q2, q4)
-    #     elseif Vx > 0 && abs(theta) > pi/2
-    #         order = (q3, q1)
-    #     else  # Vx < 0 && abs(theta) > pi/2
-    #         order = (q4, q2)
-    #     end
+        if Vx > 0 && abs(theta) < pi/2
+            order = (q1, q3)
+        elseif Vx < 0 && abs(theta) < pi/2
+            order = (q2, q4)
+        elseif Vx > 0 && abs(theta) > pi/2
+            order = (q3, q1)
+        else  # Vx < 0 && abs(theta) > pi/2
+            order = (q4, q2)
+        end
 
-    # else  # normal case
+    else  # normal case
     
 
     # for i = 1:nr
 
-    startfrom90 = false
+        startfrom90 = false
 
-    if Vx > 0 && Vy > 0
-        order = (q1, q2, q3, q4)
-    elseif Vx < 0 && Vy > 0
-        order = (q2, q1, q4, q3)
-    elseif Vx > 0 && Vy < 0
-        order = (q3, q4, q1, q2)
-    else  # Vx[i] < 0 && Vy[i] < 0
-        order = (q4, q3, q2, q1)
+        if Vx > 0 && Vy > 0
+            order = (q1, q2, q3, q4)
+        elseif Vx < 0 && Vy > 0
+            order = (q2, q1, q4, q3)
+        elseif Vx > 0 && Vy < 0
+            order = (q3, q4, q1, q2)
+        else  # Vx[i] < 0 && Vy[i] < 0
+            order = (q4, q3, q2, q1)
+        end
+
     end
 
         
@@ -688,15 +696,15 @@ function solve(rotor, section, op)
 
         # check to see if it would be faster to reverse the bracket search direction
         backwardsearch = false
-        # if !startfrom90
-        if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
-            backwardsearch = true
+        if !startfrom90
+            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                backwardsearch = true
+            end
+        else
+            if phimax == pi/2  # q1
+                backwardsearch = true
+            end
         end
-        # else
-        #     if phimax == pi/2  # q1
-        #         backwardsearch = true
-        #     end
-        # end
         
         # force to dual numbers if necessary
         phimin = phimin*one(section.chord)
@@ -742,7 +750,8 @@ Uniform inflow through rotor.  Returns an Inflow object.
 - `asounnd::Float`: air speed of sound (m/s)
 - `precone::Float`: precone angle (rad)
 """
-function simple_op(Vinf, Omega, r, rho, mu=one(rho), asound=one(rho), precone=zero(Vinf))
+function simple_op(Vinf, Omega, r, rho; mu=one(rho), asound=one(rho), precone=zero(Vinf))
+    # TODO: change this to keyword args in #master
 
     # error handling
     if typeof(r) <: Vector
