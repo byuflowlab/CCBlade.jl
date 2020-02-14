@@ -275,9 +275,6 @@ end
 
 @testset "qualitative check" begin
 
-# cd(joinpath(dirname(pathof(CCBlade))))
-println(pwd())
-
 
 # --------- qualitative --------------
 # The following tests are only qualitative.  They are not comparisons to known
@@ -306,14 +303,14 @@ theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
 # Define airfoils.  In this case we have 8 different airfoils that we load into an array.
 # These airfoils are defined in files.
 aftypes = Array{Any}(undef, 8)
-aftypes[1] = af_from_files("../test/airfoils/Cylinder1.dat")
-aftypes[2] = af_from_files("../test/airfoils/Cylinder2.dat")
-aftypes[3] = af_from_files("../test/airfoils/DU40_A17.dat")
-aftypes[4] = af_from_files("../test/airfoils/DU35_A17.dat")
-aftypes[5] = af_from_files("../test/airfoils/DU30_A17.dat")
-aftypes[6] = af_from_files("../test/airfoils/DU25_A17.dat")
-aftypes[7] = af_from_files("../test/airfoils/DU21_A17.dat")
-aftypes[8] = af_from_files("../test/airfoils/NACA64_A17.dat")
+aftypes[1] = af_from_files("airfoils/Cylinder1.dat")
+aftypes[2] = af_from_files("airfoils/Cylinder2.dat")
+aftypes[3] = af_from_files("airfoils/DU40_A17.dat")
+aftypes[4] = af_from_files("airfoils/DU35_A17.dat")
+aftypes[5] = af_from_files("airfoils/DU30_A17.dat")
+aftypes[6] = af_from_files("airfoils/DU25_A17.dat")
+aftypes[7] = af_from_files("airfoils/DU21_A17.dat")
+aftypes[8] = af_from_files("airfoils/NACA64_A17.dat")
 
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
@@ -413,7 +410,7 @@ theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
                    12.8685, 12.5233, 12.2138]
 
-af = af_from_files("../test/airfoils/NACA64_A17.dat")
+af = af_from_files("airfoils/NACA64_A17.dat")
 airfoils = fill(af, length(r))
 
 rotor = Rotor(Rhub, Rtip, B, turbine)
@@ -490,7 +487,7 @@ B = 3
 
 r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
 
-af = af_from_files("../test/NACA0012v2.txt")
+af = af_from_files("NACA0012v2.txt")
 function af2(alpha, Re, M)
     cl, cd = af(alpha, Re, M)
     return cl, cd+0.014
