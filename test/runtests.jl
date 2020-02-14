@@ -487,7 +487,7 @@ B = 3
 
 r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
 
-af = af_from_files("NACA0012v2.txt")
+af = af_from_files("naca0012v2.txt")
 function af2(alpha, Re, M)
     cl, cd = af(alpha, Re, M)
     return cl, cd+0.014
