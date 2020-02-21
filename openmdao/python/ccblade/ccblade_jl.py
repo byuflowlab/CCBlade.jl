@@ -1,9 +1,10 @@
 import os
 import numpy as np
 import openmdao.api as om
-from omjl.julia_comps import JuliaImplicitComp
+from omjl import make_component
 from ccblade.ccblade_py import FunctionalsComp
-import julia.CCBlade as CCBlade
+from julia.CCBladeOpenMDAOExample import CCBladeResidualComp
+from julia.CCBlade import af_from_files
 
 
 sqa_training = np.array([0.00, 0.04, 0.08, 0.12, 0.16, 0.20, 0.24, 0.28, 0.32])
@@ -82,12 +83,11 @@ class CCBladeGroup(om.Group):
         # Stole this from John Hwang's OpenBEMT code.
         this_dir = os.path.split(__file__)[0]
         file_path = os.path.join(this_dir, 'airfoils', af_filename)
-        af = CCBlade.af_from_files([file_path])
+        af = af_from_files([file_path])
 
-        julia_comp_data = CCBlade.CCBladeResidualComp(
+        comp = make_component(CCBladeResidualComp(
             num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades,
-            turbine=turbine, debug_print=True)
-        comp = JuliaImplicitComp(julia_comp_data=julia_comp_data)
+            turbine=turbine))
         comp.linear_solver = om.DirectSolver(assemble_jac=True)
         self.add_subsystem('ccblade_comp', comp,
                            promotes_inputs=[("r", "radii"), "chord", "theta",

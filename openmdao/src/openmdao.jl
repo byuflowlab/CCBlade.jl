@@ -1,5 +1,6 @@
 import Base.convert
 using OpenMDAO
+import OpenMDAO: detect_apply_nonlinear, detect_guess_nonlinear, detect_apply_linear
 using CCBlade: solve
 
 struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
@@ -213,3 +214,7 @@ function set_inputs!(self::CCBladeResidualComp, inputs)
 
     return nothing
 end
+
+detect_apply_nonlinear(::Type{CCBladeResidualComp}) = false
+detect_guess_nonlinear(::Type{CCBladeResidualComp}) = false
+detect_apply_linear(::Type{CCBladeResidualComp}) = false

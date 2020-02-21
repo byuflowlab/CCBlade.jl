@@ -1,6 +1,7 @@
 # CCBlade.jl
 
 [![](https://img.shields.io/badge/docs-dev-blue.svg)](https://flow.byu.edu/CCBlade.jl)
+![](https://github.com/byuflowlab/CCBlade.jl/workflows/Run%20tests/badge.svg)
 
 
 Blade Element Momentum Method for Propellers and Turbines.  

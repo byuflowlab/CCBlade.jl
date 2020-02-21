@@ -1,7 +1,8 @@
 import time
 import numpy as np
 
-from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
+from openmdao.api import IndepVarComp, Problem
+# from openmdao.api import pyOptSparseDriver
 from ccblade.geometry import GeometryGroup
 from ccblade.inflow import SimpleInflow
 from ccblade.ccblade_jl import CCBladeGroup
