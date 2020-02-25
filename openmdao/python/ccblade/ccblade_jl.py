@@ -94,7 +94,7 @@ class CCBladeGroup(om.Group):
                                             "Vx", "Vy", "rho", "mu", "asound",
                                             ("Rhub", "hub_radius"),
                                             ("Rtip", "prop_radius"),
-                                            "precone"],
+                                            "precone", "pitch"],
                            promotes_outputs=['Np', 'Tp'])
 
         comp = FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial,

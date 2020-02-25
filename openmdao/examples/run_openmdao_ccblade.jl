@@ -49,7 +49,7 @@ comp = pyccblade_geom.GeometryGroup(num_nodes=num_nodes, num_cp=num_cp, num_radi
 prob.model.add_subsystem(
     "geometry_group", comp,
     promotes_inputs=["hub_diameter", "prop_diameter", "chord_dv",
-                     "theta_dv", "pitch"],
+                     "theta_dv"],
     promotes_outputs=["radii", "dradii", "chord", "theta"])
 
 group = om.Group()
@@ -89,7 +89,7 @@ comp.linear_solver = om.DirectSolver(assemble_jac=true)
 group.add_subsystem("ccblade_residual_comp", comp,
                     promotes_inputs=[("r", "radii"), "chord", "theta", "Vx",
                                      "Vy", "rho", "mu", "asound",
-                                     # "pitch",
+                                     "pitch",
                                      ("Rhub", "hub_radius"), ("Rtip", "prop_radius"),
                                      "precone"],
                     promotes_outputs=["Np", "Tp"])
