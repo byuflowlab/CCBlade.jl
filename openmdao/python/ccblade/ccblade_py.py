@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 
 import openmdao.api as om
@@ -97,13 +98,16 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         asound = inputs['asound']
         Rhub = inputs['hub_radius']
         Rtip = inputs['prop_radius']
+        pitch = inputs['pitch']
 
         phi = outputs['phi']
 
         # check if turbine or propeller and change input sign if necessary
         swapsign = 1 if turbine else -1
-        theta = swapsign * inputs['theta']
-        Vx = swapsign * inputs['Vx']
+        # theta = swapsign * inputs['theta']
+        # Vx = swapsign * inputs['Vx']
+        theta = inputs['theta']
+        Vx = inputs['Vx']
 
         # constants
         sigma_p = B*chord/(2.0*np.pi*r)
@@ -111,7 +115,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         cphi = np.cos(phi)
 
         # angle of attack
-        alpha = phi - theta
+        alpha = phi - (theta + pitch)
 
         # Reynolds number
         W0 = np.sqrt(Vx*Vx + Vy*Vy)  # ignoring induction, which is generally a very minor error and only affects Reynolds number
@@ -123,8 +127,16 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # airfoil cl/cd
         cl = np.zeros_like(alpha)
         cd = np.zeros_like(alpha)
-        for i in range(num_radial):
-            cl[:, i], cd[:, i] = af[i](alpha[:, i], Re[:, i], Mach[:, i])
+        if turbine:
+            for i in range(num_radial):
+                cl[:, i], cd[:, i] = af[i](alpha[:, i], Re[:, i], Mach[:, i])
+        else:
+            for i in range(num_radial):
+                # I don't know why the airfoil interpolation function sometimes returns 1D arrays and sometimes 2D.
+                CL, CD = af[i](-alpha[:, i], Re[:, i], Mach[:, i])
+                cl[:, i] = np.squeeze(CL)
+                cd[:, i] = np.squeeze(CD)
+            cl *= -1
 
         # resolve into normal and tangential forces
         cn = cl*cphi + cd*sphi
@@ -167,6 +179,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         v = np.zeros_like(phi)
         a = np.zeros_like(phi)
         ap = np.zeros_like(phi)
+        G = np.zeros_like(phi)
         for i in range(num_nodes):
             for j in range(num_radial):
                 if np.isclose(Vx[i, j], 0.0, atol=1e-6):
@@ -174,17 +187,22 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                     v[i, j] = 0.0
                     a[i, j] = 0.0
                     ap[i, j] = 0.0
+                    residuals['phi'][i, j] = np.sin(phi[i, j])**2 + np.sign(phi[i, j])*cn[i, j]*sigma_p[i, j]/(4.0*F[i, j])
+                    G[i, j] = np.sqrt(F[i, j])
                 elif np.isclose(Vy[i, j], 0.0, atol=1e-6):
                     u[i, j] = 0.0
                     v[i, j] = k0p[i, j]*abs_cs(Vx[i, j])
                     a[i, j] = 0.0
                     ap[i, j] = 0.0
+                    residuals['phi'][i, j] = np.sign(Vx[i, j])*4*F[i, j]*sphi[i, j]*cphi[i, j] - ct[i, j]*sigma_p[i, j]
+                    G[i, j] = F[i, j]
                 else:
                     if phi[i, j] < 0.0:
                         k[i, j] *= -1.0
 
                     if k[i, j] <= 2./3.:  # momentum region
                         a[i, j] = k[i, j]/(1 + k[i, j])
+
                     else:  # empirical region
                         g1 = 2.0*F[i, j]*k[i, j] - (10.0/9-F[i, j])
                         g2 = 2.0*F[i, j]*k[i, j] - (4.0/3-F[i, j])*F[i, j]
@@ -202,6 +220,9 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
                     ap[i, j] = kp[i, j]/(1 - kp[i, j])
                     v[i, j] = ap[i, j] * Vy[i, j]
+
+                    residuals['phi'][i, j] = np.sin(phi[i, j])/(1 - a[i, j]) - Vx[i, j]/Vy[i, j]*np.cos(phi[i, j])/(1 + ap[i, j])
+                    G[i, j] = (1.0 - np.sqrt(1.0 - 4*a[i, j]*(1.0 - a[i, j])*F[i, j]))/(2*a[i, j])
 
         ####################################
         # Fast Pythonized Code
@@ -228,16 +249,13 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # ap = kp/(1 - kp)
         # v = ap * Vy
 
-        # ------- residual function -------------
-        residuals['phi'] = np.sin(phi)/(Vx - u) - np.cos(phi)/(Vy + v)
-
         # ------- loads ---------
         W = np.sqrt((Vx - u)**2 + (Vy + v)**2)
         Np = cn*0.5*rho*W*W*chord
         Tp = ct*0.5*rho*W*W*chord
 
-        Tp *= swapsign
-        v *= swapsign
+        # Tp *= swapsign
+        # v *= swapsign
 
         # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.
         # This is the most common way to implement a BEM, but it means that the raw velocities are misleading
@@ -246,9 +264,20 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         # In other words:
         # CT = 4 a (1 - a) F = 4 a G (1 - a G)\n
         # This is solved for G, then multiplied against the wake velocities.
-        G = (1.0 - np.sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
+        # G = (1.0 - np.sqrt(1.0 - 4*a*(1.0 - a)*F))/(2*a)
         u *= G
         v *= G
+
+        Np *= swapsign
+        Tp *= swapsign
+        a *= swapsign
+        ap *= swapsign
+        u *= swapsign
+        v *= swapsign
+        alpha *= swapsign
+        cl *= swapsign
+        cn *= swapsign
+        ct *= swapsign
 
         # Other residuals.
         residuals['Np'] = Np - outputs['Np']
@@ -332,7 +361,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 print(f"{steps_taken} solve_nonlinear res_norm: {res_norm}")
 
         # Fix up the other outputs.
-        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'alpha', 'W', 'cl', 'cd', 'cn', 'ct', 'F', 'G')
         for name in out_names:
             if np.all(np.logical_not(np.isnan(residuals[name]))):
                 outputs[name] += residuals[name]
@@ -351,6 +380,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         bracket_found, phi_1, phi_2 = self._first_bracket(
             inputs, outputs, self._residuals)
         if not np.all(bracket_found):
+            # print(f"bracket_found =\n{bracket_found}")
             raise om.AnalysisError("CCBlade bracketing failed")
 
         # Create a wrapper function compatible with the brentv function.
@@ -363,7 +393,7 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         phi, steps_taken, success = brentv(f, phi_1, phi_2, tolerance=SOLVE_TOL)
 
         # Fix up the other outputs.
-        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'W', 'cl', 'cd', 'F')
+        out_names = ('Np', 'Tp', 'a', 'ap', 'u', 'v', 'alpha', 'W', 'cl', 'cd', 'cn', 'ct', 'F', 'G')
         for name in out_names:
             if np.all(np.logical_not(np.isnan(self._residuals[name]))):
                 outputs[name] += self._residuals[name]
@@ -382,14 +412,11 @@ class LocalInflowAngleComp(om.ImplicitComponent):
     def _first_bracket(self, inputs, outputs, residuals):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
-        turbine = self.options['turbine']
 
         # parameters
         npts = 20  # number of discretization points to find bracket in residual solve
 
-        swapsign = 1 if turbine else -1
-        Vx = inputs['Vx'] * swapsign
-        # theta = inputs['theta'] * swapsign
+        Vx = inputs['Vx']
         Vy = inputs['Vy']
 
         # quadrants
@@ -474,8 +501,9 @@ class FunctionalsComp(om.ExplicitComponent):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
 
+        self.add_input('hub_radius', shape=(num_nodes, 1), units='m')
+        self.add_input('prop_radius', shape=(num_nodes, 1), units='m')
         self.add_input('radii', shape=(num_nodes, num_radial), units='m')
-        self.add_input('dradii', shape=(num_nodes, num_radial), units='m')
         self.add_input('Np',
                        shape=(num_nodes, num_radial), units='N/m')
         self.add_input('Tp',
@@ -496,154 +524,212 @@ class FunctionalsComp(om.ExplicitComponent):
                                   show_summary=True, show_sparsity=False)
         else:
             ss_sizes = {'i': num_nodes, 'j': num_radial}
+
             rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss='i', wrt_ss='ij')
 
             self.declare_partials('thrust', 'Np', rows=rows, cols=cols)
-            self.declare_partials('thrust', 'dradii', rows=rows, cols=cols)
+            self.declare_partials('thrust', 'radii', rows=rows, cols=cols)
 
             self.declare_partials('torque', 'Tp', rows=rows, cols=cols)
             self.declare_partials('torque', 'radii', rows=rows, cols=cols)
-            self.declare_partials('torque', 'dradii', rows=rows, cols=cols)
 
             self.declare_partials('power', 'Tp', rows=rows, cols=cols)
             self.declare_partials('power', 'radii', rows=rows, cols=cols)
-            self.declare_partials('power', 'dradii', rows=rows, cols=cols)
 
             self.declare_partials('efficiency', 'Np', rows=rows, cols=cols)
-            self.declare_partials('efficiency', 'dradii', rows=rows, cols=cols)
             self.declare_partials('efficiency', 'Tp', rows=rows, cols=cols)
             self.declare_partials('efficiency', 'radii', rows=rows, cols=cols)
 
             rows, cols = get_rows_cols(ss_sizes=ss_sizes, of_ss='i', wrt_ss='i')
+
+            self.declare_partials('thrust', 'hub_radius', rows=rows, cols=cols)
+            self.declare_partials('thrust', 'prop_radius', rows=rows, cols=cols)
+
+            self.declare_partials('torque', 'hub_radius', rows=rows, cols=cols)
+            self.declare_partials('torque', 'prop_radius', rows=rows, cols=cols)
+
+            self.declare_partials('power', 'hub_radius', rows=rows, cols=cols)
+            self.declare_partials('power', 'prop_radius', rows=rows, cols=cols)
             self.declare_partials('power', 'omega', rows=rows, cols=cols)
 
-            self.declare_partials('efficiency', 'v', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'hub_radius', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'prop_radius', rows=rows, cols=cols)
             self.declare_partials('efficiency', 'omega', rows=rows, cols=cols)
+            self.declare_partials('efficiency', 'v', rows=rows, cols=cols)
 
     def compute(self, inputs, outputs):
+        num_nodes = self.options['num_nodes']
+        num_radial = self.options['num_radial']
         B = self.options['num_blades']
-        radii = inputs['radii']
-        dradii = inputs['dradii']
-        Np = inputs['Np']
-        Tp = inputs['Tp']
-        v = inputs['v'][:, np.newaxis]
-        omega = inputs['omega'][:, np.newaxis]
 
-        thrust = outputs['thrust'][:] = B*np.sum(Np * dradii, axis=1)
-        torque = outputs['torque'][:] = B*np.sum(Tp * radii * dradii, axis=1)
-        outputs['power'][:] = outputs['torque']*inputs['omega']
+        v = inputs['v']
+        omega = inputs['omega']
+        dtype = omega.dtype
 
-        outputs['efficiency'] = (thrust*v[:, 0])/(torque*omega[:, 0])
+        radii = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        radii[:, 0] = inputs['hub_radius'][:, 0]
+        radii[:, 1:-1] = inputs['radii']
+        radii[:, -1] = inputs['prop_radius'][:, 0]
+
+        Np = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        Np[:, 0] = 0.0
+        Np[:, 1:-1] = inputs['Np']
+        Np[:, -1] = 0.0
+        thrust = outputs['thrust'][:] = B*np.sum((radii[:, 1:] - radii[:, :-1])*0.5*(Np[:, :-1] + Np[:, 1:]), axis=1)
+
+        Tp = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        Tp[:, 0] = 0.0
+        Tp[:, 1:-1] = inputs['Tp']
+        Tp[:, -1] = 0.0
+        Tp *= radii
+        torque = outputs['torque'][:] = B*np.sum((radii[:, 1:] - radii[:, :-1])*0.5*(Tp[:, :-1] + Tp[:, 1:]), axis=1)
+
+        outputs['power'][:] = torque*omega
+        outputs['efficiency'][:] = (thrust*v)/outputs['power']
 
     def compute_partials(self, inputs, partials):
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
         B = self.options['num_blades']
-        radii = inputs['radii']
-        dradii = inputs['dradii']
-        Np = inputs['Np']
-        Tp = inputs['Tp']
-        v = inputs['v'][:, np.newaxis]
-        omega = inputs['omega'][:, np.newaxis]
 
-        thrust = B*np.sum(Np * dradii, axis=1, keepdims=True)
-        torque = B*np.sum(Tp * radii * dradii, axis=1, keepdims=True)
+        v = inputs['v']
+        omega = inputs['omega']
+        dtype = omega.dtype
+
+        radii = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        radii[:, 0] = inputs['hub_radius'][:, 0]
+        radii[:, 1:-1] = inputs['radii']
+        radii[:, -1] = inputs['prop_radius'][:, 0]
+
+        Np = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        Np[:, 0] = 0.0
+        Np[:, 1:-1] = inputs['Np']
+        Np[:, -1] = 0.0
+
+        thrust = B*np.sum((radii[:, 1:] - radii[:, :-1])*0.5*(Np[:, :-1] + Np[:, 1:]), axis=1)
 
         dthrust_dNp = partials['thrust', 'Np']
         dthrust_dNp.shape = (num_nodes, num_radial)
-        dthrust_dNp[:, :] = B * dradii
-        dthrust_dNp.shape = (-1,)
+        dthrust_dNp[:, :] = B*(radii[:, 1:-1] - radii[:, :-2])*0.5 + B*(radii[:, 2:] - radii[:, 1:-1])*0.5
 
-        dthrust_ddradii = partials['thrust', 'dradii']
-        dthrust_ddradii.shape = (num_nodes, num_radial)
-        dthrust_ddradii[:, :] = B * Np
-        dthrust_ddradii.shape = (-1,)
+        dthrust_dradii = partials['thrust', 'radii']
+        dthrust_dradii.shape = (num_nodes, num_radial)
+        dthrust_dradii[:, :] = B*0.5*(Np[:, :-2] + Np[:, 1:-1]) - B*0.5*(Np[:, 1:-1] + Np[:, 2:])
+
+        dthrust_dhub_radius = partials['thrust', 'hub_radius']
+        dthrust_dhub_radius.shape = (num_nodes,)
+        dthrust_dhub_radius[:] = B*(-0.5)*(Np[:, 0] + Np[:, 1])
+
+        dthrust_dprop_radius = partials['thrust', 'prop_radius']
+        dthrust_dprop_radius.shape = (num_nodes,)
+        dthrust_dprop_radius[:] = B*0.5*(Np[:, -2] + Np[:, -1])
+
+        Tp = np.empty((num_nodes, num_radial+2), dtype=dtype)
+        Tp[:, 0] = 0.0
+        Tp[:, 1:-1] = inputs['Tp']
+        Tp[:, -1] = 0.0
+
+        torque = B*np.sum((radii[:, 1:] - radii[:, :-1])*0.5*(Tp[:, :-1]*radii[:, :-1] + Tp[:, 1:]*radii[:, 1:]), axis=1)
 
         dtorque_dTp = partials['torque', 'Tp']
         dtorque_dTp.shape = (num_nodes, num_radial)
-        dtorque_dTp[:, :] = B * radii * dradii
-        dtorque_dTp.shape = (-1,)
+        dtorque_dTp[:, :] = B*(radii[:, 1:-1] - radii[:, :-2])*0.5*radii[:, 1:-1] + B*(radii[:, 2:] - radii[:, 1:-1])*0.5*radii[:, 1:-1]
 
         dtorque_dradii = partials['torque', 'radii']
         dtorque_dradii.shape = (num_nodes, num_radial)
-        dtorque_dradii[:, :] = B * Tp * dradii
-        dtorque_dradii.shape = (-1,)
+        dtorque_dradii[:, :] = B*(0.5)*(Tp[:, :-2]*radii[:, :-2] + Tp[:, 1:-1]*radii[:, 1:-1])
+        dtorque_dradii[:, :] += B*(-0.5)*(Tp[:, 1:-1]*radii[:, 1:-1] + Tp[:, 2:]*radii[:, 2:])
+        dtorque_dradii[:, :] += B*(radii[:, 2:] - radii[:, 1:-1])*0.5*(Tp[:, 1:-1])
+        dtorque_dradii[:, :] += B*(radii[:, 1:-1] - radii[:, :-2])*0.5*(Tp[:, 1:-1])
 
-        dtorque_ddradii = partials['torque', 'dradii']
-        dtorque_ddradii.shape = (num_nodes, num_radial)
-        dtorque_ddradii[:, :] = B * Tp * radii
-        dtorque_ddradii.shape = (-1,)
+        dtorque_dhub_radius = partials['torque', 'hub_radius']
+        dtorque_dhub_radius.shape = (num_nodes,)
+        dtorque_dhub_radius[:] = B*(-0.5)*(Tp[:, 0]*radii[:, 0] + Tp[:, 1]*radii[:, 1])
+        dtorque_dhub_radius[:] += B*(radii[:, 1] - radii[:, 0])*0.5*(Tp[:, 0])
+
+        dtorque_dprop_radius = partials['torque', 'prop_radius']
+        dtorque_dprop_radius.shape = (num_nodes,)
+        dtorque_dprop_radius[:] = B*(0.5)*(Tp[:, -2]*radii[:, -2] + Tp[:, -1]*radii[:, -1])
+        dtorque_dprop_radius[:] += B*(radii[:, -1] - radii[:, -2])*0.5*(Tp[:, -1])
+
+        power = torque*omega
 
         dpower_dTp = partials['power', 'Tp']
         dpower_dTp.shape = (num_nodes, num_radial)
-        dpower_dTp[:, :] = B * radii * dradii * omega
-        dpower_dTp.shape = (-1,)
+        dpower_dTp[:, :] = dtorque_dTp*omega[:, np.newaxis]
 
         dpower_dradii = partials['power', 'radii']
         dpower_dradii.shape = (num_nodes, num_radial)
-        dpower_dradii[:, :] = B * Tp * dradii * omega
-        dpower_dradii.shape = (-1,)
+        dpower_dradii[:, :] = dtorque_dradii*omega[:, np.newaxis]
 
-        dpower_ddradii = partials['power', 'dradii']
-        dpower_ddradii.shape = (num_nodes, num_radial)
-        dpower_ddradii[:, :] = B * Tp * radii * omega
-        dpower_ddradii.shape = (-1,)
+        dpower_dhub_radius = partials['power', 'hub_radius']
+        dpower_dhub_radius.shape = (num_nodes,)
+        dpower_dhub_radius[:] = dtorque_dhub_radius*omega
+
+        dpower_dprop_radius = partials['power', 'prop_radius']
+        dpower_dprop_radius.shape = (num_nodes,)
+        dpower_dprop_radius[:] = dtorque_dprop_radius*omega
 
         dpower_domega = partials['power', 'omega']
         dpower_domega.shape = (num_nodes,)
-        dpower_domega[:] = torque[:, 0]
-        dpower_domega.shape = (-1,)
+        dpower_domega[:] = torque
 
-        dthrust_ddradii = partials['thrust', 'dradii']
-        dthrust_ddradii.shape = (num_nodes, num_radial)
-
-        dtorque_ddradii = partials['torque', 'dradii']
-        dtorque_ddradii.shape = (num_nodes, num_radial)
-
-        dtorque_dTp = partials['torque', 'Tp']
-        dtorque_dTp.shape = (num_nodes, num_radial)
-
-        dtorque_dradii = partials['torque', 'radii']
-        dtorque_dradii.shape = (num_nodes, num_radial)
+        # efficiency = (thrust*v)/power
 
         defficiency_dNp = partials['efficiency', 'Np']
         defficiency_dNp.shape = (num_nodes, num_radial)
-        defficiency_dNp[:, :] = B * dradii * v / (torque * omega)
-        defficiency_dNp.shape = (-1,)
-
-        # dradii from thrust and torque cancel each other. Haha, no they don't,
-        # dummy.
-        defficiency_ddradii = partials['efficiency', 'dradii']
-        defficiency_ddradii.shape = (num_nodes, num_radial)
-        defficiency_ddradii[:, :] = (
-            ((torque*omega)*(dthrust_ddradii*v) - (thrust*v)*(dtorque_ddradii*omega))/(torque*omega*torque*omega)
-        )
-        defficiency_ddradii.shape = (-1,)
+        defficiency_dNp[:, :] = dthrust_dNp*v[:, np.newaxis]/power[:, np.newaxis]
 
         defficiency_dTp = partials['efficiency', 'Tp']
         defficiency_dTp.shape = (num_nodes, num_radial)
-        defficiency_dTp[:, :] = -(thrust * v) / (torque * torque * omega) * dtorque_dTp
-        defficiency_dTp.shape = (-1,)
+        defficiency_dTp[:, :] = -(thrust[:, np.newaxis]*v[:, np.newaxis])/(power[:, np.newaxis]*power[:, np.newaxis])*dpower_dTp
 
         defficiency_dradii = partials['efficiency', 'radii']
         defficiency_dradii.shape = (num_nodes, num_radial)
-        defficiency_dradii[:, :] = -(thrust * v) / (torque * torque * omega) * dtorque_dradii
-        defficiency_dradii.shape = (-1,)
+        defficiency_dradii[:, :] = (power[:, np.newaxis]) * (dthrust_dradii*v[:, np.newaxis])
+        defficiency_dradii[:, :] -= (thrust[:, np.newaxis]*v[:, np.newaxis]) * (dpower_dradii)
+        defficiency_dradii[:, :] /= power[:, np.newaxis]*power[:, np.newaxis]
+
+        defficiency_dhub_radius = partials['efficiency', 'hub_radius']
+        defficiency_dhub_radius.shape = (num_nodes,)
+        defficiency_dhub_radius[:] = (power) * (dthrust_dhub_radius*v)
+        defficiency_dhub_radius[:] -= (thrust*v) * (dpower_dhub_radius)
+        defficiency_dhub_radius[:] /= power*power
+
+        defficiency_dprop_radius = partials['efficiency', 'prop_radius']
+        defficiency_dprop_radius.shape = (num_nodes,)
+        defficiency_dprop_radius[:] = (power) * (dthrust_dprop_radius*v)
+        defficiency_dprop_radius[:] -= (thrust*v) * (dpower_dprop_radius)
+        defficiency_dprop_radius[:] /= power*power
+
+        defficiency_domega = partials['efficiency', 'omega']
+        defficiency_domega.shape = (num_nodes,)
+        defficiency_domega[:] = -(thrust*v)/(power*power)*dpower_domega
 
         defficiency_dv = partials['efficiency', 'v']
         defficiency_dv.shape = (num_nodes,)
-        defficiency_dv[:] = (thrust[:, 0])/(torque[:, 0] * omega[:, 0])
-        defficiency_dv[:].shape = (-1,)
+        defficiency_dv[:] = thrust/power
 
-        defficicency_domega = partials['efficiency', 'omega']
-        defficicency_domega.shape = (num_nodes,)
-        defficicency_domega[:] = -(thrust[:, 0] * v[:, 0]) / (torque[:, 0] * omega[:, 0] * omega[:, 0])
-        defficicency_domega.shape = (-1,)
-
-        dthrust_ddradii.shape = (-1,)
-        dtorque_ddradii.shape = (-1,)
+        dthrust_dNp.shape = (-1,)
+        dthrust_dradii.shape = (-1,)
+        dthrust_dhub_radius.shape = (-1,)
+        dthrust_dprop_radius.shape = (-1,)
         dtorque_dTp.shape = (-1,)
         dtorque_dradii.shape = (-1,)
+        dtorque_dhub_radius.shape = (-1,)
+        dtorque_dprop_radius.shape = (-1,)
+        dpower_dTp.shape = (-1,)
+        dpower_dradii.shape = (-1,)
+        dpower_dhub_radius.shape = (-1,)
+        dpower_dprop_radius.shape = (-1,)
+        dpower_domega.shape = (-1,)
+        defficiency_dNp.shape = (-1,)
+        defficiency_dTp.shape = (-1,)
+        defficiency_dradii.shape = (-1,)
+        defficiency_dhub_radius.shape = (-1,)
+        defficiency_dprop_radius.shape = (-1,)
+        defficiency_domega.shape = (-1,)
+        defficiency_dv.shape = (-1,)
 
 
 class HubPropRadiusComp(om.ExplicitComponent):
@@ -691,15 +777,10 @@ class CCBladeGroup(om.Group):
         turbine = self.options['turbine']
         solve_nonlinear = self.options['phi_residual_solve_nonlinear']
 
-        # comp = om.ExecComp(
-        #     ['hub_radius = 0.5*hub_diameter',
-        #      'prop_radius = 0.5*prop_diameter'],
-        #     hub_radius={'units': 'm', 'shape': num_nodes},
-        #     hub_diameter={'units': 'm'},
-        #     prop_radius={'units': 'm', 'shape': num_nodes},
-        #     prop_diameter={'units': 'm'})
         comp = HubPropRadiusComp(num_nodes=num_nodes)
-        self.add_subsystem('hub_prop_radius_comp', comp, promotes=['*'])
+        self.add_subsystem('hub_prop_radius_comp', comp,
+                           promotes_inputs=['hub_diameter', 'prop_diameter'],
+                           promotes_outputs=['hub_radius', 'prop_radius'])
 
         comp = LocalInflowAngleComp(
             num_nodes=num_nodes, num_radial=num_radial, num_blades=num_blades,
@@ -718,7 +799,8 @@ class CCBladeGroup(om.Group):
                                num_blades=num_blades)
         self.add_subsystem(
             'ccblade_torquethrust_comp', comp,
-            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
+            promotes_inputs=['hub_radius', 'prop_radius', 'radii', 'Np', 'Tp',
+                             'v', 'omega'],
             promotes_outputs=['thrust', 'torque', 'power', 'efficiency'])
 
         self.linear_solver = om.DirectSolver(assemble_jac=True)
@@ -740,7 +822,6 @@ if __name__ == "__main__":
 
     comp = om.IndepVarComp()
     comp.add_output('radii', val=radii, units='m')
-    comp.add_output('dradii', val=dradii, units='m')
     comp.add_output('Np', val=Np, units='N/m')
     comp.add_output('Tp', val=Tp, units='N/m')
     comp.add_output('omega', val=omega, units='rad/s')

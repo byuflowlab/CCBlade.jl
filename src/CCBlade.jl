@@ -746,7 +746,6 @@ function solve(rotor, section, op)
     # it will return empty outputs
     # alternatively, one could increase npts and try again
     
-    @warn "no solution found for this section"
     return Outputs()
 end
 
