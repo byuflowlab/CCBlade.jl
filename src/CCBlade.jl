@@ -26,7 +26,7 @@ export solve, thrusttorque, nondim
 # --------- structs -------------
 
 """
-    Rotor(Rhub, Tip, B, turbine, pitch, precone)
+    Rotor(Rhub, Rtip, B, turbine, pitch, precone)
 
 Scalar parameters defining the rotor.  
 
@@ -38,13 +38,13 @@ Scalar parameters defining the rotor.
 - `pitch::Float64`: pitch angle (rad).  defined same direction as twist.
 - `precone::Float64`: precone angle
 """
-struct Rotor{TF, TI, TB}
+struct Rotor{TF, TI, TB, TF2}
 
     Rhub::TF
     Rtip::TF
     B::TI
     turbine::TB
-    pitch::TF
+    pitch::TF2  # TODO: move this to operating condition.
     precone::TF
 
 end
@@ -64,18 +64,18 @@ Define sectional properties for one station along rotor
 - `theta::Float64`: corresponding twist angle (radians)
 - `af::function`: a function of the form: `cl, cd = af(alpha, Re, Mach)`
 """
-struct Section{TF, TAF}
+struct Section{TF1, TF2, TF3, TAF}
     
-    r::TF
-    chord::TF
-    theta::TF
+    r::TF1  # different types b.c. of dual numbers.  often r is fixed, while chord/theta vary.
+    chord::TF2
+    theta::TF3
     af::TAF
 
 end
 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Section{TF, TAF}}, sym::Symbol) where {TF, TAF}
+function Base.getproperty(obj::Vector{Section{TF1, TF2, TF3, TAF}}, sym::Symbol) where {TF1, TF2, TF3, TAF}
     return getfield.(obj, sym)
 end
 
