@@ -106,7 +106,7 @@ class CCBladeGroup(om.Group):
 
         self.add_subsystem(
             'ccblade_torquethrust_comp', comp,
-            promotes_inputs=['radii', 'dradii', 'Np', 'Tp', 'v', 'omega'],
+            promotes_inputs=['hub_radius', 'prop_radius', 'radii', 'Np', 'Tp', 'v', 'omega'],
             promotes_outputs=promotes_outputs)
 
         if installed_thrust_loss:
