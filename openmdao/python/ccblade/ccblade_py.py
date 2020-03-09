@@ -82,7 +82,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                               num_full_jacs=2, tol=1e-20, orders=20,
                               show_summary=True, show_sparsity=False)
 
+    # @profile
     def apply_nonlinear(self, inputs, outputs, residuals):
+
+        #warnings.simplefilter("error")
 
         num_nodes = self.options['num_nodes']
         num_radial = self.options['num_radial']
@@ -125,8 +128,8 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         Mach = W0/asound  # also ignoring induction
 
         # airfoil cl/cd
-        cl = np.zeros_like(alpha)
-        cd = np.zeros_like(alpha)
+        cl = np.zeros(alpha.shape, dtype=alpha.dtype)
+        cd = cl.copy()
         if turbine:
             for i in range(num_radial):
                 cl[:, i], cd[:, i] = af[i](alpha[:, i], Re[:, i], Mach[:, i])
@@ -172,57 +175,135 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         #     else:
         #         a = (g1 - np.sqrt(g2)) / g3
 
+        u = np.zeros(phi.shape, dtype=phi.dtype)
+        v = u.copy()
+        a = u.copy()
+        ap = u.copy()
+        G = u.copy()
+
+        vyfilt = np.zeros(Vx.shape, dtype=bool)
+
+        # Vy approx 0 region
+        vyfilt[np.abs(Vy) < 1e-6] = True
+        vxflt = Vx[vyfilt]
+        v[vyfilt] = k0p[vyfilt]*abs_cs(vxflt)
+        fflt = F[vyfilt]
+        residuals['phi'][vyfilt] = np.sign(vxflt)*4.*fflt*sphi[vyfilt]*cphi[vyfilt] - ct[vyfilt]*sigma_p[vyfilt]
+        G[vyfilt] = fflt
+        del vxflt
+        del fflt
+
+        # Vx approx 0 region
+        vxfilt = np.logical_not(vyfilt)
+        vxfilt = np.logical_and(vxfilt, Vx < 1e-6)
+
+        sgnphiflt = np.sign(phi[vxfilt])
+        u[vxfilt] = sgnphiflt * k0[vxfilt] * Vy[vxfilt]
+        fflt = F[vxfilt]
+        residuals['phi'][vxfilt] = sphi[vxfilt]**2 + 0.25*sgnphiflt*cn[vxfilt]*sigma_p[vxfilt]/fflt
+        G[vxfilt] = np.sqrt(fflt)
+        del sgnphiflt
+        del fflt
+
+        filt = np.logical_not(np.logical_or(vyfilt, vxfilt))
+        del vxfilt
+
+        # Vx != 0 and  Vy != 0
+        phi_neg = phi < 0.0
+        k[phi_neg] *= -1.
+        del phi_neg
+
+        momfilt = np.logical_and(filt, k <= 2./3.)
+        kfilt = k[momfilt]
+        a[momfilt] = kfilt/(1. + kfilt)
+        del kfilt
+
+        empfilt = np.logical_and(filt, k > 2./3.)
+        empF = F[empfilt]
+        empk = k[empfilt]
+
+        g2 = np.ones(F.shape, dtype=F.dtype)
+        g3 = np.ones(F.shape, dtype=F.dtype)
+        g2[empfilt] = 2.0*empF*empk - (4./3.-empF)*empF
+        g3[empfilt] = 2.0*empF*empk - (25./9.-2.*empF)
+
+        zfilt = np.logical_and(empfilt, np.abs(g3) < 1e-6)
+        a[zfilt] = 1.0 - .5*np.sqrt(g2[zfilt])
+        del zfilt
+
+        nzfilt = np.logical_and(empfilt, np.abs(g3) >= 1e-6)
+        fflt = F[nzfilt]
+        g1 = 2.0*fflt*k[nzfilt] - (10.0/9-fflt)
+        a[nzfilt] = (g1 - np.sqrt(g2[nzfilt])) / g3[nzfilt]
+        del fflt
+
+        vxflt = Vx[filt]
+        vyflt = Vy[filt]
+        aflt = a[filt]
+        one_m_aflt = 1.0 - aflt
+        u[filt] = aflt * vxflt
+
+        # -------- tangential induction ----------
+
+        kp[filt] *= np.sign(vxflt)
+
+        ap[filt] = kp[filt]/(1 - kp[filt])
+        v[filt] = ap[filt] * vyflt
+
+        residuals['phi'][filt] = sphi[filt]/one_m_aflt - vxflt/vyflt*cphi[filt]/(1. + ap[filt])
+        G[filt] = (1.0 - np.sqrt(1.0 - 4*aflt * one_m_aflt*F[filt]))/(2.*aflt)
+
+        del aflt
+        del one_m_aflt
+        del vyflt
+        del vxflt
+
         ####################################
         # Slow Pythonized Code
         ####################################
-        u = np.zeros_like(phi)
-        v = np.zeros_like(phi)
-        a = np.zeros_like(phi)
-        ap = np.zeros_like(phi)
-        G = np.zeros_like(phi)
-        for i in range(num_nodes):
-            for j in range(num_radial):
-                if np.isclose(Vx[i, j], 0.0, atol=1e-6):
-                    u[i, j] = np.sign(phi[i, j])*k0[i, j]*Vy[i, j]
-                    v[i, j] = 0.0
-                    a[i, j] = 0.0
-                    ap[i, j] = 0.0
-                    residuals['phi'][i, j] = np.sin(phi[i, j])**2 + np.sign(phi[i, j])*cn[i, j]*sigma_p[i, j]/(4.0*F[i, j])
-                    G[i, j] = np.sqrt(F[i, j])
-                elif np.isclose(Vy[i, j], 0.0, atol=1e-6):
-                    u[i, j] = 0.0
-                    v[i, j] = k0p[i, j]*abs_cs(Vx[i, j])
-                    a[i, j] = 0.0
-                    ap[i, j] = 0.0
-                    residuals['phi'][i, j] = np.sign(Vx[i, j])*4*F[i, j]*sphi[i, j]*cphi[i, j] - ct[i, j]*sigma_p[i, j]
-                    G[i, j] = F[i, j]
-                else:
-                    if phi[i, j] < 0.0:
-                        k[i, j] *= -1.0
+        # for i in range(num_nodes):
+        #     for j in range(num_radial):
+                # if np.isclose(Vx[i, j], 0.0, atol=1e-6):
+                #     u[i, j] = np.sign(phi[i, j])*k0[i, j]*Vy[i, j]
+                #     # v[i, j] = 0.0  # already 0
+                #     # a[i, j] = 0.0
+                #     # ap[i, j] = 0.0
+                #     residuals['phi'][i, j] = np.sin(phi[i, j])**2 + np.sign(phi[i, j])*cn[i, j]*sigma_p[i, j]/(4.0*F[i, j])
+                #     G[i, j] = np.sqrt(F[i, j])
+                # elif np.isclose(Vy[i, j], 0.0, atol=1e-6):
+                #     # u[i, j] = 0.0
+                #     v[i, j] = k0p[i, j]*abs_cs(Vx[i, j])
+                #     # a[i, j] = 0.0
+                #     # ap[i, j] = 0.0
+                #     residuals['phi'][i, j] = np.sign(Vx[i, j])*4*F[i, j]*sphi[i, j]*cphi[i, j] - ct[i, j]*sigma_p[i, j]
+                #     G[i, j] = F[i, j]
+                # else:
+                #     if phi[i, j] < 0.0:
+                #         k[i, j] *= -1.0
 
-                    if k[i, j] <= 2./3.:  # momentum region
-                        a[i, j] = k[i, j]/(1 + k[i, j])
+                #     if k[i, j] <= 2./3.:  # momentum region
+                #         a[i, j] = k[i, j]/(1 + k[i, j])
 
-                    else:  # empirical region
-                        g1 = 2.0*F[i, j]*k[i, j] - (10.0/9-F[i, j])
-                        g2 = 2.0*F[i, j]*k[i, j] - (4.0/3-F[i, j])*F[i, j]
-                        g3 = 2.0*F[i, j]*k[i, j] - (25.0/9-2*F[i, j])
-                        if np.isclose(g3, 0.0, atol=1e-6):  # avoid singularity
-                            a[i, j] = 1.0 - 1.0/(2.0*np.sqrt(g2))
-                        else:
-                            a[i, j] = (g1 - np.sqrt(g2)) / g3
+                #     else:  # empirical region
+                #         g2 = 2.0*F[i, j]*k[i, j] - (4.0/3-F[i, j])*F[i, j]
+                #         g3 = 2.0*F[i, j]*k[i, j] - (25.0/9-2*F[i, j])
+                #         if np.isclose(g3, 0.0, atol=1e-6):  # avoid singularity
+                #             a[i, j] = 1.0 - 1.0/(2.0*np.sqrt(g2))
+                #         else:
+                #             g1 = 2.0*F[i, j]*k[i, j] - (10.0/9-F[i, j])
+                #             a[i, j] = (g1 - np.sqrt(g2)) / g3
 
-                    u[i, j] = a[i, j] * Vx[i, j]
+                #     u[i, j] = a[i, j] * Vx[i, j]
 
-                    # -------- tangential induction ----------
-                    if Vx[i, j] < 0:
-                        kp[i, j] *= -1.0
+                #     # -------- tangential induction ----------
+                #     if Vx[i, j] < 0:
+                #         kp[i, j] *= -1.0
 
-                    ap[i, j] = kp[i, j]/(1 - kp[i, j])
-                    v[i, j] = ap[i, j] * Vy[i, j]
+                #     ap[i, j] = kp[i, j]/(1 - kp[i, j])
+                #     v[i, j] = ap[i, j] * Vy[i, j]
 
-                    residuals['phi'][i, j] = np.sin(phi[i, j])/(1 - a[i, j]) - Vx[i, j]/Vy[i, j]*np.cos(phi[i, j])/(1 + ap[i, j])
-                    G[i, j] = (1.0 - np.sqrt(1.0 - 4*a[i, j]*(1.0 - a[i, j])*F[i, j]))/(2*a[i, j])
+                #     residuals['phi'][i, j] = np.sin(phi[i, j])/(1.0 - a[i, j]) - Vx[i, j]/Vy[i, j]*np.cos(phi[i, j])/(1. + ap[i, j])  # 25%
+                #     G[i, j] = (1.0 - np.sqrt(1.0 - 4*a[i, j]*(1.0 - a[i, j])*F[i, j]))/(2.*a[i, j])  # 13.5%
 
         ####################################
         # Fast Pythonized Code
@@ -251,8 +332,9 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
         # ------- loads ---------
         W = np.sqrt((Vx - u)**2 + (Vy + v)**2)
-        Np = cn*0.5*rho*W*W*chord
-        Tp = ct*0.5*rho*W*W*chord
+        tmp = 0.5*rho*W*W*chord
+        Np = cn*tmp
+        Tp = ct*tmp
 
         # Tp *= swapsign
         # v *= swapsign
@@ -268,16 +350,17 @@ class LocalInflowAngleComp(om.ImplicitComponent):
         u *= G
         v *= G
 
-        Np *= swapsign
-        Tp *= swapsign
-        a *= swapsign
-        ap *= swapsign
-        u *= swapsign
-        v *= swapsign
-        alpha *= swapsign
-        cl *= swapsign
-        cn *= swapsign
-        ct *= swapsign
+        if not turbine:
+            Np *= swapsign
+            Tp *= swapsign
+            a *= swapsign
+            ap *= swapsign
+            u *= swapsign
+            v *= swapsign
+            alpha *= swapsign
+            cl *= swapsign
+            cn *= swapsign
+            ct *= swapsign
 
         # Other residuals.
         residuals['Np'] = Np - outputs['Np']
@@ -321,12 +404,13 @@ class LocalInflowAngleComp(om.ImplicitComponent):
             raise om.AnalysisError("CCBlade bracketing failed")
 
         # Initialize the residuals.
-        res_1 = np.zeros_like(phi_1)
+        res_1 = np.zeros(phi_1.shape, dtype=phi.dtype)
+        res_2 = res_1.copy()
+
         outputs['phi'][:, :] = phi_1
         self.apply_nonlinear(inputs, outputs, residuals)
         res_1[:, :] = residuals['phi']
 
-        res_2 = np.zeros_like(phi_1)
         outputs['phi'][:, :] = phi_2
         self.apply_nonlinear(inputs, outputs, residuals)
         res_2[:, :] = residuals['phi']
@@ -421,10 +505,10 @@ class LocalInflowAngleComp(om.ImplicitComponent):
 
         # quadrants
         epsilon = 1e-6
-        q1 = [epsilon, np.pi/2]
-        q2 = [-np.pi/2, -epsilon]
-        q3 = [np.pi/2, np.pi-epsilon]
-        q4 = [-np.pi+epsilon, -np.pi/2]
+        q1 = [epsilon, np.pi/2, False]
+        q2 = [-np.pi/2, -epsilon, True]
+        q3 = [np.pi/2, np.pi-epsilon, False]
+        q4 = [-np.pi+epsilon, -np.pi/2, True]
 
         # ---- determine quadrants based on case -----
         # Vx_is_zero = np.isclose(Vx, 0.0, atol=1e-6)
@@ -446,11 +530,11 @@ class LocalInflowAngleComp(om.ImplicitComponent):
                 else:  # Vx[i, j] < 0 and Vy[i, j] < 0
                     order = (q4, q3, q2, q1)
 
-                for (phimin, phimax) in order:  # quadrant orders.  In most cases it should find root in first quadrant searched.
+                for (phimin, phimax, backwardsearch) in order:  # quadrant orders.  In most cases it should find root in first quadrant searched.
 
-                    backwardsearch = False
-                    if np.isclose(phimin, -np.pi/2) or np.isclose(phimax, -np.pi/2):  # q2 or q4
-                        backwardsearch = True
+                    # backwardsearch = False
+                    # if np.isclose(phimin, -np.pi/2) or np.isclose(phimax, -np.pi/2):  # q2 or q4
+                    #     backwardsearch = True
 
                     # find bracket
                     found, p1, p2 = self._first_bracket_search(

@@ -44,8 +44,7 @@ class CCBladePythonTestCase(unittest.TestCase):
         num_radial = r.size
 
         def affunc(alpha, Re, M):
-            cl = 0.084*alpha*180/np.pi
-
+            cl = 0.084*180/np.pi*alpha
             return cl, np.zeros_like(cl)
 
         # --- inflow definitions ---
