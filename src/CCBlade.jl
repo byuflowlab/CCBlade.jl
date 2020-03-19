@@ -509,7 +509,7 @@ function residual(phi, rotor, section, op)
         end
 
         if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-            return 1.0
+            return 1.0, Outputs()
         end
 
         if k <= 2.0/3  # momentum region
@@ -535,7 +535,7 @@ function residual(phi, rotor, section, op)
         end
 
         if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-            return 1.0
+            return 1.0, Outputs()
         end
 
         ap = kp/(1 - kp)
