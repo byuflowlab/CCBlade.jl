@@ -1,5 +1,7 @@
 module CCBladeOpenMDAOExample
 
+using CCBlade: Rotor, Section, OperatingPoint
+
 # convenience function to set fields within an array of structs
 function Base.setproperty!(obj::Array{Rotor{TF, TI, TB, TF2}, N}, sym::Symbol, x) where {TF, TI, TB, TF2, N}
     setfield!.(obj, sym, x)
