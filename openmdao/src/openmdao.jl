@@ -9,50 +9,50 @@ struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
     af
     B
     turbine
-    rotors
-    sections
-    ops
+    # rotors
+    # sections
+    # ops
 end
 
 function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine)
     # Check if the airfoil interpolation passed is a num_radial-length array.
     try
         num_af = length(af)
-        if num_af == num_radial
-            af = reshape(af, 1, num_radial)
-        else
+        if num_af != num_radial
             throw(DomainError("af has length $num_af, but should have length $num_radial"))
         end
     catch e
         if isa(e, MethodError)
             # af is not an array of stuff, so assume it's just a single
-            # function, and make it have shape (1, num_radial).
-            af = fill(af, 1, num_radial)
+            # function, and make it have shape (num_radial,).
+            af = fill(af, num_radial)
         else
             # Some other error happened, so rethrow it.
             rethrow(e)
         end
     end
 
-    Rhub = fill(0., num_nodes, 1)
-    Rtip = fill(1., num_nodes, 1)
-    pitch = fill(0., num_nodes, 1)
-    precone = fill(0., num_nodes, 1)
-    rotors = Rotor.(Rhub, Rtip, B, turbine, pitch, precone)
+    # Rhub = fill(0., num_nodes, 1)
+    # Rtip = fill(1., num_nodes, 1)
+    # pitch = fill(0., num_nodes, 1)
+    # precone = fill(0., num_nodes, 1)
+    # rotors = Rotor.(Rhub, Rtip, B, turbine, pitch, precone)
 
-    r = fill(1., num_nodes, num_radial)
-    chord = fill(1., num_nodes, num_radial)
-    theta = fill(1., num_nodes, num_radial)
-    sections = Section.(r, chord, theta, af)
+    # r = fill(1., num_nodes, num_radial)
+    # chord = fill(1., num_nodes, num_radial)
+    # theta = fill(1., num_nodes, num_radial)
+    # sections = Section.(r, chord, theta, af)
 
-    Vx = fill(1., num_nodes, num_radial)
-    Vy = fill(1., num_nodes, num_radial)
-    rho = fill(1., num_nodes, 1)
-    mu = fill(1., num_nodes, 1)
-    asound = fill(1., num_nodes, 1)
-    ops = OperatingPoint.(Vx, Vy, rho, mu, asound)
+    # Vx = fill(1., num_nodes, num_radial)
+    # Vy = fill(1., num_nodes, num_radial)
+    # rho = fill(1., num_nodes, 1)
+    # mu = fill(1., num_nodes, 1)
+    # asound = fill(1., num_nodes, 1)
+    # ops = OperatingPoint.(Vx, Vy, rho, mu, asound)
 
-    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, rotors, sections, ops)
+    # return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, rotors, sections, ops)
+    # AF = eltype(af)
+    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine)
 end
 
 function OpenMDAO.setup(self::CCBladeResidualComp)
@@ -123,54 +123,127 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
 end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
-    # Copy the data in `inputs` to the array of structs in `self`.
-    set_inputs!(self, inputs)
+    # # Copy the data in `inputs` to the array of structs in `self`.
+    # set_inputs!(self, inputs)
 
-    # Phi, the implicit variable.
-    phis = outputs["phi"]
+    # # Phi, the implicit variable.
+    # phis = outputs["phi"]
+
+    # num_nodes = self.num_nodes
+    # num_radial = self.num_radial
+
+    # # Get the derivatives of the residual. This will have size (num_nodes,
+    # # num_radial).
+    # residual_derivs = residual_partials.(phis, self.rotors, self.sections, self.ops)
+
+    # # Copy the derivatives of the residual to the partials dict. First do the
+    # # derivative of the phi residual wrt phi.
+    # deriv = transpose(reshape(partials["phi", "phi"], (num_radial, num_nodes)))
+    # deriv .= residual_derivs.phi
+
+    # # Copy the derivatives of the residual wrt each input.
+    # for str in keys(inputs)
+    #     sym = Symbol(str)
+    #     deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
+    #     @. deriv = getfield(residual_derivs, sym)
+    # end
+
+    # # Get the derivatives of the explicit outputs.
+    # output_derivs = output_partials.(phis, self.rotors, self.sections, self.ops)
+
+    # # Copy the derivatives of the explicit outputs into the partials dict.
+    # for of_str in keys(outputs)
+    #     if of_str == "phi"
+    #         continue
+    #     else
+    #         of_sym = Symbol(of_str)
+    #         for wrt_str in keys(inputs)
+    #             wrt_sym = Symbol(wrt_str)
+    #             # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
+    #             deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+    #             @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
+    #         end
+    #         # Also need the derivative of each output with respect to phi, but
+    #         # phi is an output, not an input, so we'll need to handle that
+    #         # seperately.
+    #         wrt_str = "phi"
+    #         wrt_sym = Symbol(wrt_str)
+    #         # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
+    #         deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+    #         @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
+    #     end
+    # end
 
     num_nodes = self.num_nodes
     num_radial = self.num_radial
+    af = self.af
+    B = self.B
+    turbine = self.turbine
 
-    # Get the derivatives of the residual. This will have size (num_nodes,
-    # num_radial).
-    residual_derivs = residual_partials.(phis, self.rotors, self.sections, self.ops)
+    r = inputs["r"]
+    chord = inputs["chord"]
+    theta = inputs["theta"]
+    Vx = inputs["Vx"]
+    Vy = inputs["Vy"]
+    rho = inputs["rho"]
+    mu = inputs["mu"]
+    asound = inputs["asound"]
+    Rhub = inputs["Rhub"]
+    Rtip = inputs["Rtip"]
+    pitch = inputs["pitch"]
+    precone = inputs["precone"]
 
-    # Copy the derivatives of the residual to the partials dict. First do the
-    # derivative of the phi residual wrt phi.
-    deriv = transpose(reshape(partials["phi", "phi"], (num_radial, num_nodes)))
-    deriv .= residual_derivs.phi
+    phi = outputs["phi"]
 
-    # Copy the derivatives of the residual wrt each input.
-    for str in keys(inputs)
-        sym = Symbol(str)
-        deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
-        @. deriv = getfield(residual_derivs, sym)
-    end
+    for i in 1:num_nodes
+        for j in 1:num_radial
+            # Create the input structs.
+            rotor = Rotor(Rhub[i, 1], Rtip[i, 1], B, turbine, pitch[i, 1], precone[i, 1])
+            section = Section(r[i, j], chord[i, j], theta[i, j], af[j])
+            op = OperatingPoint(Vx[i, j], Vy[i, j], rho[i, 1], mu[i, 1], asound[i, 1])
 
-    # Get the derivatives of the explicit outputs.
-    output_derivs = output_partials.(phis, self.rotors, self.sections, self.ops)
+            # Find the partials of the phi residual.
+            residual_deriv = residual_partials(phi[i, j], rotor, section, op)
 
-    # Copy the derivatives of the explicit outputs into the partials dict.
-    for of_str in keys(outputs)
-        if of_str == "phi"
-            continue
-        else
-            of_sym = Symbol(of_str)
-            for wrt_str in keys(inputs)
-                wrt_sym = Symbol(wrt_str)
-                # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-                deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
-                @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
-            end
-            # Also need the derivative of each output with respect to phi, but
-            # phi is an output, not an input, so we'll need to handle that
-            # seperately.
-            wrt_str = "phi"
-            wrt_sym = Symbol(wrt_str)
+            # Store the derivatives of the phi residual wrt phi.
+            str = "phi"
+            sym = Symbol(str)
             # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-            deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
-            @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
+            deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
+            deriv[i, j] = getfield(residual_deriv, sym)
+
+            # Store the derivatives of the phi residual wrt the inputs.
+            for str in keys(inputs)
+                sym = Symbol(str)
+                deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
+                deriv[i, j] = getfield(residual_deriv, sym)
+            end
+
+            # Get the derivatives of the explicit outputs.
+            output_derivs = output_partials(phi[i, j], rotor, section, op)
+
+            # Copy the derivatives of the explicit outputs into the partials dict.
+            for of_str in keys(outputs)
+                if of_str == "phi"
+                    continue
+                else
+                    of_sym = Symbol(of_str)
+                    for wrt_str in keys(inputs)
+                        wrt_sym = Symbol(wrt_str)
+                        # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
+                        deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+                        deriv[i, j] = -getfield(getfield(output_derivs, of_sym), wrt_sym)
+                    end
+                    # Also need the derivative of each output with respect to phi, but
+                    # phi is an output, not an input, so we'll need to handle that
+                    # seperately.
+                    wrt_str = "phi"
+                    wrt_sym = Symbol(wrt_str)
+                    # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
+                    deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
+                    deriv[i, j] = -getfield(getfield(output_derivs, of_sym), wrt_sym)
+                end
+            end
         end
     end
 
@@ -178,42 +251,79 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
-    # Copy the data in `inputs` to the array of structs in `self`.
-    set_inputs!(self, inputs)
+    # # Copy the data in `inputs` to the array of structs in `self`.
+    # set_inputs!(self, inputs)
 
-    # When called this way, CCBlade.solve will return a 2D array of `Outputs`
-    # objects.
-    out = solve.(self.rotors, self.sections, self.ops)
+    # # When called this way, CCBlade.solve will return a 2D array of `Outputs`
+    # # objects.
+    # out = solve.(self.rotors, self.sections, self.ops)
 
-    # Set the outputs.
-    for out_str in keys(outputs)
-        out_sym = Symbol(out_str)
-        @. outputs[out_str] = getfield(out, out_sym)
+    # # Set the outputs.
+    # for out_str in keys(outputs)
+    #     out_sym = Symbol(out_str)
+    #     @. outputs[out_str] = getfield(out, out_sym)
+    # end
+
+    num_nodes = self.num_nodes
+    num_radial = self.num_radial
+    af = self.af
+    B = self.B
+    turbine = self.turbine
+
+    r = inputs["r"]
+    chord = inputs["chord"]
+    theta = inputs["theta"]
+    Vx = inputs["Vx"]
+    Vy = inputs["Vy"]
+    rho = inputs["rho"]
+    mu = inputs["mu"]
+    asound = inputs["asound"]
+    Rhub = inputs["Rhub"]
+    Rtip = inputs["Rtip"]
+    pitch = inputs["pitch"]
+    precone = inputs["precone"]
+
+    for i in 1:num_nodes
+        for j in 1:num_radial
+            # Create the input structs.
+            rotor = Rotor(Rhub[i, 1], Rtip[i, 1], B, turbine, pitch[i, 1], precone[i, 1])
+            section = Section(r[i, j], chord[i, j], theta[i, j], af[j])
+            op = OperatingPoint(Vx[i, j], Vy[i, j], rho[i, 1], mu[i, 1], asound[i, 1])
+
+            # Solve the BEMT equation.
+            out = solve(rotor, section, op)
+
+            # Save thet outputs.
+            for str in keys(outputs)
+                sym = Symbol(str)
+                outputs[str] = getfield(out, sym)
+            end
+        end
     end
 
     return nothing
 end
 
-function set_inputs!(self::CCBladeResidualComp, inputs)
-    # Rotor parameters.
-    self.rotors.Rhub = inputs["Rhub"]
-    self.rotors.Rtip = inputs["Rtip"]
-    self.rotors.precone = inputs["precone"]
+# function set_inputs!(self::CCBladeResidualComp, inputs)
+#     # Rotor parameters.
+#     self.rotors.Rhub = inputs["Rhub"]
+#     self.rotors.Rtip = inputs["Rtip"]
+#     self.rotors.precone = inputs["precone"]
 
-    # Blade section parameters.
-    self.sections.r = inputs["r"]
-    self.sections.chord = inputs["chord"]
-    self.sections.theta = inputs["theta"]
+#     # Blade section parameters.
+#     self.sections.r = inputs["r"]
+#     self.sections.chord = inputs["chord"]
+#     self.sections.theta = inputs["theta"]
 
-    # Inflow parameters.
-    self.ops.Vx = inputs["Vx"]
-    self.ops.Vy = inputs["Vy"]
-    self.ops.rho = inputs["rho"]
-    self.ops.mu = inputs["mu"]
-    self.ops.asound = inputs["asound"]
+#     # Inflow parameters.
+#     self.ops.Vx = inputs["Vx"]
+#     self.ops.Vy = inputs["Vy"]
+#     self.ops.rho = inputs["rho"]
+#     self.ops.mu = inputs["mu"]
+#     self.ops.asound = inputs["asound"]
 
-    return nothing
-end
+#     return nothing
+# end
 
 detect_apply_nonlinear(::Type{CCBladeResidualComp}) = false
 detect_guess_nonlinear(::Type{CCBladeResidualComp}) = false
