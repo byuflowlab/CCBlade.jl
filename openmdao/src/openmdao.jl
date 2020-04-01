@@ -3,15 +3,12 @@ using OpenMDAO
 import OpenMDAO: detect_apply_nonlinear, detect_guess_nonlinear, detect_apply_linear
 using CCBlade: solve
 
-struct CCBladeResidualComp <: OpenMDAO.AbstractImplicitComp
-    num_nodes
-    num_radial
-    af
-    B
-    turbine
-    # rotors
-    # sections
-    # ops
+struct CCBladeResidualComp{TAF} <: OpenMDAO.AbstractImplicitComp
+    num_nodes::Int
+    num_radial::Int
+    af::Vector{TAF}
+    B::Int
+    turbine::Bool
 end
 
 function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine)
@@ -32,27 +29,8 @@ function CCBladeResidualComp(; num_nodes, num_radial, af, B, turbine)
         end
     end
 
-    # Rhub = fill(0., num_nodes, 1)
-    # Rtip = fill(1., num_nodes, 1)
-    # pitch = fill(0., num_nodes, 1)
-    # precone = fill(0., num_nodes, 1)
-    # rotors = Rotor.(Rhub, Rtip, B, turbine, pitch, precone)
-
-    # r = fill(1., num_nodes, num_radial)
-    # chord = fill(1., num_nodes, num_radial)
-    # theta = fill(1., num_nodes, num_radial)
-    # sections = Section.(r, chord, theta, af)
-
-    # Vx = fill(1., num_nodes, num_radial)
-    # Vy = fill(1., num_nodes, num_radial)
-    # rho = fill(1., num_nodes, 1)
-    # mu = fill(1., num_nodes, 1)
-    # asound = fill(1., num_nodes, 1)
-    # ops = OperatingPoint.(Vx, Vy, rho, mu, asound)
-
-    # return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine, rotors, sections, ops)
-    # AF = eltype(af)
-    return CCBladeResidualComp(num_nodes, num_radial, af, B, turbine)
+    TAF = eltype(af)
+    return CCBladeResidualComp{TAF}(num_nodes, num_radial, af, B, turbine)
 end
 
 function OpenMDAO.setup(self::CCBladeResidualComp)
@@ -123,57 +101,6 @@ function OpenMDAO.setup(self::CCBladeResidualComp)
 end
 
 function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partials)
-    # # Copy the data in `inputs` to the array of structs in `self`.
-    # set_inputs!(self, inputs)
-
-    # # Phi, the implicit variable.
-    # phis = outputs["phi"]
-
-    # num_nodes = self.num_nodes
-    # num_radial = self.num_radial
-
-    # # Get the derivatives of the residual. This will have size (num_nodes,
-    # # num_radial).
-    # residual_derivs = residual_partials.(phis, self.rotors, self.sections, self.ops)
-
-    # # Copy the derivatives of the residual to the partials dict. First do the
-    # # derivative of the phi residual wrt phi.
-    # deriv = transpose(reshape(partials["phi", "phi"], (num_radial, num_nodes)))
-    # deriv .= residual_derivs.phi
-
-    # # Copy the derivatives of the residual wrt each input.
-    # for str in keys(inputs)
-    #     sym = Symbol(str)
-    #     deriv = transpose(reshape(partials["phi", str], (num_radial, num_nodes)))
-    #     @. deriv = getfield(residual_derivs, sym)
-    # end
-
-    # # Get the derivatives of the explicit outputs.
-    # output_derivs = output_partials.(phis, self.rotors, self.sections, self.ops)
-
-    # # Copy the derivatives of the explicit outputs into the partials dict.
-    # for of_str in keys(outputs)
-    #     if of_str == "phi"
-    #         continue
-    #     else
-    #         of_sym = Symbol(of_str)
-    #         for wrt_str in keys(inputs)
-    #             wrt_sym = Symbol(wrt_str)
-    #             # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-    #             deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
-    #             @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
-    #         end
-    #         # Also need the derivative of each output with respect to phi, but
-    #         # phi is an output, not an input, so we'll need to handle that
-    #         # seperately.
-    #         wrt_str = "phi"
-    #         wrt_sym = Symbol(wrt_str)
-    #         # reshape does not copy data: https://github.com/JuliaLang/julia/issues/112
-    #         deriv = transpose(reshape(partials[of_str, wrt_str], (num_radial, num_nodes)))
-    #         @. deriv = -getfield(getfield(output_derivs, of_sym), wrt_sym)
-    #     end
-    # end
-
     num_nodes = self.num_nodes
     num_radial = self.num_radial
     af = self.af
@@ -251,19 +178,6 @@ function OpenMDAO.linearize!(self::CCBladeResidualComp, inputs, outputs, partial
 end
 
 function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
-    # # Copy the data in `inputs` to the array of structs in `self`.
-    # set_inputs!(self, inputs)
-
-    # # When called this way, CCBlade.solve will return a 2D array of `Outputs`
-    # # objects.
-    # out = solve.(self.rotors, self.sections, self.ops)
-
-    # # Set the outputs.
-    # for out_str in keys(outputs)
-    #     out_sym = Symbol(out_str)
-    #     @. outputs[out_str] = getfield(out, out_sym)
-    # end
-
     num_nodes = self.num_nodes
     num_radial = self.num_radial
     af = self.af
@@ -293,10 +207,10 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
             # Solve the BEMT equation.
             out = solve(rotor, section, op)
 
-            # Save thet outputs.
+            # Save the outputs.
             for str in keys(outputs)
                 sym = Symbol(str)
-                outputs[str] = getfield(out, sym)
+                outputs[str][i, j] = getfield(out, sym)
             end
         end
     end
@@ -304,27 +218,6 @@ function OpenMDAO.solve_nonlinear!(self::CCBladeResidualComp, inputs, outputs)
     return nothing
 end
 
-# function set_inputs!(self::CCBladeResidualComp, inputs)
-#     # Rotor parameters.
-#     self.rotors.Rhub = inputs["Rhub"]
-#     self.rotors.Rtip = inputs["Rtip"]
-#     self.rotors.precone = inputs["precone"]
-
-#     # Blade section parameters.
-#     self.sections.r = inputs["r"]
-#     self.sections.chord = inputs["chord"]
-#     self.sections.theta = inputs["theta"]
-
-#     # Inflow parameters.
-#     self.ops.Vx = inputs["Vx"]
-#     self.ops.Vy = inputs["Vy"]
-#     self.ops.rho = inputs["rho"]
-#     self.ops.mu = inputs["mu"]
-#     self.ops.asound = inputs["asound"]
-
-#     return nothing
-# end
-
-detect_apply_nonlinear(::Type{CCBladeResidualComp}) = false
-detect_guess_nonlinear(::Type{CCBladeResidualComp}) = false
-detect_apply_linear(::Type{CCBladeResidualComp}) = false
+detect_apply_nonlinear(::Type{<:CCBladeResidualComp}) = false
+detect_guess_nonlinear(::Type{<:CCBladeResidualComp}) = false
+detect_apply_linear(::Type{<:CCBladeResidualComp}) = false
