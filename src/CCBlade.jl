@@ -81,6 +81,10 @@ function Base.getproperty(obj::Vector{Section{TF1, TF2, TF3, TAF}}, sym::Symbol)
     return getfield.(obj, sym)
 end
 
+function Base.getproperty(obj::Array{Section{TF1, TF2, TF3, TAF}, N}, sym::Symbol) where {TF1, TF2, TF3, TAF, N}
+    return getfield.(obj, sym)
+end
+
 """
     OperatingPoint(Vx, Vy, rho, mu=1.0, asound=1.0)
 
@@ -108,10 +112,13 @@ end
 OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, one(rho), one(rho)) 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Array{OperatingPoint{TF, TF2}, N}, sym::Symbol) where {TF, TF2, N}
+function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) where {TF, TF2}
     return getfield.(obj, sym)
 end
 
+function Base.getproperty(obj::Array{OperatingPoint{TF, TF2}, N}, sym::Symbol) where {TF, TF2, N}
+    return getfield.(obj, sym)
+end
 
 """
     Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
@@ -159,6 +166,10 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
+function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF
+    return getfield.(obj, sym)
+end
+
 function Base.getproperty(obj::Array{Outputs{TF}, N}, sym::Symbol) where {TF, N}
     return getfield.(obj, sym)
 end
