@@ -1,20 +1,18 @@
 import time
 import numpy as np
 
-from openmdao.api import IndepVarComp, Problem, pyOptSparseDriver
-from openbemt.airfoils.process_airfoils import ViternaAirfoil
+from openmdao.api import IndepVarComp, Problem
+# from openmdao.api import pyOptSparseDriver
 from ccblade.geometry import GeometryGroup
 from ccblade.inflow import SimpleInflow
-from ccblade.ccblade_py import CCBladeGroup
+from ccblade.ccblade_jl import CCBladeGroup
 
 
 def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    # num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    # num_blades = prob.get_val('inputs_comp.B')
-    num_blades = prob.get_val('indep_var_comp.B')
+    num_blades = prob.model.ccblade_group.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
         'ccblade_group.Np', units='N/m')[node, :]*num_blades
@@ -26,41 +24,33 @@ def make_plots(prob):
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('normal load, N/m')
     ax.legend()
-    fname = 'pyccblade_normal_load.png'
+    fname = 'ccblade_normal_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
     fig, ax = plt.subplots()
     ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('circumferential load, N/m')
     ax.legend()
-    fname = 'pyccblade_circum_load.png'
+    fname = 'ccblade_circum_load.png'
     print(fname)
     fig.savefig(fname)
+    plt.close(fig)
+    del fig
 
 
 def main():
-    interp = ViternaAirfoil().create_akima(
-        'mh117', Re_scaling=False, extend_alpha=True)
-
-    def ccblade_interp(alpha, Re, Mach):
-        shape = alpha.shape
-        x = np.concatenate(
-            [
-                alpha.flatten()[:, np.newaxis],
-                Re.flatten()[:, np.newaxis]
-            ], axis=-1)
-        y = interp(x)
-        y.shape = shape + (2,)
-        return y[..., 0], y[..., 1]
 
     num_nodes = 1
     num_blades = 3
     num_radial = 15
     num_cp = 6
-    chord = 10.
-    theta = np.linspace(65., 25., num_cp)*np.pi/180.
+    af_filename = 'mh117.dat'
+    chord = np.tile(10., (num_nodes, num_cp))
+    theta = np.tile(np.linspace(65., 25., num_cp)*np.pi/180., (num_nodes, 1))
     pitch = 0.
 
     hub_diameter = 30.  # cm
@@ -71,21 +61,21 @@ def main():
 
     prob = Problem()
 
+    v = np.linspace(1., 1.5, num_nodes)*77.2
     comp = IndepVarComp()
-    comp.add_discrete_input('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
-    comp.add_output('v', val=77.2, shape=num_nodes, units='m/s')
+    comp.add_output('v', val=v, shape=num_nodes, units='m/s')
     comp.add_output('alpha', val=0., shape=num_nodes, units='rad')
     comp.add_output('incidence', val=0., shape=num_nodes, units='rad')
-    comp.add_output('precone', val=0., units='deg')
+    comp.add_output('precone', val=0., shape=num_nodes, units='deg')
     comp.add_output('omega', val=omega, shape=num_nodes, units='rad/s')
     comp.add_output('hub_diameter', val=hub_diameter, shape=num_nodes, units='cm')
     comp.add_output('prop_diameter', val=prop_diameter, shape=num_nodes, units='cm')
     comp.add_output('pitch', val=pitch, shape=num_nodes, units='rad')
-    comp.add_output('chord_dv', val=chord, shape=num_cp, units='cm')
-    comp.add_output('theta_dv', val=theta, shape=num_cp, units='rad')
+    comp.add_output('chord_dv', val=chord, shape=(num_nodes, num_cp), units='cm')
+    comp.add_output('theta_dv', val=theta, shape=(num_nodes, num_cp), units='rad')
     prob.model.add_subsystem('indep_var_comp', comp, promotes=['*'])
 
     comp = GeometryGroup(num_nodes=num_nodes, num_cp=num_cp,
@@ -103,30 +93,31 @@ def main():
         promotes_outputs=['Vx', 'Vy'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        airfoil_interp=ccblade_interp, turbine=False,
-                        phi_residual_solve_nonlinear='brent')
+                        num_blades=num_blades, af_filename=af_filename,
+                        turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho',
-                         'mu', 'asound', 'v', 'omega', 'Vx', 'Vy', 'precone',
-                         'hub_diameter', 'prop_diameter'],
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+                         'asound', 'v', 'precone', 'omega', 'Vx', 'Vy',
+                         'precone', 'hub_diameter', 'prop_diameter'],
         promotes_outputs=['thrust', 'torque', 'efficiency'])
 
-    prob.model.add_design_var('chord_dv', lower=1., upper=20.,
-                              scaler=5e-2)
-    prob.model.add_design_var('theta_dv',
-                              lower=20.*np.pi/180., upper=90*np.pi/180.)
+    # prob.model.add_design_var('chord_dv', lower=1., upper=20.,
+    #                           scaler=5e-2)
+    # prob.model.add_design_var('theta_dv',
+    #                           lower=20.*np.pi/180., upper=90*np.pi/180.)
 
-    prob.model.add_objective('efficiency', scaler=-1.,)
-    prob.model.add_constraint('thrust', equals=700., scaler=1e-3,
-                              indices=np.arange(num_nodes))
-    prob.driver = pyOptSparseDriver()
-    prob.driver.options['optimizer'] = 'SNOPT'
+    # prob.model.add_objective('efficiency', scaler=-1.,)
+    # prob.model.add_constraint('thrust', equals=700., scaler=1e-3,
+    #                           indices=np.arange(num_nodes))
+    # prob.driver = pyOptSparseDriver()
+    # prob.driver.options['optimizer'] = 'SNOPT'
 
     prob.setup()
     prob.final_setup()
     st = time.time()
-    prob.run_driver()
+    # prob.run_driver()
+    prob.run_model()
     elapsed_time = time.time() - st
 
     make_plots(prob)
@@ -135,6 +126,7 @@ def main():
 
 
 if __name__ == "__main__":
+    # Ignore the first run to remove the Julia JIT from the timing.
     main()
     times = np.array([main() for _ in range(20)])
     print(f"average walltime = {np.mean(times)} s, stddev = {np.std(times)} s")

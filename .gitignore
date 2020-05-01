@@ -61,3 +61,7 @@ _*
 # Should this be ignored?
 # https://discourse.julialang.org/t/does-manifest-toml-belong-in-the-repository/12029/3
 Manifest.toml
+
+# OpenMDAO stuff
+coloring_files
+n2.html

@@ -73,12 +73,17 @@ struct Section{TF1, TF2, TF3, TAF}
 
 end
 
+# make rotor broadcastable as a single entity
+Base.Broadcast.broadcastable(r::Rotor) = Ref(r) 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{Section{TF1, TF2, TF3, TAF}}, sym::Symbol) where {TF1, TF2, TF3, TAF}
     return getfield.(obj, sym)
 end
 
+function Base.getproperty(obj::Array{Section{TF1, TF2, TF3, TAF}, N}, sym::Symbol) where {TF1, TF2, TF3, TAF, N}
+    return getfield.(obj, sym)
+end
 
 """
     OperatingPoint(Vx, Vy, rho, mu=1.0, asound=1.0)
@@ -111,6 +116,9 @@ function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) whe
     return getfield.(obj, sym)
 end
 
+function Base.getproperty(obj::Array{OperatingPoint{TF, TF2}, N}, sym::Symbol) where {TF, TF2, N}
+    return getfield.(obj, sym)
+end
 
 """
     Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
@@ -159,6 +167,10 @@ Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF
+    return getfield.(obj, sym)
+end
+
+function Base.getproperty(obj::Array{Outputs{TF}, N}, sym::Symbol) where {TF, N}
     return getfield.(obj, sym)
 end
 
@@ -295,6 +307,9 @@ function afalpha(alpha, Re, Mach, cl, cd)
     if nRe == 1 && nMach == 1  # could be cases with 1, 0, but this would be inconcistent input and I'm not going to bother handlingn it.
         cl = cl[:, 1, 1]
         cd = cd[:, 1, 1]
+    elseif nRe == 0 && nMach == 0
+        cl = cl[:, 1]
+        cd = cd[:, 1]
     end
 
     afcl = FLOWMath.Akima(alpha, cl)
@@ -469,17 +484,17 @@ function residual(phi, rotor, section, op)
     if isapprox(Vx, 0.0, atol=1e-6)
 
         u = sign(phi)*k0*Vy
-        v = 0.0
-        a = 0.0
-        ap = 0.0
+        v = zero(phi)
+        a = zero(phi)
+        ap = zero(phi)
         R = sin(phi)^2 + sign(phi)*cn*sigma_p/(4.0*F)
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
         
-        u = 0.0
+        u = zero(phi)
         v = k0p*abs(Vx)
-        a = 0.0
-        ap = 0.0
+        a = zero(phi)
+        ap = zero(phi)
         R = sign(Vx)*4*F*sphi*cphi - ct*sigma_p
     
     else
@@ -489,7 +504,7 @@ function residual(phi, rotor, section, op)
         end
 
         if isapprox(k, -1.0, atol=1e-6)  # state corresopnds to Vx=0, return any nonzero residual
-            return 1.0
+            return 1.0, Outputs()
         end
 
         if k <= 2.0/3  # momentum region
@@ -515,7 +530,7 @@ function residual(phi, rotor, section, op)
         end
 
         if isapprox(kp, 1.0, atol=1e-6)  # state corresopnds to Vy=0, return any nonzero residual
-            return 1.0
+            return 1.0, Outputs()
         end
 
         ap = kp/(1 - kp)
@@ -726,7 +741,6 @@ function solve(rotor, section, op)
     # it will return empty outputs
     # alternatively, one could increase npts and try again
     
-    @warn "no solution found for this section"
     return Outputs()
 end
 

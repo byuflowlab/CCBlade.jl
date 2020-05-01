@@ -1,0 +1,12 @@
+name = "CCBladeOpenMDAOExample"
+uuid = "99a45008-1abd-11ea-2ce1-4bde19e60344"
+authors = ["Andrew Ning <aning@byu.edu>", "Ingraham, Daniel James (GRC-LTV0) <daniel.j.ingraham@nasa.gov>"]
+version = "0.1.0"
+
+[deps]
+CCBlade = "e1828068-15df-11e9-03e4-ef195ea46fa4"
+FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+OpenMDAO = "2d3f9b48-ba2d-11e9-1a3f-97e029ee3d3c"
+PyCall = "438e738f-606a-5dbb-bf0a-cddfbfd45ab0"
+PyPlot = "d330b81b-6aea-500a-939a-2ce795aea3ee"

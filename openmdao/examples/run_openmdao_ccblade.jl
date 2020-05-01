@@ -1,11 +1,12 @@
 using OpenMDAO
 using PyCall
-using CCBlade
 using PyPlot
+using CCBlade: af_from_files
+using CCBladeOpenMDAOExample
 
 om = pyimport("openmdao.api")
-julia_comps = pyimport("omjl.julia_comps")
 pyccblade = pyimport("ccblade.ccblade_jl")
+pyccblade_py = pyimport("ccblade.ccblade_py")
 pyccblade_geom = pyimport("ccblade.geometry")
 
 num_nodes = 1
@@ -13,7 +14,7 @@ num_blades = 3
 num_radial = 15
 
 af_filename = "airfoils/mh117.dat"
-af = af_from_file(af_filename, use_interpolations_jl=true)
+af = af_from_files([af_filename])
 
 num_cp = 6
 chord = 10.0
@@ -48,7 +49,7 @@ comp = pyccblade_geom.GeometryGroup(num_nodes=num_nodes, num_cp=num_cp, num_radi
 prob.model.add_subsystem(
     "geometry_group", comp,
     promotes_inputs=["hub_diameter", "prop_diameter", "chord_dv",
-                     "theta_dv", "pitch"],
+                     "theta_dv"],
     promotes_outputs=["radii", "dradii", "chord", "theta"])
 
 group = om.Group()
@@ -80,20 +81,20 @@ comp = om.ExecComp("Vy = omega*radii*cos(precone)",
                    Vy=Dict("units" => "m/s", "shape" => (num_nodes, num_radial)))
 group.add_subsystem("Vy_comp", comp, promotes=["*"])
 
-ccblade_residual_comp_data = CCBlade.CCBladeResidualComp(
-    num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false, debug_print=true)
-comp = julia_comps.JuliaImplicitComp(julia_comp_data=ccblade_residual_comp_data)
+ccblade_residual_comp_data = CCBladeOpenMDAOExample.CCBladeResidualComp(
+    num_nodes=num_nodes, num_radial=num_radial, af=af, B=num_blades, turbine=false)
+comp = make_component(ccblade_residual_comp_data)
 comp.linear_solver = om.DirectSolver(assemble_jac=true)
 # comp.nonlinear_solver = om.NewtonSolver(solve_subsystems=true, iprint=2, err_on_non_converge=true)
 group.add_subsystem("ccblade_residual_comp", comp,
                     promotes_inputs=[("r", "radii"), "chord", "theta", "Vx",
-                                     "Vy", "rho", "mu", "asound", "pitch",
+                                     "Vy", "rho", "mu", "asound",
+                                     "pitch",
                                      ("Rhub", "hub_radius"), ("Rtip", "prop_radius"),
                                      "precone"],
                     promotes_outputs=["Np", "Tp"])
 
-comp = pyccblade.CCBladeThrustTorqueComp(num_nodes=num_nodes,
-                                         num_radial=num_radial, B=num_blades)
+comp = pyccblade_py.FunctionalsComp(num_nodes=num_nodes, num_radial=num_radial, num_blades=num_blades)
 group.add_subsystem("ccblade_torquethrust_comp", comp,
                     promotes_inputs=["radii", "dradii", "Np", "Tp"],
                     promotes_outputs=["thrust", "torque"])
@@ -114,7 +115,9 @@ prob.model.add_subsystem(
     "ccblade_group", group,
     promotes_inputs=["radii", "dradii", "chord", "theta", "rho", "mu",
                      "asound", "v", "precone", "omega", "hub_diameter",
-                     "prop_diameter", "pitch"],
+                     "prop_diameter",
+                     # "pitch",
+                    ],
     promotes_outputs=["thrust", "torque", "efficiency"])
 
 prob.model.add_design_var("chord_dv", lower=1., upper=20.,

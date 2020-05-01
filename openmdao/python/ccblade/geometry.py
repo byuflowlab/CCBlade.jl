@@ -1,5 +1,7 @@
 import numpy as np
-from openmdao.api import ExplicitComponent, AkimaSplineComp, Group
+from openmdao.api import ExplicitComponent, Group, SplineComp
+from openmdao.utils.spline_distributions import cell_centered
+from ccblade.utils import get_rows_cols
 
 
 def tile_sparse_jac(data, rows, cols, nrow, ncol, num_nodes):
@@ -105,49 +107,13 @@ class BEMTMeshComp(ExplicitComponent):
         ).flatten() * 0.5e-2
 
 
-class BEMTThetaComp(ExplicitComponent):
-    """
-    Compute the pitched theta control points by subtracting pitch from the unpitched thetas.
-
-    Unpitched thetas are of dim num_cp, and pitch angle is of dim num_nodes, so the pitched
-    theta control points have dim (num_nodes, num_cp).
-    """
-
-    def initialize(self):
-        self.options.declare('num_nodes', types=int,
-                             desc='Number of pitch angles.')
-        self.options.declare('num_cp', types=int,
-                             desc='Number of radial control points for chord and theta splines.')
-
-    def setup(self):
-        num_nodes = self.options['num_nodes']
-        num_cp = self.options['num_cp']
-
-        self.add_input('theta_cp_unpitched', shape=num_cp, units='rad')
-        self.add_input('pitch_cp', val=0, shape=num_nodes, units='rad')
-
-        self.add_output('theta_cp', shape=(num_nodes, num_cp), units='rad')
-
-        rows = np.arange(num_nodes * num_cp)
-        cols = np.tile(np.arange(num_cp), num_nodes)
-        self.declare_partials('theta_cp', 'theta_cp_unpitched', rows=rows, cols=cols, val=1.0)
-
-        cols = np.repeat(np.arange(num_nodes), num_cp)
-        self.declare_partials('theta_cp', 'pitch_cp', rows=rows, cols=cols, val=-1.0)
-
-    def compute(self, inputs, outputs):
-        theta_u = inputs['theta_cp_unpitched']
-        pitch = inputs['pitch_cp']
-
-        outputs['theta_cp'] = np.add.outer(-pitch, theta_u)
-
-
 class GeometryGroup(Group):
 
     def initialize(self):
         self.options.declare('num_nodes', types=int)
         self.options.declare('num_cp', types=int)
         self.options.declare('num_radial', types=int)
+        self.options.declare('add_pitch', types=bool, default=False)
 
     def setup(self):
         num_nodes = self.options['num_nodes']
@@ -157,25 +123,12 @@ class GeometryGroup(Group):
         comp = BEMTMeshComp(num_nodes=num_nodes, num_radial=num_radial)
         self.add_subsystem('mesh_comp', comp, promotes=['*'])
 
-        comp = BEMTThetaComp(num_nodes=num_nodes, num_cp=num_cp)
-        self.add_subsystem('theta_cp_comp', comp,
-                           promotes_inputs=[('theta_cp_unpitched', 'theta_dv'),
-                                            ('pitch_cp', 'pitch')],
-                           promotes_outputs=['theta_cp'])
-
-        comp = AkimaSplineComp(vec_size=1, num_control_points=num_cp,
-                               num_points=num_radial, name='chord', units='cm',
-                               eval_at='cell_center')
-
-        self.add_subsystem('chord_bspline_comp', comp,
-                           promotes_inputs=[('chord:y_cp', 'chord_dv')],
-                           promotes_outputs=[('chord:y', 'chord')])
-
-        comp = AkimaSplineComp(vec_size=num_nodes, num_control_points=num_cp,
-                               num_points=num_radial,
-                               name='theta', units='rad',
-                               eval_at='cell_center')
-
-        self.add_subsystem('theta_bspline_comp', comp,
-                           promotes_inputs=[('theta:y_cp', 'theta_cp')],
-                           promotes_outputs=[('theta:y', 'theta')])
+        x_cp = np.linspace(0.0, 1.0, num_cp)
+        x_interp = cell_centered(num_radial)
+        akima_options = {'delta_x': 0.1}
+        comp = SplineComp(method='akima', interp_options=akima_options, x_cp_val=x_cp, x_interp_val=x_interp, vec_size=num_nodes)
+        comp.add_spline(y_cp_name='chord_dv', y_interp_name='chord', y_units='m')
+        comp.add_spline(y_cp_name='theta_dv', y_interp_name='theta', y_units='rad')
+        self.add_subsystem('akima_comp', comp,
+                           promotes_inputs=['chord_dv', 'theta_dv'],
+                           promotes_outputs=['chord', 'theta'])

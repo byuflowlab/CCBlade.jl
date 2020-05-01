@@ -6,15 +6,14 @@ from openbemt.airfoils.process_airfoils import ViternaAirfoil
 from openbemt.bemt.groups.bemt_group import BEMTGroup
 from ccblade.geometry import GeometryGroup
 from ccblade.inflow import SimpleInflow
-from ccblade.ccblade_py import CCBladeGroup
+from ccblade.ccblade_jl import CCBladeGroup
 
 
 def make_plots(prob):
     import matplotlib.pyplot as plt
 
     node = 0
-    # num_blades = prob.model.ccblade_group.ccblade_comp.options['B']
-    num_blades = prob.get_val('inputs_comp.B')
+    num_blades = prob.model.ccblade_group.options['num_blades']
     radii = prob.get_val('radii', units='m')[node, :]
     dradii = prob.get_val('dradii', units='m')[node, :]
     ccblade_normal_load = prob.get_val(
@@ -28,41 +27,31 @@ def make_plots(prob):
     openbemt_circum_load /= dradii
 
     fig, ax = plt.subplots()
-    ax.plot(radii, ccblade_normal_load, label='Python CCBlade')
+    ax.plot(radii, ccblade_normal_load, label='CCBlade.jl')
     ax.plot(radii, openbemt_normal_load, label='OpenBEMT', linestyle='--')
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('normal load, N/m')
     ax.legend()
-    fig.savefig('py_normal_load.png')
+    fig.savefig('normal_load.png')
 
     fig, ax = plt.subplots()
-    ax.plot(radii, ccblade_circum_load, label='Python CCBlade')
+    ax.plot(radii, ccblade_circum_load, label='CCBlade.jl')
     ax.plot(radii, openbemt_circum_load, label='OpenBEMT', linestyle='--')
     ax.set_xlabel('blade element radius, m')
     ax.set_ylabel('circumferential load, N/m')
     ax.legend()
-    fig.savefig('py_circum_load.png')
+    fig.savefig('circum_load.png')
 
 
 def main():
     interp = ViternaAirfoil().create_akima(
         'mh117', Re_scaling=False, extend_alpha=True)
 
-    def ccblade_interp(alpha, Re, Mach):
-        shape = alpha.shape
-        x = np.concatenate(
-            [
-                alpha.flatten()[:, np.newaxis],
-                Re.flatten()[:, np.newaxis]
-            ], axis=-1)
-        y = interp(x)
-        y.shape = shape + (2,)
-        return y[..., 0], y[..., 1]
-
     num_nodes = 1
     num_blades = 3
     num_radial = 15
     num_cp = 6
+    af_filename = 'mh117.dat'
     chord = 10.
     theta = np.linspace(65., 25., num_cp)*np.pi/180.
     pitch = 0.
@@ -85,7 +74,6 @@ def main():
     prob = Problem()
 
     comp = IndepVarComp()
-    comp.add_discrete_input('B', val=num_blades)
     comp.add_output('rho', val=rho0, shape=num_nodes, units='kg/m**3')
     comp.add_output('mu', val=1., shape=num_nodes, units='N/m**2*s')
     comp.add_output('asound', val=c0, shape=num_nodes, units='m/s')
@@ -124,12 +112,11 @@ def main():
         promotes_outputs=['Vx', 'Vy'])
 
     comp = CCBladeGroup(num_nodes=num_nodes, num_radial=num_radial,
-                        airfoil_interp=ccblade_interp,
-                        turbine=False,
-                        phi_residual_solve_nonlinear='bracketing')
+                        num_blades=num_blades, af_filename=af_filename,
+                        turbine=False)
     prob.model.add_subsystem(
         'ccblade_group', comp,
-        promotes_inputs=['B', 'radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
+        promotes_inputs=['radii', 'dradii', 'chord', 'theta', 'rho', 'mu',
                          'asound', 'Vx', 'Vy', 'v', 'precone', 'omega',
                          'hub_diameter', 'prop_diameter'],
         promotes_outputs=[('Np', 'ccblade_normal_load'),
