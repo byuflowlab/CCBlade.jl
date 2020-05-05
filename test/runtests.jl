@@ -18,11 +18,12 @@ using Test
 
 
 # --- rotor definition ---
-turbine = true
 Rhub = 0.01
 Rtip = 5.0
 Rtip_eff = 5.0*100  # to eliminate tip effects as consistent with their study.
 B = 3  # number of blades
+
+rotor = Rotor(Rhub, Rtip_eff, B, negateoutputs=true)
 
 # --- section definitions ---
 
@@ -41,7 +42,6 @@ end
 n = length(r)
 airfoils = fill(affunc, n)
 
-rotor = Rotor(Rhub, Rtip_eff, B, turbine)
 sections = Section.(r, chord, theta, airfoils)
 
 
@@ -118,27 +118,26 @@ betavec = 90 .- out.phi*180/pi
 # -------- verification: propellers.  using script at http://www.aerodynamics4students.com/propulsion/blade-element-propeller-theory.php ------
 # I increased their tolerance to 1e-6
 
-# inputs
-chord = 0.10
-D = 1.6
-RPM = 2100
-rho = 1.225
-pitch = 1.0  # pitch distance in meters.
 
 # --- rotor definition ---
-turbine = false
+D = 1.6
 Rhub = 0.0
 Rtip = D/2
 Rhub_eff = 1e-6  # something small to eliminate hub effects
 Rtip_eff = 100.0  # something large to eliminate tip effects
 B = 2  # number of blades
 
+rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B)
+rotor = Rotor(Rhub, Rtip, B)
+
 
 # --- section definitions ---
 
 R = D/2.0
 r = range(R/10, stop=R, length=11)
+pitch = 1.0  # pitch distance in meters.
 theta = atan.(pitch./(2*pi*r))
+chord = 0.10
 
 
 function affunc(alpha, Re, M)
@@ -155,13 +154,13 @@ airfoils = fill(affunc, n)
 # chord = chord*ones(n)
 # rho = rho
 
-
-rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B, turbine)
-rotor = Rotor(Rhub, Rtip, B, turbine)
 sections = Section.(r, chord, theta, airfoils)
 
 
 # --- inflow definitions ---
+RPM = 2100
+rho = 1.225
+
 
 tsim = 1e3*[1.045361193032356, 1.025630300048415, 1.005234466788998, 0.984163367036026, 0.962407923825140, 0.939960208707079, 0.916813564966455, 0.892962691000145, 0.868403981825492, 0.843134981103815, 0.817154838249790, 0.790463442573673, 0.763063053839278, 0.734956576558370, 0.706148261507327, 0.676643975451150, 0.646450304160057, 0.615575090105131, 0.584027074365864, 0.551815917391907, 0.518952127358381, 0.485446691671386, 0.451311288662196, 0.416557935286392, 0.381199277009438, 0.345247916141561, 0.308716772800348, 0.271618894441869, 0.233967425339051, 0.195775319296371, 0.157055230270717, 0.117820154495231, 0.078082266879117, 0.037854059197644, -0.002852754149850, -0.044026182837742, -0.085655305814570, -0.127728999394140, -0.170237722799272, -0.213169213043848, -0.256515079286031, -0.300266519551194, -0.344414094748869, -0.388949215983616, -0.433863576642539, -0.479150401337354, -0.524801553114807, -0.570810405128802, -0.617169893200684, -0.663873474163182, -0.710915862524620, -0.758291877949762, -0.805995685105502, -0.854022273120508, -0.902366919041604, -0.951025170820984, -0.999992624287163, -1.049265666456123, -1.098840222937414, -1.148712509929845]
 qsim = 1e2*[0.803638686218187, 0.806984572453978, 0.809709290183008, 0.811743686838315, 0.813015017103876, 0.813446921530685, 0.812959654049620, 0.811470393912576, 0.808893852696513, 0.805141916379142, 0.800124489784850, 0.793748780791057, 0.785921727832179, 0.776548246109426, 0.765532528164390, 0.752778882688809, 0.738190986274448, 0.721673076180745, 0.703129918771009, 0.682467282681955, 0.659592296506578, 0.634413303042323, 0.606840565246423, 0.576786093366321, 0.544164450503912, 0.508891967461804, 0.470887571011192, 0.430072787279711, 0.386371788290446, 0.339711042057184, 0.290019539402947, 0.237229503458026, 0.181274942660876, 0.122093307308376, 0.059623821454727, -0.006190834182631, -0.075406684829235, -0.148076528546541, -0.224253047813501, -0.303980950928302, -0.387309291734422, -0.474283793689904, -0.564946107631716, -0.659336973911858, -0.757495165410553, -0.859460291551374, -0.965266648683888, -1.074949504731187, -1.188540970723477, -1.306072104649531, -1.427575034895290, -1.553080300508925, -1.682614871422754, -1.816205997296014, -1.953879956474228, -2.095662107769925, -2.241576439746701, -2.391647474158875, -2.545897099743367, -2.704346566395035]
@@ -198,7 +197,7 @@ out = solve.(Ref(rotor_no_F), sections, op)
 
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B
-eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
+eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
 
 
 @test isapprox(CT, 0.056110238632657, atol=1e-7)
@@ -286,11 +285,11 @@ end
 Rhub = 1.5
 Rtip = 63.0
 B = 3
-turbine = true
-pitch = 0.0
 precone = 2.5*pi/180
+flipcamber = true
+negateoutputs = true
 
-rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+rotor = Rotor(Rhub, Rtip, B, precone, flipcamber, negateoutputs)
 
 r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
     28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
@@ -332,8 +331,9 @@ rotorR = Rtip*cos(precone)
 Omega = Vinf*tsr/rotorR
 azimuth = 0.0*pi/180
 rho = 1.225
+pitch = 0.0
 
-op = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+op = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
 out = solve.(Ref(rotor), sections, op)
 
@@ -373,11 +373,11 @@ azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
 for i = 1:ntsr
     Omega = Vinf*tsrvec[i]/rotorR
 
-    ops = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
+    ops = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
     outs = solve.(Ref(rotor), sections, ops)
     T, Q = thrusttorque(rotor, sections, outs)
 
-    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor)
+    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor, "windturbine")
 end
 
 cpvec_test = [0.02350364982213745, 0.07009444382725231, 0.13891408294580307, 0.21795999362154536, 0.30793657066245234, 0.39220453169574504, 0.43584242088313013, 0.4590001212905916, 0.4695346630018769, 0.4680559467091491, 0.45853627726342805, 0.44346560401350865, 0.4247660950655427, 0.4031517121734798, 0.37850875685858926, 0.3506421939620393, 0.31947670368255254, 0.28492212475211376, 0.24684802187254656, 0.2053516821754716]
@@ -394,7 +394,8 @@ end
 Rhub = 0.0254*.5
 Rtip = 0.0254*3.0
 B = 2  # number of blades
-turbine = false
+
+rotor = Rotor(Rhub, Rtip, B)
 
 r = .0254*[0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332,
      1.1128, 1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911,
@@ -413,7 +414,7 @@ theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
 af = af_from_files("airfoils/NACA64_A17.dat")
 airfoils = fill(af, length(r))
 
-rotor = Rotor(Rhub, Rtip, B, turbine)
+
 sections = Section.(r, chord, theta, airfoils)
 
 
@@ -456,7 +457,7 @@ for i = 1:nJ
     op = simple_op.(Vinf, Omega, r, rho)
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
-    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor)
+    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
 
 end
 
@@ -477,15 +478,15 @@ end
 
 # https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf
 
-chord = 0.060
-theta = 0.0
-Rtip = 0.656
-Rhub = 0.19*Rtip
 
-turbine = false
+Rhub = 0.19*Rtip
+Rtip = 0.656
 B = 3
+rotor = Rotor(Rhub, Rtip, B)
 
 r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
+chord = 0.060
+theta = 0.0
 
 af = af_from_files("naca0012v2.txt")
 function af2(alpha, Re, M)
@@ -498,7 +499,6 @@ sections = Section.(r, chord, theta, af2)
 rho = 1.225
 Omega = 800*pi/30
 Vinf = 0.0
-op = simple_op.(Vinf, Omega, r, rho)
 
 
 nP = 40
@@ -509,14 +509,11 @@ CQ = zeros(nP)
 
 
 for i = 1:nP
-    rotor = Rotor(Rhub, Rtip, B, turbine, pitch[i])
+    
+    op = simple_op.(Vinf, Omega, r, rho, pitch=pitch[i])
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
-    
-    A = pi*Rtip^2
-    CT[i] = T / (rho * A * (Omega * Rtip)^2)
-    CQ[i] = Q / (rho * A * (Omega * Rtip)^2 * Rtip)
-
+    _, CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "helicopter")
 end
 
 # these are not directly from the experimental data, but have been compared to the experimental data and compare favorably.
