@@ -731,7 +731,7 @@ function solve(rotor, section, op)
         # once bracket is found, solve root finding problem and compute loads
         if success
 
-            phistar = FLOWMath.brent(R, phiL, phiU)
+            phistar, _ = FLOWMath.brent(R, phiL, phiU)
             _, outputs = residual(phistar, rotor, section, op)
             return outputs
         end    
