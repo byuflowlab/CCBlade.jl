@@ -663,7 +663,6 @@ end
 
 
 
-
 """
     nondim(T, Q, Vhub, Omega, rho, rotor)
 
