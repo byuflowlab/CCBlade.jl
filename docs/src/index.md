@@ -28,7 +28,7 @@ pkg> add CCBlade
 - Full details of the API are listed in [reference](reference.md).
 - Full details of the theory are linked from the [theory](theory.md) page.
 
-**Run Unit Tests**
+**Run Unit Tests**:
 
 ```julia
 pkg> activate .

@@ -657,3 +657,161 @@ clexcel = [0.1311, 0.3953, 0.6904, 0.8995, 0.9911, 1.0338, 1.0954, 1.0444, 1.001
 end
 
 
+@testset "derivatives" begin
+
+D = 1.6
+R = D/2.0
+Rhub = 0.01
+Rtip = D/2
+r = range(R/10, stop=9/10*R, length=11)
+chord = 0.1*ones(length(r))
+proppitch = 1.0  # pitch distance in meters.
+theta = atan.(proppitch./(2*pi*r))
+
+function affunc(alpha, Re, M)
+
+    cl = 6.2*alpha
+    cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+    return cl, cd
+end 
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+B = 2  # number of blades
+turbine = false
+pitch = 0.0
+precone = 0.0
+
+rho = 1.225
+Vinf = 30.0
+RPM = 2100
+Omega = RPM * pi/30 
+
+function ccbladewrapper(x)
+    
+    # unpack
+    nall = length(x)
+    nvec = nall - 7
+    n = nvec ÷ 3
+
+    rp = x[1:n]
+    chordp = x[n+1:2*n]
+    thetap = x[2*n+1:3*n]
+    Rhubp = x[3*n+1]
+    Rtipp = x[3*n+2]
+    pitchp = x[3*n+3]
+    preconep = x[3*n+4]
+    Vinfp = x[3*n+5]
+    Omegap = x[3*n+6]
+    rhop = x[3*n+7]
+
+    rotor = Rotor(Rhubp, Rtipp, B; turbine=turbine, precone=preconep)
+    sections = Section.(rp, chordp, thetap, airfoils)
+    ops = simple_op.(Vinfp, Omegap, rp, rhop; pitch=pitchp)
+
+    outputs = solve.(Ref(rotor), sections, ops)
+
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T; Q]
+end
+
+import ForwardDiff
+
+x = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
+
+J = ForwardDiff.jacobian(ccbladewrapper, x)
+
+import FiniteDiff
+
+J2 = FiniteDiff.finite_difference_jacobian(ccbladewrapper, x, Val{:central})
+
+@test maximum(abs.(J - J2)) < 1e-6
+
+end
+
+@testset "type stability" begin
+
+
+function ccbladewrapper(x)
+
+    B = 2  # number of blades
+    turbine = false
+
+    function af(alpha, Re, M)
+
+        cl = 6.2*alpha
+        cd = 0.008 - 0.003*cl + 0.01*cl*cl
+    
+        return cl, cd
+    end 
+    
+    # unpack
+    nall = length(x)
+    nvec = nall - 7
+    # n = nvec ÷ 3
+    n = 11
+    # println(n, "hi")
+
+    rp = x[1:n]
+    chordp = x[n+1:2*n]
+    thetap = x[2*n+1:3*n]
+    Rhubp = x[3*n+1]
+    Rtipp = x[3*n+2]
+    pitchp = x[3*n+3]
+    preconep = x[3*n+4]
+    Vinfp = x[3*n+5]
+    Omegap = x[3*n+6]
+    rhop = x[3*n+7]
+
+    rotor = Rotor(Rhubp, Rtipp, B; turbine=turbine, precone=preconep)
+    sections = Section.(rp, chordp, thetap, Ref(af))
+    ops = simple_op.(Vinfp, Omegap, rp, rhop; pitch=pitchp)
+
+    outputs = solve.(Ref(rotor), sections, ops)
+
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T; Q]
+end
+
+D = 1.6
+R = D/2.0
+Rhub = 0.01
+Rtip = D/2
+r = range(R/10, stop=9/10*R, length=11)
+chord = 0.1*ones(length(r))
+proppitch = 1.0  # pitch distance in meters.
+theta = atan.(proppitch./(2*pi*r))
+
+n = length(r)
+airfoils = fill(affunc, n)
+
+pitch = 0.0
+precone = 0.0
+
+rho = 1.225
+Vinf = 30.0
+RPM = 2100
+Omega = RPM * pi/30 
+
+xvec = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
+
+# @code_warntype ccbladewrapper(xvec)
+
+function checkstability()
+    try
+        @inferred Vector{Float64} ccbladewrapper(xvec)
+        return true
+    catch err
+        println(err)
+        return false
+    end
+end
+
+@test checkstability()
+
+
+end
