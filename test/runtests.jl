@@ -786,9 +786,6 @@ chord = 0.1*ones(length(r))
 proppitch = 1.0  # pitch distance in meters.
 theta = atan.(proppitch./(2*pi*r))
 
-n = length(r)
-airfoils = fill(affunc, n)
-
 pitch = 0.0
 precone = 0.0
 
