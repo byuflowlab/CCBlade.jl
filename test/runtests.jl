@@ -23,7 +23,7 @@ Rtip = 5.0
 Rtip_eff = 5.0*100  # to eliminate tip effects as consistent with their study.
 B = 3  # number of blades
 
-rotor = Rotor(Rhub, Rtip_eff, B, negateoutputs=true)
+rotor = Rotor(Rhub, Rtip_eff, B, turbine=true)
 
 # --- section definitions ---
 
@@ -39,10 +39,7 @@ function affunc(alpha, Re, M)
     return cl, 0.0
 end 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 
 # --- inflow definitions ---
@@ -148,13 +145,7 @@ function affunc(alpha, Re, M)
     return cl, cd
 end 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-# chord = chord*ones(n)
-# rho = rho
-
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 
 # --- inflow definitions ---
@@ -221,12 +212,7 @@ function affunc(alpha, Re, M)
 end 
 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-# theta .-= 3*pi/180
-
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 Vinf = 5.0
 Omega = RPM * pi/30 
@@ -258,7 +244,7 @@ Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 
 theta = atan.(pitch./(2*pi*r)) .- 3*pi/180
 
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 out = solve.(Ref(rotor_no_F), sections, ops)
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B
@@ -286,10 +272,8 @@ Rhub = 1.5
 Rtip = 63.0
 B = 3
 precone = 2.5*pi/180
-flipcamber = true
-negateoutputs = true
 
-rotor = Rotor(Rhub, Rtip, B, precone, flipcamber, negateoutputs)
+rotor = Rotor(Rhub, Rtip, B; precone=precone, turbine=true)
 
 r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
     28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
@@ -301,15 +285,15 @@ theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
 
 # Define airfoils.  In this case we have 8 different airfoils that we load into an array.
 # These airfoils are defined in files.
-aftypes = Array{Any}(undef, 8)
-aftypes[1] = af_from_files("airfoils/Cylinder1.dat")
-aftypes[2] = af_from_files("airfoils/Cylinder2.dat")
-aftypes[3] = af_from_files("airfoils/DU40_A17.dat")
-aftypes[4] = af_from_files("airfoils/DU35_A17.dat")
-aftypes[5] = af_from_files("airfoils/DU30_A17.dat")
-aftypes[6] = af_from_files("airfoils/DU25_A17.dat")
-aftypes[7] = af_from_files("airfoils/DU21_A17.dat")
-aftypes[8] = af_from_files("airfoils/NACA64_A17.dat")
+aftypes = Array{AlphaAF}(undef, 8)
+aftypes[1] = AlphaAF("airfoils/Cylinder1.dat", radians=false)
+aftypes[2] = AlphaAF("airfoils/Cylinder2.dat", radians=false)
+aftypes[3] = AlphaAF("airfoils/DU40_A17.dat", radians=false)
+aftypes[4] = AlphaAF("airfoils/DU35_A17.dat", radians=false)
+aftypes[5] = AlphaAF("airfoils/DU30_A17.dat", radians=false)
+aftypes[6] = AlphaAF("airfoils/DU25_A17.dat", radians=false)
+aftypes[7] = AlphaAF("airfoils/DU21_A17.dat", radians=false)
+aftypes[8] = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
@@ -411,11 +395,9 @@ theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
                    12.8685, 12.5233, 12.2138]
 
-af = af_from_files("airfoils/NACA64_A17.dat")
-airfoils = fill(af, length(r))
+af = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
 
-
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(af))
 
 
 rho = 1.225
@@ -488,12 +470,12 @@ r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
 chord = 0.060
 theta = 0.0
 
-af = af_from_files("naca0012v2.txt")
+af = AlphaAF("naca0012v2.txt", radians=false)
 function af2(alpha, Re, M)
-    cl, cd = af(alpha, Re, M)
+    cl, cd = afeval(af, alpha, Re, M)
     return cl, cd+0.014
 end
-sections = Section.(r, chord, theta, af2)
+sections = Section.(r, chord, theta, Ref(af2))
 
 
 rho = 1.225
@@ -538,49 +520,30 @@ cl0 = 0.5
 cd0 = 0.001
 Mach = 0.6
 
-cl, cd = machcorrection(NoMachCorrection(), cl0, cd0, Mach)
-
-@test cl == 0.5
-@test cd == 0.001
-
-cl, cd = machcorrection(PrandtlGlauert(), cl0, cd0, Mach)
+cl, cd = mach_correction(PrandtlGlauert(), cl0, cd0, Mach)
 
 @test cl == 0.625
 @test cd == 0.001
 
-Re = 2e6
-
-cl, cd = recorrection(NoReCorrection(), cl0, cd0, Re)
-
-@test cl == 0.5
-@test cd == 0.001
 
 # --- Re ---
 
 Re0 = 1e6
-p = 0.2 
-sf = SkinFriction(Re0, p)
+sf = TurbulentSkinFriction(Re0)
 
-cl, cd = recorrection(sf, cl0, cd0, Re)
+Re = 2e6
+cl, cd = re_correction(sf, cl0, cd0, Re)
 
 @test cl == 0.5
 @test isapprox(cd, 0.000870551, atol=1e-6)
 
-cl, cd = recorrection(sf, cl0, cd0, 0.5e6)
+cl, cd = re_correction(sf, cl0, cd0, 0.5e6)
 
 @test cl == 0.5
 @test isapprox(cd, 0.001148698, atol=1e-6)
 
-# --- no rotation ---
-
-cl, cd = rotationcorrection(NoRotationCorrection(), cl0, cd0, 0.1, 0.1, 0.7, 3*pi/180, 2*pi, 0.0, 5*pi/180)
-
-@test cl == 0.5
-@test cd == 0.001
-
 
 # ----- Du Selig lift -----
-du = DuSeligEggers()
 D = 5.35
 rR = 0.3
 cr = 0.37
@@ -588,19 +551,19 @@ Omega = 158*pi/30
 Vinf = 8.8
 
 tsr = Omega*D/2/Vinf
-phi = 0.0 # irrelevant for du-selig
 
 # 2D data from Du-Selig paper
 alphavec = pi/180*[0.0, 2.5155348977710403, 5.008413994160788, 7.49992519310865, 10.032131340952713, 12.497054033373846, 14.982409693833208, 17.44339968110891, 19.969450290464472, 22.590227797670874, 25.098125268058034]
 cl2d = [0.0, 0.2519530298215895, 0.499873042018675, 0.6993694847728795, 0.7394671184527943, 0.7977304301609993, 0.7793208104222391, 0.6983663599821608, 0.5205579311691111, 0.49608168627557214, 0.47565213798095574]
 
 # lift curve slope / angle of attack
-m, alpha0 = linearliftcoeff(alphavec[1:3], cl2d[1:3])
+m, alpha0 = CCBlade.linearliftcoeff(alphavec[1:3], cl2d[1:3])
+du = DuSeligEggers(1.0, 1.0, 1.0, m, alpha0)
 
 na = length(alphavec)
 cl3d = zeros(na)
 for i = 1:na
-    cl3d[i], _ = rotationcorrection(du, cl2d[i], cd, cr, rR, tsr, alphavec[i], m, alpha0, phi)
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
 end
 
 # data extracted from paper. match is not quite ok, but not exact.  not enough info from paper to determine what they did differently.
@@ -616,7 +579,7 @@ clexcel = [0.0002, 0.2516, 0.5000, 0.7285, 0.8937, 1.0624, 1.2008, 1.3120, 1.387
 rR = 0.55
 cr = 0.16
 for i = 1:na
-    cl3d[i], _ = rotationcorrection(du, cl2d[i], cd, cr, rR, tsr, alphavec[i], m, alpha0, phi)
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
 end
 
 # from original paper
@@ -641,12 +604,13 @@ tsr = Omega*D/2/Vinf
 
 alphavec = pi/180*[0.05300353356890675, 2.5265017667844507, 4.905771495877504, 7.214369846878679, 9.899882214369846, 12.396937573616018, 14.917550058892814, 17.48527679623086, 19.958775029446404, 22.479387514723207, 25.0, 27.49705535924618, 29.970553592461723]
 cl2d = [0.13100179507357756, 0.39492390225335816, 0.6916073880907927, 0.8987789384891554, 0.9814551925975084, 1.0139336800037035, 1.0660602506930839, 1.0002777477741605, 0.9432391562639841, 0.8490775173463776, 0.8204180618348846, 0.8092284269703383, 0.8002247699579783]
-m, alpha0 = linearliftcoeff(alphavec[1:4], cl2d[1:4])
+m, alpha0 = CCBlade.linearliftcoeff(alphavec[1:4], cl2d[1:4])
+du = DuSeligEggers(1.0, 1.0, 1.0, m, alpha0)
 
 na = length(alphavec)
 cl3d = zeros(na)
 for i = 1:na
-    cl3d[i], _ = rotationcorrection(du, cl2d[i], cd, cr, rR, tsr, alphavec[i], m, alpha0, phi)
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
 end
 
 # data from original paper
@@ -663,7 +627,7 @@ clexcel = [0.1324, 0.3988, 0.6794, 0.9057, 1.0786, 1.2140, 1.3617, 1.4444, 1.527
 cr = 0.181
 rR = 0.47
 for i = 1:na
-    cl3d[i], _ = rotationcorrection(du, cl2d[i], cd, cr, rR, tsr, alphavec[i], m, alpha0, phi)
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
 end
 
 # data from original paper
@@ -678,7 +642,7 @@ clexcel = [0.1316, 0.3966, 0.6862, 0.9018, 1.0243, 1.1021, 1.1964, 1.1960, 1.200
 cr = 0.113
 rR = 0.80
 for i = 1:na
-    cl3d[i], _ = rotationcorrection(du, cl2d[i], cd, cr, rR, tsr, alphavec[i], m, alpha0, phi)
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
 end
 
 # data from original paper

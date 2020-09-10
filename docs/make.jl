@@ -5,7 +5,10 @@ makedocs(
     format = Documenter.HTML(),
     pages = [
         "Intro" => "index.md",
-        "Guide" => "tutorial.md"
+        "Quick Start" => "tutorial.md",
+        "Guided Examples" => "howto.md",
+        "API Reference" => "reference.md",
+        "Theory" => "theory.md"
     ],
     repo="https://github.com/byuflowlab/CCBlade.jl/blob/{commit}{path}#L{line}",
     sitename="CCBlade.jl",

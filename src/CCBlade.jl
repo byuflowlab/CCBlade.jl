@@ -13,55 +13,51 @@ Some unique features:
 
 module CCBlade
 
-
 import FLOWMath
 
 export Rotor, Section, OperatingPoint, Outputs
-export af_from_files, af_from_data
 export simple_op, windturbine_op
 export solve, thrusttorque, nondim
 
 
 include("airfoils.jl")  # all the code related to airfoil data
-include("corrections.jl")  # correction methods (Mach, Re, rotation, tip loss)
 
 # --------- structs -------------
 
 """
-    Rotor(Rhub, Rtip, B; precone=0.0, flipcamber=false, negateoutputs=false)
+    Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, 
+        mach=nothing, re=nothing, rotation=nothing, tip=PrandtlTipHub())
 
-Scalar parameters defining the rotor.  
+Parameters defining the rotor (apply to all sections).  
 
 **Arguments**
 - `Rhub::Float64`: hub radius (along blade length)
 - `Rtip::Float64`: tip radius (along blade length)
 - `B::Int64`: number of blades
 - `precone::Float64`: precone angle
-- `flipcamber::Bool`: true if flip airfoil camber as would typically be desired for turbine operation.
-- `negateoutputs::Bool`: true if you want to negate the outputs as would be convention for turbines
-- `MachC::MachCorrection`: correction method for Mach number
-- `ReC::ReCorrection`: correction method for Reynolds number
-- `rotationC::RotationCorrection`: correction method for blade rotation
-- `tipC::TipCorrection`: correction method for hub/tip loss
+- `turbine::Bool`: true if using wind turbine conventions
+- `mach::MachCorrection`: correction method for Mach number
+- `re::ReCorrection`: correction method for Reynolds number
+- `rotation::RotationCorrection`: correction method for blade rotation
+- `tip::TipCorrection`: correction method for hub/tip loss
 """
-struct Rotor{TF, TI, TB}
-
+struct Rotor{TF, TI, TB, 
+        T1 <: Union{Nothing, MachCorrection}, T2 <: Union{Nothing, ReCorrection}, 
+        T3 <: Union{Nothing, RotationCorrection}, T4 <: Union{Nothing, TipCorrection}}
     Rhub::TF
     Rtip::TF
     B::TI
     precone::TF
-    flipcamber::TB
-    negateoutputs::TB
-    MachC::MachCorrection
-    ReC::ReCorrection
-    rotationC::RotationCorrection
-    tipC::TipCorrection
+    turbine::TB
+    mach::T1
+    re::T2
+    rotation::T3
+    tip::T4
 end
 
 # convenience constructor with keyword parameters
-Rotor(Rhub, Rtip, B; precone=0.0, flipcamber=false, negateoutputs=false, MachC=NoMachCorrection(), 
-    ReC=NoReCorrection(), rotationC=NoRotationCorrection(), tipC=Prandtl()) = Rotor(Rhub, Rtip, 
-    B, precone, flipcamber, negateoutputs, MachC, ReC, rotationC, tipC)
+Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, mach=nothing, re=nothing, rotation=nothing, tip=PrandtlTipHub()
+    ) = Rotor(Rhub, Rtip, B, precone, turbine, mach, re, rotation, tip)
 
 
 """
@@ -70,34 +66,33 @@ Rotor(Rhub, Rtip, B; precone=0.0, flipcamber=false, negateoutputs=false, MachC=N
 Define sectional properties for one station along rotor
     
 **Arguments**
-- `r::Float64`: radial location along blade (`Rhub < r < Rtip`)
+- `r::Float64`: radial location along blade
 - `chord::Float64`: corresponding local chord length
 - `theta::Float64`: corresponding twist angle (radians)
-- `af::function`: a function of the form: `cl, cd = af(alpha, Re, Mach)`
+- `af::Function or AFType`: if function form is: `cl, cd = af(alpha, Re, Mach)`
 """
 struct Section{TF1, TF2, TF3, TAF}
-    
     r::TF1  # different types b.c. of dual numbers.  often r is fixed, while chord/theta vary.
     chord::TF2
     theta::TF3
     af::TAF
+end  
 
-end
 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{Section{TF1, TF2, TF3, TAF}}, sym::Symbol) where {TF1, TF2, TF3, TAF}
     return getfield.(obj, sym)
-end
+end # This is not always type stable b/c we don't know if the return type will be float or af function.
 
 
 """
-    OperatingPoint(Vx, Vy, rho, pitch=0.0, mu=1.0, asound=1.0)
+    OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
 
 Operation point for a rotor.  
 The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
 See Documentation for more detail on coordinate systems.
-Vx and Vy vary radially at same locations as `r` in the rotor definition.
+`Vx` and `Vy` vary radially at same locations as `r` in the rotor definition.
 
 **Arguments**
 - `Vx::Float64`: velocity in x-direction along blade
@@ -117,7 +112,7 @@ struct OperatingPoint{TF, TF2}
 end
 
 # convenience constructor when Re and Mach are not used.
-OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho, zero(rho), one(rho), one(rho)) 
+OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) where {TF, TF2}
@@ -131,24 +126,23 @@ end
 Outputs from the BEM solver along the radius.
 
 **Arguments**
-- `Np::Vector{Float64}`: normal force per unit length
-- `Tp::Vector{Float64}`: tangential force per unit length
-- `a::Vector{Float64}`: axial induction factor
-- `ap::Vector{Float64}`: tangential induction factor
-- `u::Vector{Float64}`: axial induced velocity
-- `v::Vector{Float64}`: tangential induced velocity
-- `phi::Vector{Float64}`: inflow angle
-- `alpha::Vector{Float64}`: angle of attack
-- `W::Vector{Float64}`: inflow velocity
-- `cl::Vector{Float64}`: lift coefficient
-- `cd::Vector{Float64}`: drag coefficient
-- `cn::Vector{Float64}`: normal force coefficient
-- `ct::Vector{Float64}`: tangential force coefficient
-- `F::Vector{Float64}`: hub/tip loss correction
-- `G::Vector{Float64}`: effective hub/tip loss correction for induced velocities: `u = Vx * a * G, v = Vy * ap * G`
+- `Np::Float64`: normal force per unit length
+- `Tp::Float64`: tangential force per unit length
+- `a::Float64`: axial induction factor
+- `ap::Float64`: tangential induction factor
+- `u::Float64`: axial induced velocity
+- `v::Float64`: tangential induced velocity
+- `phi::Float64`: inflow angle
+- `alpha::Float64`: angle of attack
+- `W::Float64`: inflow velocity
+- `cl::Float64`: lift coefficient
+- `cd::Float64`: drag coefficient
+- `cn::Float64`: normal force coefficient
+- `ct::Float64`: tangential force coefficient
+- `F::Float64`: hub/tip loss correction
+- `G::Float64`: effective hub/tip loss correction for induced velocities: `u = Vx * a * G, v = Vy * ap * G`
 """
 struct Outputs{TF}
-
     Np::TF
     Tp::TF
     a::TF
@@ -164,7 +158,6 @@ struct Outputs{TF}
     ct::TF
     F::TF
     G::TF
-
 end
 
 # convenience constructor to initialize
@@ -174,7 +167,6 @@ Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 function Base.getproperty(obj::Vector{Outputs{TF}}, sym::Symbol) where TF
     return getfield.(obj, sym)
 end
-
 
 # -------------------------------
 
@@ -217,24 +209,33 @@ function residual(phi, rotor, section, op)
     Mach = W0/op.asound  # also ignoring induction
 
     # airfoil cl/cd
-    if rotor.flipcamber
-        cl, cd = af(-alpha, Re, Mach)
+    if rotor.turbine
+        cl, cd = afeval(af, -alpha, Re, Mach)
         cl *= -1
     else
-        cl, cd = af(alpha, Re, Mach)
+        cl, cd = afeval(af, alpha, Re, Mach)
     end
 
     # airfoil corrections
-    cl, cd = machcorrection(rotor.MachC, cl, cd, Mach)
-    cl, cd = recorrection(rotor.ReC, cl, cd, Re)
-    cl, cd = rotationcorrection(rotor.rotationC, cl, cd, chord/r, r/Rtip, Vy/Vx*Rtip/r, alpha, m, alpha0, phi)
+    if !isnothing(rotor.re)
+        cl, cd = re_correction(rotor.re, cl, cd, Re)
+    end
+    if !isnothing(rotor.mach)
+        cl, cd = mach_correction(rotor.mach, cl, cd, Mach)
+    end
+    if !isnothing(rotor.rotation)
+        cl, cd = rotation_correction(rotor.rotation, cl, cd, chord/r, r/Rtip, Vy/Vx*Rtip/r, alpha, phi)
+    end
 
     # resolve into normal and tangential forces
     cn = cl*cphi - cd*sphi
     ct = cl*sphi + cd*cphi
 
     # hub/tip loss
-    F = tiplossfactor(rotor.tipC, r, Rhub, Rtip, phi, B)   
+    F = 1.0
+    if !isnothing(rotor.tip)
+        F = tip_correction(rotor.tip, r, Rhub, Rtip, phi, B)   
+    end
 
     # sec parameters
     k = cn*sigma_p/(4.0*F*sphi*sphi)
@@ -325,7 +326,7 @@ function residual(phi, rotor, section, op)
     u *= G
     v *= G
 
-    if rotor.negateoutputs
+    if rotor.turbine
         return R, Outputs(-Np, -Tp, -a, -ap, -u, -v, phi, -alpha, W, -cl, cd, -cn, -ct, F, G)
     else
         return R, Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
@@ -513,14 +514,14 @@ end
 """
     simple_op(Vinf, Omega, r, rho; pitch=0.0, mu=1.0, asound=1.0, precone=0.0)
 
-Uniform inflow through rotor.  Returns an Inflow object.
+Uniform inflow through rotor.  Returns an OperatingPoint object.
 
 **Arguments**
 - `Vinf::Float`: freestream speed (m/s)
 - `Omega::Float`: rotation speed (rad/s)
 - `r::Float`: radial location where inflow is computed (m)
-- `pitch::Float`: pitch angle (rad)
 - `rho::Float`: air density (kg/m^3)
+- `pitch::Float`: pitch angle (rad)
 - `mu::Float`: air viscosity (Pa * s)
 - `asounnd::Float`: air speed of sound (m/s)
 - `precone::Float`: precone angle (rad)
@@ -606,7 +607,7 @@ end
 # -------- convenience methods ------------
 
 """
-    thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
+    thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
 
 integrate the thrust/torque across the blade, 
 including 0 loads at hub/tip, using a trapezoidal rule.
@@ -621,10 +622,11 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
 # function thrusttorque(rotor, sections, outputs)
-function thrusttorque(rotor, sections, outputs::Vector{Outputs{TF}}) where TF
+function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
-    rfull = [rotor.Rhub; sections.r; rotor.Rtip]
+    rvec = [s.r for s in sections]
+    rfull = [rotor.Rhub; rvec; rotor.Rtip]
     Npfull = [0.0; outputs.Np; 0.0]
     Tpfull = [0.0; outputs.Tp; 0.0]
 
@@ -640,13 +642,13 @@ end
 
 
 """
-    thrusttorque(rotor, sections, outputs::Array{Outputs{TF}, 2}) where TF
+    thrusttorque(rotor, sections, outputs::Matrix{TO}) where TO
 
 Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
 `outputs[i, j]` corresponds to `sections[i], azimuth[j]`.  Integrates across azimuth
 """
-function thrusttorque(rotor, sections, outputs::Matrix{Outputs{TF}}) where TF
+function thrusttorque(rotor, sections, outputs::Matrix{TO}) where TO
 
     T = 0.0
     Q = 0.0
@@ -664,7 +666,7 @@ end
 
 
 """
-    nondim(T, Q, Vhub, Omega, rho, rotor)
+    nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
 Nondimensionalize the outputs.
 
@@ -675,31 +677,31 @@ Nondimensionalize the outputs.
 - `Omega::Float64`: rotation speed used in propeller normalization (rad/s)
 - `rho::Float64`: air density (kg/m^3)
 - `rotor::Rotor`: rotor object
-- `type::String`: normalization type
+- `rotortype::String`: normalization type
 
 **Returns**
 
-if type == "windturbine"
+`if rotortype == "windturbine"`
 - `CP::Float64`: power coefficient
 - `CT::Float64`: thrust coefficient
 - `CQ::Float64`: torque coefficient
 
-if type == "propeller"
+`if rotortype == "propeller"`
 - `eff::Float64`: efficiency
 - `CT::Float64`: thrust coefficient
 - `CQ::Float64`: torque coefficient
 
-if type == "helicopter"
+`if rotortype == "helicopter"`
 - `FM::Float64`: figure of merit
 - `CT::Float64`: thrust coefficient
 - `CQ or CP::Float64`: torque/power coefficient (they are identical)
 """
-function nondim(T, Q, Vhub, Omega, rho, rotor, type)
+function nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
     P = Q * Omega
     Rp = rotor.Rtip*cos(rotor.precone)
 
-    if type == "windturbine"  # wind turbine normalizations
+    if rotortype == "windturbine"  # wind turbine normalizations
 
         q = 0.5 * rho * Vhub^2
         A = pi * Rp^2
@@ -710,7 +712,7 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, type)
 
         return CP, CT, CQ
 
-    elseif type == "propeller"
+    elseif rotortype == "propeller"
 
         n = Omega/(2*pi)
         Dp = 2*Rp
@@ -725,7 +727,7 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, type)
 
         return eff, CT, CQ
 
-    elseif type == "helicopter"
+    elseif rotortype == "helicopter"
 
         A = pi * Rp^2
 
