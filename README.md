@@ -4,8 +4,6 @@
 ![](https://github.com/byuflowlab/CCBlade.jl/workflows/Run%20tests/badge.svg)
 
 
-# CCBlade Documentation
-
 **Summary**: A blade element momentum method for propellers and turbines. 
 
 **Author**: Andrew Ning
