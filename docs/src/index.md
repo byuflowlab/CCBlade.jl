@@ -28,6 +28,13 @@ pkg> add CCBlade
 - Full details of the API are listed in [reference](reference.md).
 - Full details of the theory are linked from the [theory](theory.md) page.
 
+**Run Unit Tests**
+
+```julia
+pkg> activate .
+pkg> test
+```
+
 **Citing**:
 
 Ning, A., “Using Blade Element Momentum Methods with Gradient-Based Design Optimization,” Apr. 2020, (in review).
