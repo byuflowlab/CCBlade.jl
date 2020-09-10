@@ -18,11 +18,12 @@ using Test
 
 
 # --- rotor definition ---
-turbine = true
 Rhub = 0.01
 Rtip = 5.0
 Rtip_eff = 5.0*100  # to eliminate tip effects as consistent with their study.
 B = 3  # number of blades
+
+rotor = Rotor(Rhub, Rtip_eff, B, turbine=true)
 
 # --- section definitions ---
 
@@ -38,11 +39,7 @@ function affunc(alpha, Re, M)
     return cl, 0.0
 end 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-rotor = Rotor(Rhub, Rtip_eff, B, turbine)
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 
 # --- inflow definitions ---
@@ -118,27 +115,26 @@ betavec = 90 .- out.phi*180/pi
 # -------- verification: propellers.  using script at http://www.aerodynamics4students.com/propulsion/blade-element-propeller-theory.php ------
 # I increased their tolerance to 1e-6
 
-# inputs
-chord = 0.10
-D = 1.6
-RPM = 2100
-rho = 1.225
-pitch = 1.0  # pitch distance in meters.
 
 # --- rotor definition ---
-turbine = false
+D = 1.6
 Rhub = 0.0
 Rtip = D/2
 Rhub_eff = 1e-6  # something small to eliminate hub effects
 Rtip_eff = 100.0  # something large to eliminate tip effects
 B = 2  # number of blades
 
+rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B)
+rotor = Rotor(Rhub, Rtip, B)
+
 
 # --- section definitions ---
 
 R = D/2.0
 r = range(R/10, stop=R, length=11)
+pitch = 1.0  # pitch distance in meters.
 theta = atan.(pitch./(2*pi*r))
+chord = 0.10
 
 
 function affunc(alpha, Re, M)
@@ -149,19 +145,13 @@ function affunc(alpha, Re, M)
     return cl, cd
 end 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-# chord = chord*ones(n)
-# rho = rho
-
-
-rotor_no_F = Rotor(Rhub_eff, Rtip_eff, B, turbine)
-rotor = Rotor(Rhub, Rtip, B, turbine)
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 
 # --- inflow definitions ---
+RPM = 2100
+rho = 1.225
+
 
 tsim = 1e3*[1.045361193032356, 1.025630300048415, 1.005234466788998, 0.984163367036026, 0.962407923825140, 0.939960208707079, 0.916813564966455, 0.892962691000145, 0.868403981825492, 0.843134981103815, 0.817154838249790, 0.790463442573673, 0.763063053839278, 0.734956576558370, 0.706148261507327, 0.676643975451150, 0.646450304160057, 0.615575090105131, 0.584027074365864, 0.551815917391907, 0.518952127358381, 0.485446691671386, 0.451311288662196, 0.416557935286392, 0.381199277009438, 0.345247916141561, 0.308716772800348, 0.271618894441869, 0.233967425339051, 0.195775319296371, 0.157055230270717, 0.117820154495231, 0.078082266879117, 0.037854059197644, -0.002852754149850, -0.044026182837742, -0.085655305814570, -0.127728999394140, -0.170237722799272, -0.213169213043848, -0.256515079286031, -0.300266519551194, -0.344414094748869, -0.388949215983616, -0.433863576642539, -0.479150401337354, -0.524801553114807, -0.570810405128802, -0.617169893200684, -0.663873474163182, -0.710915862524620, -0.758291877949762, -0.805995685105502, -0.854022273120508, -0.902366919041604, -0.951025170820984, -0.999992624287163, -1.049265666456123, -1.098840222937414, -1.148712509929845]
 qsim = 1e2*[0.803638686218187, 0.806984572453978, 0.809709290183008, 0.811743686838315, 0.813015017103876, 0.813446921530685, 0.812959654049620, 0.811470393912576, 0.808893852696513, 0.805141916379142, 0.800124489784850, 0.793748780791057, 0.785921727832179, 0.776548246109426, 0.765532528164390, 0.752778882688809, 0.738190986274448, 0.721673076180745, 0.703129918771009, 0.682467282681955, 0.659592296506578, 0.634413303042323, 0.606840565246423, 0.576786093366321, 0.544164450503912, 0.508891967461804, 0.470887571011192, 0.430072787279711, 0.386371788290446, 0.339711042057184, 0.290019539402947, 0.237229503458026, 0.181274942660876, 0.122093307308376, 0.059623821454727, -0.006190834182631, -0.075406684829235, -0.148076528546541, -0.224253047813501, -0.303980950928302, -0.387309291734422, -0.474283793689904, -0.564946107631716, -0.659336973911858, -0.757495165410553, -0.859460291551374, -0.965266648683888, -1.074949504731187, -1.188540970723477, -1.306072104649531, -1.427575034895290, -1.553080300508925, -1.682614871422754, -1.816205997296014, -1.953879956474228, -2.095662107769925, -2.241576439746701, -2.391647474158875, -2.545897099743367, -2.704346566395035]
@@ -198,7 +188,7 @@ out = solve.(Ref(rotor_no_F), sections, op)
 
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B
-eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor)
+eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
 
 
 @test isapprox(CT, 0.056110238632657, atol=1e-7)
@@ -222,12 +212,7 @@ function affunc(alpha, Re, M)
 end 
 
 
-n = length(r)
-airfoils = fill(affunc, n)
-
-# theta .-= 3*pi/180
-
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 
 Vinf = 5.0
 Omega = RPM * pi/30 
@@ -259,7 +244,7 @@ Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 
 theta = atan.(pitch./(2*pi*r)) .- 3*pi/180
 
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(affunc))
 out = solve.(Ref(rotor_no_F), sections, ops)
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B
@@ -286,11 +271,9 @@ end
 Rhub = 1.5
 Rtip = 63.0
 B = 3
-turbine = true
-pitch = 0.0
 precone = 2.5*pi/180
 
-rotor = Rotor(Rhub, Rtip, B, turbine, pitch, precone)
+rotor = Rotor(Rhub, Rtip, B; precone=precone, turbine=true)
 
 r = [2.8667, 5.6000, 8.3333, 11.7500, 15.8500, 19.9500, 24.0500,
     28.1500, 32.2500, 36.3500, 40.4500, 44.5500, 48.6500, 52.7500,
@@ -302,15 +285,15 @@ theta = pi/180*[13.308, 13.308, 13.308, 13.308, 11.480, 10.162, 9.011, 7.795,
 
 # Define airfoils.  In this case we have 8 different airfoils that we load into an array.
 # These airfoils are defined in files.
-aftypes = Array{Any}(undef, 8)
-aftypes[1] = af_from_files("airfoils/Cylinder1.dat")
-aftypes[2] = af_from_files("airfoils/Cylinder2.dat")
-aftypes[3] = af_from_files("airfoils/DU40_A17.dat")
-aftypes[4] = af_from_files("airfoils/DU35_A17.dat")
-aftypes[5] = af_from_files("airfoils/DU30_A17.dat")
-aftypes[6] = af_from_files("airfoils/DU25_A17.dat")
-aftypes[7] = af_from_files("airfoils/DU21_A17.dat")
-aftypes[8] = af_from_files("airfoils/NACA64_A17.dat")
+aftypes = Array{AlphaAF}(undef, 8)
+aftypes[1] = AlphaAF("airfoils/Cylinder1.dat", radians=false)
+aftypes[2] = AlphaAF("airfoils/Cylinder2.dat", radians=false)
+aftypes[3] = AlphaAF("airfoils/DU40_A17.dat", radians=false)
+aftypes[4] = AlphaAF("airfoils/DU35_A17.dat", radians=false)
+aftypes[5] = AlphaAF("airfoils/DU30_A17.dat", radians=false)
+aftypes[6] = AlphaAF("airfoils/DU25_A17.dat", radians=false)
+aftypes[7] = AlphaAF("airfoils/DU21_A17.dat", radians=false)
+aftypes[8] = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
@@ -332,8 +315,9 @@ rotorR = Rtip*cos(precone)
 Omega = Vinf*tsr/rotorR
 azimuth = 0.0*pi/180
 rho = 1.225
+pitch = 0.0
 
-op = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+op = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 
 out = solve.(Ref(rotor), sections, op)
 
@@ -373,11 +357,11 @@ azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
 for i = 1:ntsr
     Omega = Vinf*tsrvec[i]/rotorR
 
-    ops = windturbine_op.(Vinf, Omega, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
+    ops = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
     outs = solve.(Ref(rotor), sections, ops)
     T, Q = thrusttorque(rotor, sections, outs)
 
-    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor)
+    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor, "windturbine")
 end
 
 cpvec_test = [0.02350364982213745, 0.07009444382725231, 0.13891408294580307, 0.21795999362154536, 0.30793657066245234, 0.39220453169574504, 0.43584242088313013, 0.4590001212905916, 0.4695346630018769, 0.4680559467091491, 0.45853627726342805, 0.44346560401350865, 0.4247660950655427, 0.4031517121734798, 0.37850875685858926, 0.3506421939620393, 0.31947670368255254, 0.28492212475211376, 0.24684802187254656, 0.2053516821754716]
@@ -394,7 +378,8 @@ end
 Rhub = 0.0254*.5
 Rtip = 0.0254*3.0
 B = 2  # number of blades
-turbine = false
+
+rotor = Rotor(Rhub, Rtip, B)
 
 r = .0254*[0.7526, 0.7928, 0.8329, 0.8731, 0.9132, 0.9586, 1.0332,
      1.1128, 1.1925, 1.2722, 1.3519, 1.4316, 1.5114, 1.5911,
@@ -410,11 +395,9 @@ theta = pi/180.0*[40.2273, 38.7657, 37.3913, 36.0981, 34.8803, 33.5899, 31.6400,
                    15.9417, 15.4179, 14.9266, 14.4650, 14.0306, 13.6210, 13.2343,
                    12.8685, 12.5233, 12.2138]
 
-af = af_from_files("airfoils/NACA64_A17.dat")
-airfoils = fill(af, length(r))
+af = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
 
-rotor = Rotor(Rhub, Rtip, B, turbine)
-sections = Section.(r, chord, theta, airfoils)
+sections = Section.(r, chord, theta, Ref(af))
 
 
 rho = 1.225
@@ -456,7 +439,7 @@ for i = 1:nJ
     op = simple_op.(Vinf, Omega, r, rho)
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
-    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor)
+    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
 
 end
 
@@ -477,28 +460,27 @@ end
 
 # https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf
 
-chord = 0.060
-theta = 0.0
-Rtip = 0.656
-Rhub = 0.19*Rtip
 
-turbine = false
+Rhub = 0.19*Rtip
+Rtip = 0.656
 B = 3
+rotor = Rotor(Rhub, Rtip, B)
 
 r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
+chord = 0.060
+theta = 0.0
 
-af = af_from_files("naca0012v2.txt")
+af = AlphaAF("naca0012v2.txt", radians=false)
 function af2(alpha, Re, M)
-    cl, cd = af(alpha, Re, M)
+    cl, cd = afeval(af, alpha, Re, M)
     return cl, cd+0.014
 end
-sections = Section.(r, chord, theta, af2)
+sections = Section.(r, chord, theta, Ref(af2))
 
 
 rho = 1.225
 Omega = 800*pi/30
 Vinf = 0.0
-op = simple_op.(Vinf, Omega, r, rho)
 
 
 nP = 40
@@ -509,14 +491,11 @@ CQ = zeros(nP)
 
 
 for i = 1:nP
-    rotor = Rotor(Rhub, Rtip, B, turbine, pitch[i])
+    
+    op = simple_op.(Vinf, Omega, r, rho, pitch=pitch[i])
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
-    
-    A = pi*Rtip^2
-    CT[i] = T / (rho * A * (Omega * Rtip)^2)
-    CQ[i] = Q / (rho * A * (Omega * Rtip)^2 * Rtip)
-
+    _, CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "helicopter")
 end
 
 # these are not directly from the experimental data, but have been compared to the experimental data and compare favorably.
@@ -529,5 +508,152 @@ for i = 1:nP
     @test isapprox(CQ[i], CQcomp[i], atol=1e-4)
 end
 
+end
+
+
+
+@testset "correction methods" begin
+
+# --- Mach ---
+
+cl0 = 0.5
+cd0 = 0.001
+Mach = 0.6
+
+cl, cd = mach_correction(PrandtlGlauert(), cl0, cd0, Mach)
+
+@test cl == 0.625
+@test cd == 0.001
+
+
+# --- Re ---
+
+Re0 = 1e6
+sf = TurbulentSkinFriction(Re0)
+
+Re = 2e6
+cl, cd = re_correction(sf, cl0, cd0, Re)
+
+@test cl == 0.5
+@test isapprox(cd, 0.000870551, atol=1e-6)
+
+cl, cd = re_correction(sf, cl0, cd0, 0.5e6)
+
+@test cl == 0.5
+@test isapprox(cd, 0.001148698, atol=1e-6)
+
+
+# ----- Du Selig lift -----
+D = 5.35
+rR = 0.3
+cr = 0.37
+Omega = 158*pi/30
+Vinf = 8.8
+
+tsr = Omega*D/2/Vinf
+
+# 2D data from Du-Selig paper
+alphavec = pi/180*[0.0, 2.5155348977710403, 5.008413994160788, 7.49992519310865, 10.032131340952713, 12.497054033373846, 14.982409693833208, 17.44339968110891, 19.969450290464472, 22.590227797670874, 25.098125268058034]
+cl2d = [0.0, 0.2519530298215895, 0.499873042018675, 0.6993694847728795, 0.7394671184527943, 0.7977304301609993, 0.7793208104222391, 0.6983663599821608, 0.5205579311691111, 0.49608168627557214, 0.47565213798095574]
+
+# lift curve slope / angle of attack
+m, alpha0 = CCBlade.linearliftcoeff(alphavec[1:3], cl2d[1:3])
+du = DuSeligEggers(1.0, 1.0, 1.0, m, alpha0)
+
+na = length(alphavec)
+cl3d = zeros(na)
+for i = 1:na
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
+end
+
+# data extracted from paper. match is not quite ok, but not exact.  not enough info from paper to determine what they did differently.
+# alphavec3 = pi/180*[0.0, 2.5155348977710403, 5.009097942881734, 7.4334966735869, 10.014092193437797, 12.43661006516037, 14.970982050620755, 17.504385108726478, 20.01382146373576, 22.593334064778496, 25.10510724458434]
+cl37 = [0.0, 0.2519530298215895, 0.5240848267401155, 0.74779989370297, 0.900881296424801, 1.058013955403694, 1.174782240701504, 1.2572504976439398, 1.2912974649725646, 1.406043541885448, 1.5228141070123276]
+
+# comparison from airfoil prep excel worksheet
+clexcel = [0.0002, 0.2516, 0.5000, 0.7285, 0.8937, 1.0624, 1.2008, 1.3120, 1.3871, 1.5309, 1.6698]
+
+@test all(isapprox.(cl3d, clexcel, atol=5e-5))
+
+
+rR = 0.55
+cr = 0.16
+for i = 1:na
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
+end
+
+# from original paper
+# alphavec2 = pi/180*[0.0, 2.492879096389748, 5.008527985614281, 7.5228659731236664, 10.010615454106329, 12.52130571510401, 14.984974501536751, 17.537442630238804, 20.019606530000416, 22.618925146087175, 25.105135742447715]
+cl16 = [0.0, 0.2499376609238726, 0.5039083394722486, 0.7114730973045302, 0.7778047240908117, 0.8562399634087439, 0.8701150031276412, 0.8274867591802311, 0.6960888107414154, 0.7119678202126802, 0.7238229313757207]
+
+# from airfoil prep excel worksheet
+clexcel = [0.0000, 0.2519, 0.4999, 0.7071, 0.7802, 0.8677, 0.8908, 0.8606, 0.7497, 0.7697, 0.7914]
+
+@test all(isapprox.(cl3d, clexcel, atol=5e-5))
+
+
+# -- second test case from Du-Selig paper
+
+cr = 0.301
+rR = 0.3
+Omega = 72*pi/30
+Vinf = 10.0
+D = 10.0
+
+tsr = Omega*D/2/Vinf
+
+alphavec = pi/180*[0.05300353356890675, 2.5265017667844507, 4.905771495877504, 7.214369846878679, 9.899882214369846, 12.396937573616018, 14.917550058892814, 17.48527679623086, 19.958775029446404, 22.479387514723207, 25.0, 27.49705535924618, 29.970553592461723]
+cl2d = [0.13100179507357756, 0.39492390225335816, 0.6916073880907927, 0.8987789384891554, 0.9814551925975084, 1.0139336800037035, 1.0660602506930839, 1.0002777477741605, 0.9432391562639841, 0.8490775173463776, 0.8204180618348846, 0.8092284269703383, 0.8002247699579783]
+m, alpha0 = CCBlade.linearliftcoeff(alphavec[1:4], cl2d[1:4])
+du = DuSeligEggers(1.0, 1.0, 1.0, m, alpha0)
+
+na = length(alphavec)
+cl3d = zeros(na)
+for i = 1:na
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
+end
+
+# data from original paper
+# alphavec2 = pi/180*[0.05300353356890497, 2.502944640753828, 4.905771495877504, 7.285041224970556, 9.8527679623086, 12.255594817432275, 14.823321554770313, 17.367491166077738, 19.93521790341578, 22.45583038869258, 24.95288574793875, 27.520612485276803, 29.970553592461716]
+cl30 = [0.12663498284650343, 0.39274306787847024, 0.6872405758637183, 0.9118716599544292, 1.0753467989569032, 1.192988411745645, 1.3368128957262853, 1.4042207374717754, 1.4781762258192277, 1.525935984281534, 1.6239166550938433, 1.7218896106902037, 1.8176920188662753]
+
+# data from airfoil prep excel sheet
+clexcel = [0.1324, 0.3988, 0.6794, 0.9057, 1.0786, 1.2140, 1.3617, 1.4444, 1.5276, 1.5919, 1.6935, 1.8040, 1.9147]
+
+@test all(isapprox.(cl3d, clexcel, atol=5e-5))
+
+
+
+cr = 0.181
+rR = 0.47
+for i = 1:na
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
+end
+
+# data from original paper
+# alphavec3 = pi/180*[0.05300353356890675, 2.5265017667844543, 4.929328621908127, 7.332155477031801, 9.852767962308597, 12.349823321554773, 14.893992932862197, 17.438162544169607, 19.958775029446404, 22.502944640753825, 24.95288574793875, 27.497055359246172, 29.99411071849234]
+cl18 = [0.12663498284650343, 0.39929071448043185, 0.6916048163521438, 0.9140499225906671, 1.0054778033237153, 1.0641571640923564, 1.1424820364055326, 1.1116366030418527, 1.0851605536438969, 1.0390312774854573, 1.0365804105523586, 1.0581367239135695, 1.07969818075208]
+
+# data from airofilprep excel worksheet
+clexcel = [0.1316, 0.3966, 0.6862, 0.9018, 1.0243, 1.1021, 1.1964, 1.1960, 1.2008, 1.1764, 1.2052, 1.2476, 1.2914]
+
+@test all(isapprox.(cl3d, clexcel, atol=5e-5))
+
+cr = 0.113
+rR = 0.80
+for i = 1:na
+    cl3d[i], _ = rotation_correction(du, cl2d[i], cd, cr, rR, tsr, alphavec[i])
+end
+
+# data from original paper
+# alphavec4 = pi/180*[0.05300353356890675, 2.5265017667844525, 4.952885747938751, 7.285041224970556, 9.805653710247352, 12.396937573616018, 14.89399293286219, 17.438162544169607, 19.958775029446404, 22.502944640753825, 24.95288574793875, 27.473498233215548, 29.99411071849234]
+cl11 = [0.12663498284650343, 0.4014741205939689, 0.6937856507270308, 0.9075048477273546, 0.9836488856656436, 1.0270341166849262, 1.0900802896806416, 1.0308505768409797, 0.9803570601941154, 0.901476692332619, 0.8815585764912233, 0.8790999943421753, 0.8744580060795908]
+
+# data from airfoil prep excel worksheet
+clexcel = [0.1311, 0.3953, 0.6904, 0.8995, 0.9911, 1.0338, 1.0954, 1.0444, 1.0013, 0.9229, 0.9071, 0.9080, 0.9109]
+
+@test all(isapprox.(cl3d, clexcel, atol=5e-5))
 
 end
+
+
