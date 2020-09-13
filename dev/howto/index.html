@@ -641,7 +641,7 @@ figure()
 plot(tsrvec, cpvec)
 plot(tsrvec, ctvec)
 xlabel(&quot;tip speed ratio&quot;)
-legend([L&quot;C_P&quot;, L&quot;C_T&quot;])</code></pre><p><img src="../cpct-turbine.svg" alt/></p><h2 id="Helicopter-Operation"><a class="docs-heading-anchor" href="#Helicopter-Operation">Helicopter Operation</a><a id="Helicopter-Operation-1"></a><a class="docs-heading-anchor-permalink" href="#Helicopter-Operation" title="Permalink"></a></h2><p>Let&#39;s simulate the rotorcraft geometry from this <a href="https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf">NASA report</a>.  The setup is standard to begin with.  </p><pre><code class="language-">using CCBlade
+legend([L&quot;C_P&quot;, L&quot;C_T&quot;])</code></pre><p><img src="../cpct-turbine.svg" alt/></p><h2 id="Helicopter-Operation"><a class="docs-heading-anchor" href="#Helicopter-Operation">Helicopter Operation</a><a id="Helicopter-Operation-1"></a><a class="docs-heading-anchor-permalink" href="#Helicopter-Operation" title="Permalink"></a></h2><p>Let&#39;s simulate the rotorcraft geometry from this <a href="https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf">NASA report</a>.  The setup is standard to begin with.  </p><pre><code class="language-julia">using CCBlade
 
 chord = 0.060
 theta = 0.0
@@ -658,9 +658,7 @@ function af2(alpha, Re, M)
     cl, cd = afeval(af, alpha, Re, M)
     return cl, cd+0.014  # drag addition per report for Reynolds number adjustment
 end
-sections = Section.(r, chord, theta, af2)
-nothing # hide</code></pre><p>Notice that we put in zero for the freestream speed.  As discussed in the <a href="../theory/">Theory</a> document, the method has been extended to handle these special cases (alternatively you can use a small nonzero number, which utilizes the standard theory, but this is prone to occassional numerical noise in the output).  Also note that we use the nondimensionalization for helicopters.</p><pre><code class="language-">
-rho = 1.225
+sections = Section.(r, chord, theta, af2)</code></pre><p>Notice that we put in zero for the freestream speed.  As discussed in the <a href="../theory/">Theory</a> document, the method has been extended to handle these special cases (alternatively you can use a small nonzero number, which utilizes the standard theory, but this is prone to occassional numerical noise in the output).  Also note that we use the nondimensionalization for helicopters.</p><pre><code class="language-julia">rho = 1.225
 Omega = 800*pi/30
 Vinf = 0.0
 
@@ -678,8 +676,7 @@ for i = 1:nP
     FM[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, &quot;helicopter&quot;)
 end
 
-sigma = B * chord / (pi * Rtip)
-nothing # hide</code></pre><p>Plotting the results against the provided experimental data.</p><pre><code class="language-">using PyPlot
+sigma = B * chord / (pi * Rtip)</code></pre><p>Plotting the results against the provided experimental data.</p><pre><code class="language-julia">using PyPlot
 
 
 figure()
@@ -737,7 +734,6 @@ plot(data[:, 1], data[:, 2], &quot;o&quot;, color=&quot;#A60628&quot;)
 text(0.133, 0.014, &quot;BEM&quot;, color=&quot;#348ABD&quot;)
 text(0.08, 0.017, &quot;experimental&quot;, color=&quot;#A60628&quot;)
 gca().yaxis.set_label_coords(-0.09,1.05)
-savefig(&quot;rotorcraft1.svg&quot;); nothing # hide
 
 figure()
 plot(CT/sigma, FM, color=&quot;#348ABD&quot;)
@@ -760,8 +756,7 @@ data = [
 plot(data[:, 1], data[:, 2], &quot;o&quot;, color=&quot;#A60628&quot;)
 text(0.12, 0.67, &quot;BEM&quot;, color=&quot;#348ABD&quot;)
 text(0.12, 0.5, &quot;experimental&quot;, color=&quot;#A60628&quot;)
-gca().yaxis.set_label_coords(0,1.05)
-savefig(&quot;rotorcraft2.svg&quot;); nothing # hide</code></pre><p><img src="rotorcraft1.svg" alt/> <img src="rotorcraft2.svg" alt/></p><h2 id="Computing-Derivatives"><a class="docs-heading-anchor" href="#Computing-Derivatives">Computing Derivatives</a><a id="Computing-Derivatives-1"></a><a class="docs-heading-anchor-permalink" href="#Computing-Derivatives" title="Permalink"></a></h2><p>The code is written in a generic enough way to allow for algorithmic differentiation through the entirety of the code.  This derivative workflow is not embeded in the package for a few reasons: 1) there are many different possible input/output combinations and trying to handle the most general cases would create a lot of extra data that may not be of interest, 2) there are many different AD packages one might want to use, 3) the code is often connected to others and one might want to AD a longer chain than just around CCBlade.  In any case, setting this is up is not too difficult.  Below is an example using <code>ForwardDiff</code> and <code>ReverseDiff</code>.</p><p>First, let&#39;s import some needed packages.</p><pre><code class="language-julia">import ForwardDiff
+gca().yaxis.set_label_coords(0,1.05)</code></pre><p><img src="../rotorcraft1.svg" alt/> <img src="../rotorcraft2.svg" alt/></p><h2 id="Computing-Derivatives"><a class="docs-heading-anchor" href="#Computing-Derivatives">Computing Derivatives</a><a id="Computing-Derivatives-1"></a><a class="docs-heading-anchor-permalink" href="#Computing-Derivatives" title="Permalink"></a></h2><p>The code is written in a generic enough way to allow for algorithmic differentiation through the entirety of the code.  This derivative workflow is not embeded in the package for a few reasons: 1) there are many different possible input/output combinations and trying to handle the most general cases would create a lot of extra data that may not be of interest, 2) there are many different AD packages one might want to use, 3) the code is often connected to others and one might want to AD a longer chain than just around CCBlade.  In any case, setting this is up is not too difficult.  Below is an example using <code>ForwardDiff</code> and <code>ReverseDiff</code>.</p><p>First, let&#39;s import some needed packages.</p><pre><code class="language-julia">import ForwardDiff
 import ReverseDiff
 using CCBlade</code></pre><p>Next, let&#39;s define the data for a simple propeller geometry.</p><pre><code class="language-julia">D = 1.6
 R = D/2.0
@@ -935,5 +930,5 @@ SparseDiffTools.forwarddiff_color_jacobian!(Jsparse, func, x, cache)  # compute 
 t1 = @benchmark ForwardDiff.jacobian!($J, $func, $y, $x, $config)
 println(median(t1).time*1e-9)  # median time in seconds
 t2 = @benchmark SparseDiffTools.forwarddiff_color_jacobian!($Jsparse, $func, $x, $cache)
-println(median(t2).time*1e-9)  # median time in seconds</code></pre><pre class="documenter-example-output">1.6304717215000002
-0.19250000050000002</pre><p>This represents about an order of magnitude speed up by leveraging sparsity.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tutorial/">« Quick Start</a><a class="docs-footer-nextpage" href="../reference/">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 11 September 2020 22:24">Friday 11 September 2020</span>. Using Julia version 1.5.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+println(median(t2).time*1e-9)  # median time in seconds</code></pre><pre class="documenter-example-output">1.386636561
+0.156093746</pre><p>This represents about an order of magnitude speed up by leveraging sparsity.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../tutorial/">« Quick Start</a><a class="docs-footer-nextpage" href="../reference/">API Reference »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 13 September 2020 03:44">Sunday 13 September 2020</span>. Using Julia version 1.5.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
