@@ -1,6 +1,6 @@
 # CCBlade.jl
 
-[![](https://img.shields.io/badge/docs-dev-blue.svg)](https://flow.byu.edu/CCBlade.jl/dev)
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://flow.byu.edu/CCBlade.jl/stable)
 ![](https://github.com/byuflowlab/CCBlade.jl/workflows/Run%20tests/badge.svg)
 
 
