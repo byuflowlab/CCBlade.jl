@@ -444,10 +444,7 @@ alpha1, cl1, cd1 = viterna(alpha, cl, cd, cr75)
 nothing #hide
 ```
 
-All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.  To do the interpolation we are going to use the FLOWMath package.  That isn't needed for standard usage of CCBlade so you may need to install it.  From the REPL (the `]` enters package mode).
-```
-] add FLOWMath
-```
+All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.  To do the interpolation we are going to use the FLOWMath package (which is already a dependency of CCBlade so should already be installed). 
 
 ```@example af
 import FLOWMath
