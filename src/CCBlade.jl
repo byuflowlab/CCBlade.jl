@@ -621,7 +621,6 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `T::Float64`: thrust (along x-dir see Documentation).
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
-# function thrusttorque(rotor, sections, outputs)
 function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.

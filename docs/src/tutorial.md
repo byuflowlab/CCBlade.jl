@@ -50,12 +50,18 @@ theta = propgeom[:, 3] * pi/180
 nothing # hide
 ```
 
-The remaining piece in defining the geometry is the airfoils.  We don't actually define the airfoil geometry, but rather the aerodynamic performance data of the airfoils at each station (lift and drag coefficients).  This propeller uses the NACA 4412 airfoil, for which experimental data is readily available, or for which computational data can be easily provided. The data for this airfoil is contained in a file "naca4412.dat".  The file format is discussed in [Airfoil Files](@ref).  There are some important details to be aware of when providing airfoil data---the way this file was constructed is covered in [Airfoil Data](@ref).  For now, we just assume provided airfoil data.  The file extension is not important, all that matters is that the format has columns of data for:
-angle of attack | lift coefficient | drag coefficient (after an informational header row, a row for Reynolds number, and a row for Mach number).  
+The remaining piece in defining the geometry is the airfoils.  We don't actually define the airfoil geometry, but rather the aerodynamic performance data of the airfoils at each station (lift and drag coefficients).  This propeller uses the NACA 4412 airfoil, for which experimental data is readily available, or for which computational data can be easily provided. The data for this airfoil is contained in a file "naca4412.dat" (in the `data` directory of the repository).  The file format is discussed in [Airfoil Files](@ref).  There are some important details to be aware of when providing airfoil data---the way this file was constructed is covered in [Airfoil Data](@ref).  For now, we just assume provided airfoil data.  The file extension is not important, all that matters is that the format has columns of data for:
+angle of attack | lift coefficient | drag coefficient (after an informational header row, a row for Reynolds number, and a row for Mach number).  We can either put in the full or relative path to the file, for example if you were in the home directory of this repository:
 
 ```@example prop
-af = AlphaAF("naca4412.dat")
+af = AlphaAF("data/naca4412.dat")
 nothing # hide
+```
+
+or we can change directory (note the semicolon to enter shell mode from the REPL):
+```
+; cd data
+af = AlphaAF("naca4412.dat")
 ```
 
 We can now define the sections using this airfoil data.  Since Section is defined for one section, and we'd like to define them all simultaneously, we use broadcasting (see the dot after Section).  The airfoil is the same for all stations along the rotor so we wrap it in a `Ref()` call so that it can be broadcast across.
@@ -204,7 +210,7 @@ plot(J, CQ*2*pi)
 plot(Jexp, CTexp, "ko")
 plot(Jexp, CPexp, "ko")
 xlabel(L"J")
-legend([L"C_T", L"C_P"])
+legend([L"C_T", L"C_P", "experimental"])
 savefig("ctcp-prop.svg") # hide
 
 figure()
@@ -212,6 +218,7 @@ plot(J, eff)
 plot(Jexp, etaexp, "ko")
 xlabel(L"J")
 ylabel(L"\eta")
+legend(["CCBlade", "experimental"])
 savefig("eta-prop.svg"); nothing # hide
 ```
 

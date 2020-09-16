@@ -22,7 +22,7 @@
 **Installation**:
 
 ```julia
-pkg> add CCBlade
+] add CCBlade
 ```
 
 **Documentation**:

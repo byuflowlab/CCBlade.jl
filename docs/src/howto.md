@@ -6,18 +6,15 @@ This section shows examples of how to perform various tasks in CCBlade.  It assu
 
 In this example we will construct an airfoil file.  In this case we are interested in the NACA 4412.  The XFOIL simulation data for this case is available [here](http://airfoiltools.com/polar/details?polar=xf-naca4412-il-1000000) for (``Re = 10^6``).
 
+```@setup af
+using PyPlot  # do this first to avoid displaying matplotlib installation, etc.
+```
+
 ```@example af
 using CCBlade
 using PyPlot
 
 xfoildata = [
- -15.750  -0.8374   0.08373   0.08141  -0.0585   1.0000   0.0169
- -15.500  -0.9127   0.06837   0.06591  -0.0687   1.0000   0.0166
- -15.250  -1.0965   0.03328   0.03022  -0.0993   1.0000   0.0153
- -15.000  -1.1161   0.03120   0.02803  -0.0956   1.0000   0.0154
- -14.750  -1.1210   0.02977   0.02651  -0.0926   1.0000   0.0156
- -14.500  -1.1215   0.02857   0.02523  -0.0896   1.0000   0.0159
- -14.250  -1.1181   0.02751   0.02407  -0.0870   1.0000   0.0162
  -14.000  -1.0990   0.02637   0.02282  -0.0871   0.9992   0.0166
  -13.750  -1.0711   0.02533   0.02165  -0.0885   0.9979   0.0170
  -13.500  -1.0462   0.02365   0.01985  -0.0903   0.9963   0.0177
@@ -155,11 +152,17 @@ cd_0 = xfoildata[:, 3]
 
 figure()
 plot(alpha_0, cl_0)
+xlabel(L"\alpha")
+ylabel(L"c_l")
 savefig("cl1.svg") # hide
 
 figure()
 plot(alpha_0, cd_0)
+xlabel(L"\alpha")
+ylabel(L"c_d")
 savefig("cd1.svg") # hide
+
+nothing # hide
 ```
 
 ![](cl1.svg)
@@ -175,10 +178,14 @@ alpha_ext, cl_ext, cd_ext = viterna(alpha_0, cl_0, cd_0, cr75)
 
 figure()
 plot(alpha_ext, cl_ext)
+xlabel(L"\alpha")
+ylabel(L"c_l")
 savefig("cl2.svg") # hide
 
 figure()
 plot(alpha_ext, cd_ext)
+xlabel(L"\alpha")
+ylabel(L"c_d")
 savefig("cd2.svg") # hide
 ```
 
@@ -437,7 +444,10 @@ alpha1, cl1, cd1 = viterna(alpha, cl, cd, cr75)
 nothing #hide
 ```
 
-All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.
+All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.  To do the interpolation we are going to use the FLOWMath package.  That isn't needed for standard usage of CCBlade so you may need to install it.  From the REPL (the `]` enters package mode).
+```
+] add FLOWMath
+```
 
 ```@example af
 import FLOWMath
@@ -589,6 +599,8 @@ figure()
 plot(alpha_0, cl_0, label="original")
 plot(alpha_ext, cl_ext, label="extrapolated")
 plot(alpha_rot, cl_rot, label="rotation")
+xlabel(L"\alpha")
+ylabel(L"c_l")
 legend()
 savefig("clcomp.svg") # hide
 
@@ -596,6 +608,8 @@ figure()
 plot(alpha_0, cd_0, label="original")
 plot(alpha_ext, cd_ext, label="extrapolated")
 plot(alpha_rot, cd_rot, label="rotation")
+xlabel(L"\alpha")
+ylabel(L"c_d")
 legend()
 savefig("cdcomp.svg") # hide
 ```
@@ -665,14 +679,14 @@ The airfoils are contained in files.  This wind turbine uses  8 different airfoi
 # Define airfoils.  In this case we have 8 different airfoils that we load into an array.
 # These airfoils are defined in files.
 aftypes = Array{AlphaAF}(undef, 8)
-aftypes[1] = AlphaAF("airfoils/Cylinder1.dat", radians=false)
-aftypes[2] = AlphaAF("airfoils/Cylinder2.dat", radians=false)
-aftypes[3] = AlphaAF("airfoils/DU40_A17.dat", radians=false)
-aftypes[4] = AlphaAF("airfoils/DU35_A17.dat", radians=false)
-aftypes[5] = AlphaAF("airfoils/DU30_A17.dat", radians=false)
-aftypes[6] = AlphaAF("airfoils/DU25_A17.dat", radians=false)
-aftypes[7] = AlphaAF("airfoils/DU21_A17.dat", radians=false)
-aftypes[8] = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
+aftypes[1] = AlphaAF("data/Cylinder1.dat", radians=false)
+aftypes[2] = AlphaAF("data/Cylinder2.dat", radians=false)
+aftypes[3] = AlphaAF("data/DU40_A17.dat", radians=false)
+aftypes[4] = AlphaAF("data/DU35_A17.dat", radians=false)
+aftypes[5] = AlphaAF("data/DU30_A17.dat", radians=false)
+aftypes[6] = AlphaAF("data/DU25_A17.dat", radians=false)
+aftypes[7] = AlphaAF("data/DU21_A17.dat", radians=false)
+aftypes[8] = AlphaAF("data/NACA64_A17.dat", radians=false)
 
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
@@ -799,7 +813,7 @@ rotor = Rotor(Rhub, Rtip, B)
 
 r = range(Rhub, Rtip, length=30)
 
-af = AlphaAF("naca0012.txt", radians=false)
+af = AlphaAF("data/naca0012.txt", radians=false)
 function af2(alpha, Re, M)
     cl, cd = afeval(af, alpha, Re, M)
     return cl, cd+0.014  # drag addition per report for Reynolds number adjustment
@@ -927,7 +941,7 @@ savefig("rotorcraft2.svg"); nothing # hide
 
 ## Computing Derivatives
 
-The code is written in a generic enough way to allow for algorithmic differentiation through the entirety of the code.  This derivative workflow is not embeded in the package for a few reasons: 1) there are many different possible input/output combinations and trying to handle the most general cases would create a lot of extra data that may not be of interest, 2) there are many different AD packages one might want to use, 3) the code is often connected to others and one might want to AD a longer chain than just around CCBlade.  In any case, setting this is up is not too difficult.  Below is an example using `ForwardDiff` and `ReverseDiff`.
+The code is written in a generic enough way to allow for algorithmic differentiation through the entirety of the code.  This derivative workflow is not embeded in the package for a few reasons: 1) there are many different possible input/output combinations and trying to handle the most general cases would create a lot of extra data that may not be of interest, 2) there are many different AD packages one might want to use, 3) the code is often connected to others and one might want to AD a longer chain than just around CCBlade.  In any case, setting this is up is not too difficult.  Below is an example using `ForwardDiff` and `ReverseDiff` (note that ReverseDiff currently has an issue with concatenation so you must use version 1.2.0 for this example).
 
 First, let's import some needed packages.
 
