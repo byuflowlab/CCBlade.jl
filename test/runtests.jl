@@ -470,7 +470,7 @@ r = range(Rhub + 0.01*Rtip, Rtip - 0.01*Rtip, length=30)
 chord = 0.060
 theta = 0.0
 
-af = AlphaAF("naca0012v2.txt", radians=false)
+af = AlphaAF("airfoils/naca0012v2.txt", radians=false)
 function af2(alpha, Re, M)
     cl, cd = afeval(af, alpha, Re, M)
     return cl, cd+0.014
