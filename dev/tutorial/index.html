@@ -26,28 +26,29 @@ rotor = Rotor(Rhub, Rtip, B)</code></pre><p>Next, we define the geometry along t
 
 r = propgeom[:, 1] * Rtip
 chord = propgeom[:, 2] * Rtip
-theta = propgeom[:, 3] * pi/180</code></pre><p>The remaining piece in defining the geometry is the airfoils.  We don&#39;t actually define the airfoil geometry, but rather the aerodynamic performance data of the airfoils at each station (lift and drag coefficients).  This propeller uses the NACA 4412 airfoil, for which experimental data is readily available, or for which computational data can be easily provided. The data for this airfoil is contained in a file &quot;naca4412.dat&quot;.  The file format is discussed in <a href="../reference/#Airfoil-Files">Airfoil Files</a>.  There are some important details to be aware of when providing airfoil data–-the way this file was constructed is covered in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.  For now, we just assume provided airfoil data.  The file extension is not important, all that matters is that the format has columns of data for: angle of attack | lift coefficient | drag coefficient (after an informational header row, a row for Reynolds number, and a row for Mach number).  </p><pre><code class="language-julia">af = AlphaAF(&quot;naca4412.dat&quot;)</code></pre><p>We can now define the sections using this airfoil data.  Since Section is defined for one section, and we&#39;d like to define them all simultaneously, we use broadcasting (see the dot after Section).  The airfoil is the same for all stations along the rotor so we wrap it in a <code>Ref()</code> call so that it can be broadcast across.</p><pre><code class="language-julia">sections = Section.(r, chord, theta, Ref(af))</code></pre><p>Next, we define the operating point(s).  You can define your own arbitrary inflow struct, but for this example we will assume constant inflow across the rotor.  We again use broadcasting because the velocities will vary at each radial station <code>r</code>.  For this simple method we just need to know the freestream speed, rotation speed, and the air density.</p><pre><code class="language-julia">Vinf = 5.0
+theta = propgeom[:, 3] * pi/180</code></pre><p>The remaining piece in defining the geometry is the airfoils.  We don&#39;t actually define the airfoil geometry, but rather the aerodynamic performance data of the airfoils at each station (lift and drag coefficients).  This propeller uses the NACA 4412 airfoil, for which experimental data is readily available, or for which computational data can be easily provided. The data for this airfoil is contained in a file &quot;naca4412.dat&quot; (in the <code>data</code> directory of the repository).  The file format is discussed in <a href="../reference/#Airfoil-Files">Airfoil Files</a>.  There are some important details to be aware of when providing airfoil data–-the way this file was constructed is covered in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.  For now, we just assume provided airfoil data.  The file extension is not important, all that matters is that the format has columns of data for: angle of attack | lift coefficient | drag coefficient (after an informational header row, a row for Reynolds number, and a row for Mach number).  We can either put in the full or relative path to the file, for example if you were in the home directory of this repository:</p><pre><code class="language-julia">af = AlphaAF(&quot;data/naca4412.dat&quot;)</code></pre><p>or we can change directory (note the semicolon to enter shell mode from the REPL):</p><pre><code class="language-none">; cd data
+af = AlphaAF(&quot;naca4412.dat&quot;)</code></pre><p>We can now define the sections using this airfoil data.  Since Section is defined for one section, and we&#39;d like to define them all simultaneously, we use broadcasting (see the dot after Section).  The airfoil is the same for all stations along the rotor so we wrap it in a <code>Ref()</code> call so that it can be broadcast across.</p><pre><code class="language-julia">sections = Section.(r, chord, theta, Ref(af))</code></pre><p>Next, we define the operating point(s).  You can define your own arbitrary inflow struct, but for this example we will assume constant inflow across the rotor.  We again use broadcasting because the velocities will vary at each radial station <code>r</code>.  For this simple method we just need to know the freestream speed, rotation speed, and the air density.</p><pre><code class="language-julia">Vinf = 5.0
 Omega = 5400*pi/30  # convert to rad/s
 rho = 1.225
 
 op = simple_op.(Vinf, Omega, r, rho)</code></pre><p>We have now defined the requisite inputs and can start using the BEM methodology.  The solve function is the core of the BEM. Note that we use broadcasting to solve all sections in one call.  However, since rotor is not an Array, and is the same for all sections, we wrap it in Ref so that it can broadcast as a &quot;scalar&quot;.</p><pre><code class="language-julia">out = solve.(Ref(rotor), sections, op)</code></pre><p>There are many outputs, and although the return variable is actually an array of structs, convenience methods are provided to access the fields as if it was a struct of arrays.  For example, we can access the angles of attack at each radial station as:</p><pre><code class="language-julia">out.alpha*180/pi  # angle of attack in degrees</code></pre><pre class="documenter-example-output">18-element Array{Float64,1}:
- 1.5526483964108742
- 8.2592816586044
- 8.318829951357227
- 7.100592831035915
- 6.030938351244401
- 5.062309539608879
- 4.479051334176166
- 4.092121766436447
- 3.8589608614091784
- 3.7943113412827545
- 3.6570688871063983
- 3.6801866721437704
- 3.7309872715758408
- 3.8142915314551646
- 3.8026391660011605
- 3.451902733512742
- 2.7943851168951417
+ 1.6775778421741854
+ 8.358564583802222
+ 8.415893286356741
+ 7.179966221624963
+ 6.121087792681808
+ 5.1444777125110575
+ 4.555092236064599
+ 4.175897516702776
+ 3.935139932160625
+ 3.862983493725478
+ 3.718529482894817
+ 3.738448565846664
+ 3.786857587115428
+ 3.8709976652382454
+ 3.8564178687455724
+ 3.5100794719833104
+ 2.8505053557041027
  0.0</pre><p>The full list of outputs and their positive directions are shown in <a href="../reference/#Output-Struct">Output Struct</a>.</p><p>Let&#39;s now plot the distributed loads.</p><pre><code class="language-julia">figure()
 plot(r/Rtip, out.Np)
 plot(r/Rtip, out.Tp)
@@ -120,10 +121,11 @@ plot(J, CQ*2*pi)
 plot(Jexp, CTexp, &quot;ko&quot;)
 plot(Jexp, CPexp, &quot;ko&quot;)
 xlabel(L&quot;J&quot;)
-legend([L&quot;C_T&quot;, L&quot;C_P&quot;])
+legend([L&quot;C_T&quot;, L&quot;C_P&quot;, &quot;experimental&quot;])
 
 figure()
 plot(J, eff)
 plot(Jexp, etaexp, &quot;ko&quot;)
 xlabel(L&quot;J&quot;)
-ylabel(L&quot;\eta&quot;)</code></pre><p><img src="../ctcp-prop.svg" alt/> <img src="../eta-prop.svg" alt/></p><p>There is reasonable agreement in thrust and torque coefficient, certainly within experimental/computational error.  Efficiency is overpredicted, but always harder to match as it is the ratio of two estimated values.  Spending time providing more accurate airfoil data could improve the accuracy, and is discussed more in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Intro</a><a class="docs-footer-nextpage" href="../howto/">Guided Examples »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Sunday 13 September 2020 03:55">Sunday 13 September 2020</span>. Using Julia version 1.5.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ylabel(L&quot;\eta&quot;)
+legend([&quot;CCBlade&quot;, &quot;experimental&quot;])</code></pre><p><img src="../ctcp-prop.svg" alt/> <img src="../eta-prop.svg" alt/></p><p>There is reasonable agreement in thrust and torque coefficient, certainly within experimental/computational error.  Efficiency is overpredicted, but always harder to match as it is the ratio of two estimated values.  Spending time providing more accurate airfoil data could improve the accuracy, and is discussed more in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Intro</a><a class="docs-footer-nextpage" href="../howto/">Guided Examples »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Wednesday 16 September 2020 18:17">Wednesday 16 September 2020</span>. Using Julia version 1.5.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
