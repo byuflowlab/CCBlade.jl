@@ -1,6 +1,10 @@
 # Changelog
 
 
+## [0.2.1] - Sep 2020
+
+- minor change to improve type flexibility in OperatingPoint (for AD usage)
+
 ## [0.2] - Sep 2020
 
 - WARNING: default is now a propeller instead of a turbine.  But turbine conventions are easily accessed through a flag.  Main reason was to better support rotorcraft usage, and because we already have example implementations from a turbine perspective thought it would be nice for the internal representation to use a propeller perspective so both are available.
