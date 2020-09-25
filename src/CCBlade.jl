@@ -102,20 +102,20 @@ See Documentation for more detail on coordinate systems.
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct OperatingPoint{TF, TF2}
-    Vx::TF
-    Vy::TF
+struct OperatingPoint{TF1, TF2, TF3, TF4, TF5}
+    Vx::TF1
+    Vy::TF1
     rho::TF2  # different type to accomodate ReverseDiff
-    pitch::TF2  
-    mu::TF2
-    asound::TF2
+    pitch::TF3  
+    mu::TF4
+    asound::TF5
 end
 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{OperatingPoint{TF, TF2}}, sym::Symbol) where {TF, TF2}
+function Base.getproperty(obj::Vector{OperatingPoint{TF1, TF2, TF3, TF4, TF5}}, sym::Symbol) where {TF1, TF2, TF3, TF4, TF5}
     return getfield.(obj, sym)
 end
 
@@ -562,8 +562,7 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `mu::Float64`: air viscosity (Pa * s)
 - `asound::Float64`: air speed of sound (m/s)
 """
-function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=1.0, asound=1.0)
-
+function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=one(rho), asound=one(rho))
     sy = sin(yaw)
     cy = cos(yaw)
     st = sin(tilt)
