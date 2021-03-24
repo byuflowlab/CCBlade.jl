@@ -1,6 +1,95 @@
 using CCBlade
 using Test
 
+@testset "utilities" begin
+
+pitch = 0
+R = 1.
+
+#-uniform wind
+rho = 1.
+shearExp = 0.
+hubHt = 0.
+Vhub = 1.
+
+#--turbine 1, non-rotating
+yaw = 0.
+tilt = 0.
+precone = 30. *pi/180.
+Omega = 0.
+
+#---condition 1
+azimuth = 0 #upward
+xb = yb = 0.
+zb = R
+lcon = 0.
+lswp = 0.
+
+ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+@test isapprox(ops.Vx, cos(precone), atol=1e-9)  
+@test isapprox(ops.Vy, 0., atol=1e-9)  
+
+#---condition 2
+azimuth = 0 #upward
+xb = yb = 0.
+zb = R
+lcon = 30. *pi/180.
+lswp = 45. *pi/180.
+
+ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+@test isapprox(ops.Vx, 1., atol=1e-9) 
+@test isapprox(ops.Vy, 0., atol=1e-9) 
+
+#---condition 3
+azimuth = .5*pi #upward
+xb = yb = 0.
+zb = R
+lcon = 15. *pi/180.
+lswp = 45. *pi/180.
+
+ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+# println(ops.Vx," ",ops.Vy)
+# println(0.," ",0.)
+@test isapprox(ops.Vx, cos(precone-lcon), atol=1e-9) 
+@test isapprox(ops.Vy, -sin(precone-lcon)*sin(lswp), atol=1e-9) 
+
+
+#--turbine 2, non-rotating, yawed
+yaw = 90. *pi/180.
+tilt = 0.
+precone = 30. *pi/180.
+Omega = 0.
+
+#---condition 4
+azimuth = pi #downward
+xb = yb = 0.
+zb = R
+lcon = 0. *pi/180.
+lswp = -10. *pi/180.
+
+ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+@test isapprox(ops.Vx, 0., atol=1e-9) 
+@test isapprox(ops.Vy, cos(lswp), atol=1e-9) 
+
+#- no wind
+Vhub = 0.
+
+#--turbine 3, rotating
+precone = 30. *pi/180.
+Omega = 1. / R
+
+#---condition 5
+azimuth = .5*pi #upward
+xb = yb = 0.
+zb = R
+lcon = 0. *pi/180.
+lswp = 30. *pi/180.
+
+ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
+@test isapprox(ops.Vx, 0, atol=1e-9) 
+@test isapprox(ops.Vy, cos(precone)*cos(lswp), atol=1e-9) 
+
+end
 
 @testset "normal operation" begin
 
