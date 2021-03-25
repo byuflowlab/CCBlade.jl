@@ -90,7 +90,7 @@ end
 
 # convenience constructor for undeflected blade. Avoiding kwargs so that it can still be broadcasted.
 Section(r, chord, theta, af
-    ) = Section(r, chord, theta, af, zero(r), zero(r), zero(r), zero(r), zero(r))
+    ) = Section(r, chord, theta, af, zero(r), zero(r), r, zero(r), zero(r))
 
 Section(r, chord, theta, af, xdef, ydef, zdef, coning, sweep
     ) = Section(r, chord, theta, af, xdef, ydef, zdef, coning, sweep)
@@ -578,47 +578,13 @@ and orientation of turbine.  See Documentation for angle definitions.
 - `asound::Float64`: air speed of sound (m/s)
 """
 function windturbine_op(Vhub, Omega, pitch, r, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=one(rho), asound=one(rho))
-    sy = sin(yaw)
-    cy = cos(yaw)
-    st = sin(tilt)
-    ct = cos(tilt)
-    sa = sin(azimuth)
-    ca = cos(azimuth)
-    sc = sin(precone)
-    cc = cos(precone)
 
-    # coordinate in azimuthal coordinate system
-    x_az = -r*sin(precone)
-    z_az = r*cos(precone)
-    y_az = 0.0  # could omit (the more general case allows for presweep so this is nonzero)
-
-    # get section heights in wind-aligned coordinate system
-    heightFromHub = (y_az*sa + z_az*ca)*ct - x_az*st
-
-    # velocity with shear
-    V = Vhub*(1 + heightFromHub/hubHt)^shearExp
-
-    # transform wind to blade c.s.
-    Vwind_x = V * ((cy*st*ca + sy*sa)*sc + cy*ct*cc)
-    Vwind_y = V * (cy*st*sa - sy*ca)
-
-    # wind from rotation to blade c.s.
-    Vrot_x = -Omega*y_az*sc
-    Vrot_y = Omega*z_az
-
-    # total velocity
-    Vx = Vwind_x + Vrot_x
-    Vy = Vwind_y + Vrot_y
-
-    # operating point
-    return OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
-
-    # xb = zero(r)
-    # yb = zero(r)
-    # zb = r
-    # lcon = zero(r)
-    # lswp = zero(r)
-    # return flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu, asound)
+    xb = zero(r)
+    yb = zero(r)
+    zb = r
+    lcon = zero(r)
+    lswp = zero(r)
+    return flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu, asound)
 end
 
 """
@@ -696,6 +662,15 @@ function flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw
 
 end
 
+function flexturbine_op(Vhub, Omega, pitch, section, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu=one(rho), asound=one(rho))
+
+    xb = section.xdef
+    yb = section.ydef
+    zb = section.zdef
+    lcon = section.coning
+    lswp = section.sweep
+    return flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho, mu, asound)
+end
 # -------------------------------------
 
 
@@ -724,11 +699,43 @@ function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
     Npfull = [0.0; outputs.Np; 0.0]
     Tpfull = [0.0; outputs.Tp; 0.0]
 
-    # integrate Thrust and Torque (trapezoidal)
-    thrust = Npfull*cos(rotor.precone)
-    torque = Tpfull.*rfull*cos(rotor.precone)
-    #should account for local coning and sweep angles!!
+    # angles between the local deflected blade orientation and the rotor plane
+    confull = [0.0; [s.coning for s in sections]; 0.0] .- rotor.precone #since conicity and precone are two successive transforms, I can just add up the angles (minus because they follow opposite sign conventions)
+    swpfull = [0.0; [s.sweep for s in sections]; 0.0]
 
+    # switch loads from local deflected blade c.s. to azimuthal c.s. (that is, the rotor plane)
+    # Caution: because Ct is defined positive towards the leading edge, we must change sign to match the y direction
+    fx = cos.(confull).*Npfull .+ sin.(swpfull).*sin.(confull).*-Tpfull
+    fy = cos.(swpfull).*-Tpfull
+    fz = -sin.(confull).*Npfull .+ sin.(swpfull).*cos.(confull).*-Tpfull
+
+    # radius vector components, from the hub to a location on the delfected blade, in the blade root c.s.:
+    xdef = [s.xdef for s in sections]
+    ydef = [s.ydef for s in sections]
+    zdef = [s.zdef for s in sections]
+    # switch back to the azimuthal frame, i.e. to the rotor plane:
+    xdef_a = cos(rotor.precone) * xdef - sin(rotor.precone) * zdef
+    ydef_a = ydef
+    zdef_a = sin(rotor.precone) * xdef + cos(rotor.precone) * zdef
+    # guessing the position of the root and the tip, in the azimuthal coordinates, after preconing and deflection
+    xdef_tip = xdef_a[end] + sin(confull[end]) * (rotor.Rtip-rvec[end])
+    ydef_tip = ydef_a[end] - sin(swpfull[end]) * cos(confull[end]) * (rotor.Rtip-rvec[end])
+    zdef_tip = zdef_a[end] + cos(swpfull[end]) * cos(confull[end]) * (rotor.Rtip-rvec[end])
+    xdef_root = xdef_a[1] + sin(confull[1]) * (rotor.Rhub-rvec[1])
+    ydef_root = ydef_a[1] - sin(swpfull[1]) * cos(confull[1]) * (rotor.Rhub-rvec[1])
+    zdef_root = zdef_a[1] + cos(swpfull[1]) * cos(confull[1]) * (rotor.Rhub-rvec[1])
+    # assembling it:
+    # xdeffull = [xdef_root ; xdef_a ; xdef_tip] #unused
+    ydeffull = [ydef_root ; ydef_a ; ydef_tip]
+    zdeffull = [zdef_root ; zdef_a ; zdef_tip]
+
+    # due to the deflection, Np and Tp may contribute to the torque = r cross (fx fy fz)
+    thrust = fx 
+    torque = ydeffull .* fz - zdeffull .* fy
+    #with no sweep and no coning:
+    # torque = Tpfull*rfull*cos(precone) = -fy * z * cos(precone)
+
+    # integrate Thrust and Torque (trapezoidal)
     T = rotor.B * FLOWMath.trapz(rfull, thrust)
     Q = rotor.B * FLOWMath.trapz(rfull, torque)
 

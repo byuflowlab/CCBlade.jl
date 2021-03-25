@@ -89,6 +89,40 @@ ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, t
 @test isapprox(ops.Vx, 0, atol=1e-9) 
 @test isapprox(ops.Vy, cos(precone)*cos(lswp), atol=1e-9) 
 
+
+# -----------------------------
+
+rotor = Rotor(0., .5, 1., turbine=true)
+r = .05 + 0.:.1:.4
+
+theta = ones(length(r))
+chord = ones(length(r))
+affunc(alpha, Re, M) = (0.,0.)
+
+Np = ones(length(r))
+Tp = ones(length(r))
+
+# -1-
+angl = pi/6
+swp = [angl, angl, angl, angl] 
+
+sections = Section.(r, chord, theta, Ref(affunc) ,
+    zero(r),zero(r),r,zero(r),swp)
+
+outputs = Outputs.(Np, Tp, 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0., 0.)
+
+T,Q = thrusttorque(rotor,sections,outputs)
+@test isapprox(T, .4, atol=1e-9) 
+@test isapprox(Q, .0875 * cos(angl), atol=1e-9) 
+
+# -2-
+conicity = [angl, angl, angl, angl]
+
+sections = Section.(r, chord, theta, Ref(affunc) ,
+    zero(r),zero(r),r,conicity,swp)
+T,Q = thrusttorque(rotor,sections,outputs)
+@test isapprox(T, .4 * cos(angl) - .4 * sin(angl)^2, atol=1e-9) 
+@test isapprox(Q, .0875 * cos(angl), atol=1e-9) 
 end
 
 @testset "normal operation" begin
