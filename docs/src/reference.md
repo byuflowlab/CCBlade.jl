@@ -10,7 +10,7 @@ The rotor object is defined as follows.
 Rotor
 ```
 
-The precone angle is shown below (commonly used with wind turbines, less so with propellers).
+The precone angle is shown below (commonly used with wind turbines, less so with propellers). ``\Phi`` is negative as shown.
 
 ![precone](precone.png)
 

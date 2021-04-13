@@ -15,7 +15,7 @@ Vhub = 1.
 #--turbine 1, non-rotating
 yaw = 0.
 tilt = 0.
-precone = 30. *pi/180.
+precone = -30. *pi/180.
 Omega = 0.
 
 #---condition 1
@@ -50,14 +50,14 @@ lswp = 45. *pi/180.
 ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, tilt, azimuth, hubHt, shearExp, rho)
 # println(ops.Vx," ",ops.Vy)
 # println(0.," ",0.)
-@test isapprox(ops.Vx, cos(precone-lcon), atol=1e-9) 
-@test isapprox(ops.Vy, -sin(precone-lcon)*sin(lswp), atol=1e-9) 
+@test isapprox(ops.Vx, cos(precone+lcon), atol=1e-9) 
+@test isapprox(ops.Vy, sin(precone+lcon)*sin(lswp), atol=1e-9) 
 
 
 #--turbine 2, non-rotating, yawed
 yaw = 90. *pi/180.
 tilt = 0.
-precone = 30. *pi/180.
+precone = -30. *pi/180.
 Omega = 0.
 
 #---condition 4
@@ -75,7 +75,7 @@ ops = flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw, t
 Vhub = 0.
 
 #--turbine 3, rotating
-precone = 30. *pi/180.
+precone = -30. *pi/180.
 Omega = 1. / R
 
 #---condition 5
@@ -143,7 +143,7 @@ end
 # --- rotor definition ---
 Rhub = 0.01
 Rtip = 5.0
-Rtip_eff = 5.0*100  # to eliminate tip effects as consistent with their study.
+Rtip_eff = Rtip*100  # to eliminate tip effects as consistent with their study.
 B = 3  # number of blades
 
 rotor = Rotor(Rhub, Rtip_eff, B, turbine=true)
@@ -394,7 +394,7 @@ end
 Rhub = 1.5
 Rtip = 63.0
 B = 3
-precone = 2.5*pi/180
+precone = -2.5*pi/180
 
 rotor = Rotor(Rhub, Rtip, B; precone=precone, turbine=true)
 

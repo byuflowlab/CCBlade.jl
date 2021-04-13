@@ -17,7 +17,7 @@ import FLOWMath
 
 export Rotor, Section, OperatingPoint, Outputs
 export simple_op, windturbine_op, flexturbine_op
-export solve, thrusttorque, nondim, loadsToRotorPlane
+export solve, thrusttorque, nondim, localLoadsToBladeFrame
 
 
 include("airfoils.jl")  # all the code related to airfoil data
@@ -619,7 +619,7 @@ function flexturbine_op(Vhub, Omega, pitch, xb, yb, zb, lcon, lswp, precone, yaw
     ct = cos(tilt)
     sa = sin(azimuth)
     ca = cos(azimuth)
-    sc = sin(precone)
+    sc =-sin(precone) #mind the minus sign! This is because the rest of this routine is written as if precone was positive forward
     cc = cos(precone)
     sco = sin(lcon)
     cco = cos(lcon)
@@ -691,6 +691,7 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `T::Float64`: thrust (along x-dir see Documentation).
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
+#TODO: use buffers to avoid allocations?
 function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
@@ -698,15 +699,15 @@ function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
     rfull = [rotor.Rhub; rvec; rotor.Rtip]
 
     # angles between the local deflected blade orientation and the rotor plane
-    confull = [0.0; [s.coning for s in sections]; 0.0] .- rotor.precone #since conicity and precone are two successive transforms, I can just add up the angles (minus because they follow opposite sign conventions)
+    confull = [0.0; [s.coning for s in sections]; 0.0] .+ rotor.precone #since conicity and precone are two successive transforms, I can just add up the angles
     swpfull = [0.0; [s.sweep for s in sections]; 0.0]
 
-    # extract loading as force components in the blade root c.s., and adding 0 at the tip and the root
-    fx, fy, fz = loadsToRotorPlane(rotor, sections, outputs)
-    # rotating by the precone to go to the rotor plane
-    fxfull = [0.0; fx*cos(-rotor.precone) + fz*sin(-rotor.precone); 0.0] 
+    # extract loading as force components in the rotor plane c.s.,
+    fx, fy, fz = localLoadsToBladeFrame(rotor, sections, outputs, toRotorPlane=true)
+    # extend to the root and tip
+    fxfull = [0.0; fx; 0.0] 
     fyfull = [0.0; fy; 0.0] 
-    fzfull = [0.0; fx*sin(-rotor.precone) + fz*cos(-rotor.precone); 0.0] 
+    fzfull = [0.0; fx; 0.0] 
 
     # radius vector components, from the hub to a location on the delfected blade, in the blade root c.s.:
     xdef = [s.xdef for s in sections]
@@ -766,36 +767,46 @@ function thrusttorque(rotor, sections, outputs::Matrix{TO}) where TO
 end
 
 """
-    loadsToRotorPlane(rotor, sections, outputs::Vector{TO}) where TO
+    localLoadsToBladeFrame(rotor, sections, outputs::Vector{TO}) where TO
 
 transform the loading along the blade to express it in force components (x,y,z)
 in the blade root coordinate system (x towards suction side at root, y towards root leading edge, z towards the blade tip at root).
+If `toRotorPlane=true`, the precone angle is also accounted for such that the output is expressed in the rotor plane.
 
 **Arguments**
 - `rotor::Rotor`: rotor object
 - `sections::Vector{Section}`: rotor object
 - `outputs::Vector{Outputs}`: output data along blade
+- `toRotorPlane::Bool`: if true, the output are expressed in the rotor plane
 
 **Returns**
 - `fx::Vector{Float64}`: force along x-dir (see Documentation).
 - `fy::Vector{Float64}`: force along y-dir (see Documentation).
 - `fz::Vector{Float64}`: force along z-dir (see Documentation).
 """
-function loadsToRotorPlane(rotor, sections, outputs::Vector{TO}) where TO
+function localLoadsToBladeFrame(rotor, sections, outputs::Vector{TO}; toRotorPlane=false) where TO
+
+    # Caution: For props Ct is defined positive towards the trailing edge, 
+    #           for turbines, it is positive towards the LE.
+    #          Cn is always positive towards the suction side.
+    #  Hence, we need to change the sign of Tp to match the definition of the blade/rotor frame.
+    sig = -1.
 
     # loadings in their local deflected c.s.
     Np = outputs.Np
-    Tp = outputs.Tp
-
-    # angles between the local deflected blade orientation and the rotor plane
-    con = [s.coning for s in sections] 
+    Tp = outputs.Tp .* sig
+    
+    # prepare to add the precone to the coning=curvature if needed
+    pcn = toRotorPlane ? rotor.precone : zero(rotor.precone)
+    
+    # angles between the local deflected blade orientation and the blade root c.s.
+    con = [s.coning + pcn for s in sections] 
     swp = [s.sweep for s in sections]
 
-    # switch loads from local deflected blade c.s. to azimuthal c.s. (that is, the rotor plane)
-    # Caution: because Ct is defined positive towards the leading edge, we must change sign to match the y direction
-    fx = cos.(con).*Np .+ sin.(swp).*sin.(con).*-Tp
-    fy = cos.(swp).*-Tp
-    fz = -sin.(con).*Np .+ sin.(swp).*cos.(con).*-Tp    
+    # switch loads from local deflected blade c.s. to azimuthal c.s. (that is, the blade root c.s. or rotor plane)
+    fx = cos.(con).*Np .+ sin.(swp).*sin.(con).*Tp
+    fy = cos.(swp).*Tp
+    fz = -sin.(con).*Np .+ sin.(swp).*cos.(con).*Tp    
 
     return fx, fy, fz
 end
