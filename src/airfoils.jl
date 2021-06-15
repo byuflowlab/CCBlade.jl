@@ -422,8 +422,8 @@ function AlphaReMachAF(filenames::Matrix{String}; radians=true)
 
     info, Re1, Mach1, alpha, cl1, cd1 = parsefile(filenames[1, 1], radians)  # assumes common alpha and info across files
     nalpha = length(alpha)
-    nRe = length(Re1)
-    nMach = length(Mach1)
+    nRe = size(filenames)[1]
+    nMach = size(filenames)[2]
     
     cl = Array{Float64}(undef, nalpha, nRe, nMach)
     cd = Array{Float64}(undef, nalpha, nRe, nMach)
