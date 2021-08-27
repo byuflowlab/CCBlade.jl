@@ -102,13 +102,13 @@ See Documentation for more detail on coordinate systems.
 - `mu::Float64`: fluid dynamic viscosity (unused if Re not included in airfoil data)
 - `asound::Float64`: fluid speed of sound (unused if Mach not included in airfoil data)
 """
-struct OperatingPoint{TF1, TF2, TF3, TF4, TF5}
+struct OperatingPoint{TF1, TF2, TF3, TF4, TF5, TF6}
     Vx::TF1
-    Vy::TF1
-    rho::TF2  # different type to accomodate ReverseDiff
-    pitch::TF3  
-    mu::TF4
-    asound::TF5
+    Vy::TF2
+    rho::TF3  # different type to accomodate ReverseDiff
+    pitch::TF4  
+    mu::TF5
+    asound::TF6
 end
 
 # convenience constructor when Re and Mach are not used.
