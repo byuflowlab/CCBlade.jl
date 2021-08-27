@@ -621,7 +621,7 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
 function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
-
+    println("Sherlock!\n\ttypeof(outputs) = $(typeof(outputs))")
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rvec = [s.r for s in sections]
     rfull = [rotor.Rhub; rvec; rotor.Rtip]
