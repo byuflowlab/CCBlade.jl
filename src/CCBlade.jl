@@ -164,7 +164,7 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Outputs{Union{TF1,TF2},Union{TF1,TF2}}}, sym::Symbol) where {TF1,TF2}
+function Base.getproperty(obj::Vector{Union{Outputs{TF1,TF1}, Outputs{TF1,TF2}, Outputs{TF2,TF1}, Outputs{TF2,TF2}}}, sym::Symbol) where {TF1,TF2}
     return getfield.(obj, sym)
 end
 
