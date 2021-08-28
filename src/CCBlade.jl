@@ -164,11 +164,11 @@ end
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{Outputs{TF1,TF2} where {TF1,TF2}}, sym::Symbol)
+function Base.getproperty(obj::Vector{Outputs{TF1,TF2}}, sym::Symbol) where {TF1,TF2}
     return getfield.(obj, sym)
 end
 
-function Base.getproperty(obj::Vector{Outputs{TF1,TF2}}, sym::Symbol) where {TF1,TF2}
+function Base.getproperty(obj::Vector{Outputs}, sym::Symbol)
     return getfield.(obj, sym)
 end
 
