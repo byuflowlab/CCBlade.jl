@@ -27,10 +27,11 @@
 
 **Documentation**:
 
-- Start with the [quick start tutorial](tutorial.md) to learn basic usage.
-- More advanced or specific queries are addressed in the [guided examples](howto.md).
-- Full details of the API are listed in [reference](reference.md).
-- Full details of the theory are linked from the [theory](theory.md) page.
+The [documentation](https://flow.byu.edu/CCBlade.jl/stable/) contains
+- A quick start tutorial to learn basic usage,
+- Guided examples to address specific or more advanced tasks,
+- A reference describing the API,
+- Theory in full detail.
 
 **Run Unit Tests**:
 
