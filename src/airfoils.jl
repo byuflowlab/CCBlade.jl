@@ -416,14 +416,13 @@ struct AlphaReMachAF{TF, TS} <: AFType
     info::TS
 end
 
-AlphaReMachAF(alpha, Re, Mach, cl, cd) = AlphaMachAF(alpha, Re, Mach, cl, cd, "CCBlade generated airfoil")
+AlphaReMachAF(alpha, Re, Mach, cl, cd) = AlphaReMachAF(alpha, Re, Mach, cl, cd, "CCBlade generated airfoil")
 
 function AlphaReMachAF(filenames::Matrix{String}; radians=true)
 
-    info, Re1, Mach1, alpha, cl1, cd1 = parsefile(filenames[1, 1], radians)  # assumes common alpha and info across files
+    info, _, _, alpha, _, _ = parsefile(filenames[1, 1], radians)  # assumes common alpha and info across files
     nalpha = length(alpha)
-    nRe = length(Re1)
-    nMach = length(Mach1)
+    nRe, nMach = size(filenames)
     
     cl = Array{Float64}(undef, nalpha, nRe, nMach)
     cd = Array{Float64}(undef, nalpha, nRe, nMach)
