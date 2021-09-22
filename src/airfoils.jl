@@ -422,8 +422,14 @@ function AlphaReMachAF(filenames::Matrix{String}; radians=true)
 
     info, _, _, alpha, _, _ = parsefile(filenames[1, 1], radians)  # assumes common alpha and info across files
     nalpha = length(alpha)
+    nRe, nMach = size(filenames)
+
+    cl = Array{Float64}(undef, nalpha, nRe, nMach)
+    cd = Array{Float64}(undef, nalpha, nRe, nMach)
+    Re = Array{Float64}(undef, nRe)
     Mach = Array{Float64}(undef, nMach)
 
+    for j = 1:nMach
         for i = 1:nRe
             _, Rei, Machj, _, clij, cdij = parsefile(filenames[i, j], radians)
             cl[:, i, j] = clij
