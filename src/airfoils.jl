@@ -43,19 +43,19 @@ function parsefile(filename, radians)
         info = readline(f)
         Re = parse(Float64, readline(f))
         Mach = parse(Float64, readline(f))
-        
+
         for line in eachline(f)
             parts = split(line)
             push!(alpha, parse(Float64, parts[1]))
             push!(cl, parse(Float64, parts[2]))
             push!(cd, parse(Float64, parts[3]))
-        end    
+        end
     end
 
     if !radians
         alpha *= pi/180
     end
-    
+
     return info, Re, Mach, alpha, cl, cd
 end
 
@@ -111,12 +111,12 @@ function afeval(af::Function, alpha, Re, Mach)
 end
 # ---------------
 
-# --- Simple paramterization ------  
+# --- Simple paramterization ------
 
 """
     SimpleAF(m, alpha0, clmax, clmin, cd0, cd2)
 
-A simple parameterized lift and drag curve.  
+A simple parameterized lift and drag curve.
 - `cl = m (alpha - alpha0)` (capped by clmax/clmin)
 - `cd = cd0 + cd2 * cl^2`
 
@@ -175,7 +175,7 @@ a file
 - `filename::String`: name/path of file to read in
 - `radians::Bool`: true if angle of attack in file is given in radians
 """
-struct AlphaAF{TF, TS, TSP} <: AFType 
+struct AlphaAF{TF, TS, TSP} <: AFType
     alpha::Vector{TF}
     cl::Vector{TF}
     cd::Vector{TF}
@@ -233,7 +233,7 @@ end
     AlphaReAF(alpha, Re, cl, cd)
     read_AlphaReAF(filenames::Vector{String}; radians=true)
 
-Airfoil data that varies with angle of attack and Reynolds number.  
+Airfoil data that varies with angle of attack and Reynolds number.
 Data is fit with a recursive Akima spline.
 
 **Arguments**
@@ -252,7 +252,7 @@ filenames with one file per Reynolds number.
 - `filenames::Vector{String}`: name/path of files to read in, each at a different Reynolds number in ascending order
 - `radians::Bool`: true if angle of attack in file is given in radians
 """
-struct AlphaReAF{TF, TS} <: AFType 
+struct AlphaReAF{TF, TS} <: AFType
     alpha::Vector{TF}
     Re::Vector{TF}
     cl::Matrix{TF}
@@ -265,7 +265,7 @@ AlphaReAF(alpha, Re, cl, cd, info) = AlphaReAF(alpha, Re, cl, cd, info, 0.0)
 AlphaReAF(alpha, Re, cl, cd) = AlphaReAF(alpha, Re, cl, cd, "CCBlade generated airfoil", 0.0)
 
 function AlphaReAF(filenames::Vector{String}; radians=true)
-    
+
     info, Re1, Mach, alpha, cl1, cd1 = parsefile(filenames[1], radians)  # assumes common alpha across files, also common info and common Mach
     nalpha = length(alpha)
     ncond = length(filenames)
@@ -284,7 +284,7 @@ function AlphaReAF(filenames::Vector{String}; radians=true)
         cd[:, i] = cdi
         Re[i] = Rei
     end
-    
+
     return AlphaReAF(alpha, Re, cl, cd, info, Mach)
 end
 
@@ -311,7 +311,7 @@ end
     AlphaMachAF(alpha, Mach, cl, cd)
     AlphaMachAF(filenames::Vector{String}; radians=true)
 
-Airfoil data that varies with angle of attack and Mach number.  
+Airfoil data that varies with angle of attack and Mach number.
 Data is fit with a recursive Akima spline.
 
 **Arguments**
@@ -330,7 +330,7 @@ filenames with one file per Mach number.
 - `filenames::Vector{String}`: name/path of files to read in, each at a different Mach number in ascending order
 - `radians::Bool`: true if angle of attack in file is given in radians
 """
-struct AlphaMachAF{TF, TS} <: AFType 
+struct AlphaMachAF{TF, TS} <: AFType
     alpha::Vector{TF}
     Mach::Vector{TF}
     cl::Matrix{TF}
@@ -344,7 +344,7 @@ AlphaMachAF(alpha, Mach, cl, cd) = AlphaMachAF(alpha, Mach, cl, cd, "CCBlade gen
 
 
 function AlphaMachAF(filenames::Vector{String}; radians=true)
-    
+
     info, Re, Mach1, alpha, cl1, cd1 = parsefile(filenames[1], radians)  # assumes common alpha across files, also common info and common Re
     nalpha = length(alpha)
     ncond = length(filenames)
@@ -363,7 +363,7 @@ function AlphaMachAF(filenames::Vector{String}; radians=true)
         cd[:, i] = cdi
         Mach[i] = Machi
     end
-    
+
     return AlphaMachAF(alpha, Mach, cl, cd, info, Re)
 end
 
@@ -390,7 +390,7 @@ end
     AlphaReMachAF(alpha, Re, Mach, cl, cd)
     AlphaReMachAF(filenames::Matrix{String}; radians=true)
 
-Airfoil data that varies with angle of attack, Reynolds number, and Mach number.  
+Airfoil data that varies with angle of attack, Reynolds number, and Mach number.
 Data is fit with a recursive Akima spline.
 
 **Arguments**
@@ -407,7 +407,7 @@ or files with one per Re/Mach combination
 - `filenames::Matrix{String}`: name/path of files to read in.  filenames[i, j] corresponds to Re[i] Mach[j] with Reynolds number and Mach number in ascending order.
 - `radians::Bool`: true if angle of attack in file is given in radians
 """
-struct AlphaReMachAF{TF, TS} <: AFType 
+struct AlphaReMachAF{TF, TS} <: AFType
     alpha::Vector{TF}
     Re::Vector{TF}
     Mach::Vector{TF}
@@ -424,7 +424,7 @@ function AlphaReMachAF(filenames::Matrix{String}; radians=true)
     nalpha = length(alpha)
     nRe = length(Re1)
     nMach = length(Mach1)
-    
+
     cl = Array{Float64}(undef, nalpha, nRe, nMach)
     cd = Array{Float64}(undef, nalpha, nRe, nMach)
     Re = Array{Float64}(undef, nRe)
@@ -444,9 +444,10 @@ function AlphaReMachAF(filenames::Matrix{String}; radians=true)
 end
 
 function afeval(af::AlphaReMachAF, alpha, Re, Mach)
+    # println("Sherlock!\n\taf = $af")
     cl = FLOWMath.interp3d(FLOWMath.akima, af.alpha, af.Re, af.Mach, af.cl, [alpha], [Re], [Mach])[1]
     cd = FLOWMath.interp3d(FLOWMath.akima, af.alpha, af.Re, af.Mach, af.cd, [alpha], [Re], [Mach])[1]
-    
+
     return cl, cd
 end
 
@@ -539,9 +540,9 @@ Skin friction model for a flat plate.
 - `Re0::Float64`: reference Reynolds number (i.e., no corrections at this number)
 - `p::Float64`: exponent in flat plate model.  0.5 for laminar (Blasius solution), ~0.2 for fully turbulent (Schlichting empirical fit)
 """
-struct SkinFriction{TF} <: ReCorrection 
-    Re0::TF 
-    p::TF  
+struct SkinFriction{TF} <: ReCorrection
+    Re0::TF
+    p::TF
 end
 LaminarSkinFriction(Re0) = SkinFriction(Re0, 0.5)
 TurbulentSkinFriction(Re0) = SkinFriction(Re0, 0.2)
@@ -607,7 +608,7 @@ DuSeligEggers() = DuSeligEggers(1.0, 1.0, 1.0, 2*pi, 0.0)
 
 
 function rotation_correction(du::DuSeligEggers, cl, cd, cr, rR, tsr, alpha, phi=alpha, alpha_max_corr=30*pi/180)
-    
+
     # Du-Selig correction for lift
     Lambda = tsr / sqrt(1 + tsr^2)
     expon = du.d / (Lambda * rR)
@@ -618,14 +619,14 @@ function rotation_correction(du::DuSeligEggers, cl, cd, cr, rR, tsr, alpha, phi=
 
     # adjustment for max correction
     amax = atan(1/0.12) - 5*pi/180  # account for singularity in Eggers (not pi/2)
-    if abs(alpha) >= amax 
+    if abs(alpha) >= amax
         adj = 0.0
     elseif abs(alpha) > alpha_max_corr
         adj = ((amax-abs(alpha))/(amax-alpha_max_corr))^2
     else
         adj = 1.0
     end
-    
+
     # increment in cl
     deltacl = adj*fcl*(cl_linear - cl)
     cl += deltacl
@@ -635,7 +636,7 @@ function rotation_correction(du::DuSeligEggers, cl, cd, cr, rR, tsr, alpha, phi=
     cd += deltacd
 
     return cl, cd
-end    
+end
 
 
 # ------ Extract Linear Portion of Curve -----------
@@ -647,7 +648,7 @@ function linearliftcoeff(af::T, Re, Mach) where T <: Union{AlphaAF, AlphaReAF, A
     clwrap(alpha) = afeval(af, alpha, Re, Mach)[1]
     alpha = range(-2*pi/180, 5*pi/180, length=20)
     cl = clwrap.(alpha)
-    
+
     return linearliftregression(alpha, cl)
 end
 
@@ -675,7 +676,7 @@ end
 
 ############## tip correction ################
 
-abstract type TipCorrection end 
+abstract type TipCorrection end
 
 """
     tip_correction(::TipCorrection, r, Rhub, Rtip, phi, B)
@@ -712,7 +713,7 @@ Standard Prandtl tip loss correction plus hub loss correction of same form.
 struct PrandtlTipHub <: TipCorrection end
 
 function tip_correction(::PrandtlTip, r, Rhub, Rtip, phi, B)
-    
+
     asphi = abs(sin(phi))
     factortip = B/2.0*(Rtip/r - 1)/asphi
     F = 2.0/pi*acos(exp(-factortip))
@@ -755,7 +756,7 @@ Viterna extrapolation.  Follows Viterna paper and somewhat follows NREL version 
 function viterna(alpha, cl, cd, cr75, nalpha=50)
 
     # estimate cdmax
-    AR = 1.0 / cr75  
+    AR = 1.0 / cr75
     cdmaxAR = 1.11 + 0.018*AR
     cdmax = max(maximum(cd), cdmaxAR)
 
@@ -786,7 +787,7 @@ function viterna(alpha, cl, cd, cr75, nalpha=50)
     ca = cos(a_ns)
     A2neg = (cl_ns - cdmax*sa*ca)*sa/ca^2 * ones(nalpha)
     B2neg = (cd_ns - cdmax*sa^2)/ca * ones(nalpha)
-    
+
     # angles of attack to extrapolate to
     apos = range(alpha[end], pi, length=nalpha+1)
     apos = apos[2:end]  # don't duplicate point
@@ -801,14 +802,14 @@ function viterna(alpha, cl, cd, cr75, nalpha=50)
     B2pos[idx] .*= -1
 
     # idx = findall(aneg .<= -alpha[end])
-    
+
     adjneg = ones(nalpha)
     idx = findall(aneg .<= -pi/2)
     adjneg[idx] .= 0.7
     A2neg[idx] .*= -1
     B2neg[idx] .*= -1
 
-    # extrapolate 
+    # extrapolate
     clpos = @. adjpos * (A1pos*sin(2*apos) + A2pos*cos(apos)^2/sin(apos))
     cdpos = @. B1pos*sin(apos)^2 + B2pos*cos(apos)
     clneg = @. adjneg * (A1neg*sin(2*aneg) + A2neg*cos(aneg)^2/sin(aneg))
@@ -822,9 +823,9 @@ function viterna(alpha, cl, cd, cr75, nalpha=50)
 
     # override with linear variation at ends
     idx = findall(apos .>= pi-a_ps)
-    @. clpos[idx] = (apos[idx] - pi)/a_ps*cl_ps*0.7  
+    @. clpos[idx] = (apos[idx] - pi)/a_ps*cl_ps*0.7
     idx = findall(aneg .<= -pi-a_ns)
-    @. clneg[idx] = (aneg[idx] + pi)/a_ns*cl_ns*0.7  
+    @. clneg[idx] = (aneg[idx] + pi)/a_ns*cl_ns*0.7
 
     # concatenate
     alphafull = [aneg; alpha; apos]
@@ -835,5 +836,3 @@ function viterna(alpha, cl, cd, cr75, nalpha=50)
     cdfull = max.(cdfull, 0.0001)
     return alphafull, clfull, cdfull
 end
-
-
