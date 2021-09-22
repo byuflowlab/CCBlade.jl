@@ -1,6 +1,10 @@
 # Changelog
 
 
+## [0.2.2] - Aug 2021
+
+- Two bug fixes for AlphaReMachAF functions
+
 ## [0.2.1] - Sep 2020
 
 - minor change to improve type flexibility in OperatingPoint (for AD usage)
