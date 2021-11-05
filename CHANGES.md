@@ -1,6 +1,10 @@
 # Changelog
 
 
+## [0.2.3] - Nov 2021
+
+Minor change in how the empirical region is handled based on suggestion from Kenneth Lønbæk.  In effect it is Buhl(F = 1)*F.  This forces CT -> 0 as F -> 0 at the tip.
+
 ## [0.2.2] - Aug 2021
 
 - Two bug fixes for AlphaReMachAF functions

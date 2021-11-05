@@ -271,16 +271,13 @@ function residual(phi, rotor, section, op)
         if k >= -2.0/3  # momentum region
             a = k/(1 - k)
 
-        else  # empirical region
-            g1 = F*(2*k - 1) + 10.0/9
-            g2 = F*(F - 2*k - 4.0/3)
-            g3 = 2*F*(1 - k) - 25.0/9
-
-            if isapprox(g3, 0.0, atol=1e-6)  # avoid singularity
-                a = 1.0/(2.0*sqrt(g2)) - 1
-            else
-                a = (g1 + sqrt(g2)) / g3
-            end
+        else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.  
+            # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if 
+            # using a or CT directly as a design variable.  Suggestion courtesy of Kenneth Lønbæk.
+            g1 = 2*k + 1.0/9
+            g2 = -2*k - 1.0/3
+            g3 = -2*k - 7.0/9
+            a = (g1 + sqrt(g2)) / g3
         end
 
         u = a * Vx
