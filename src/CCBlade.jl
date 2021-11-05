@@ -273,7 +273,7 @@ function residual(phi, rotor, section, op)
 
         else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.  
             # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if 
-            # using a or CT directly as a design variable.  Suggestion courtesy of Kenneth Lønbæk.
+            # using CT/CP directly as a design variables.  Suggestion courtesy of Kenneth Lønbæk.
             g1 = 2*k + 1.0/9
             g2 = -2*k - 1.0/3
             g3 = -2*k - 7.0/9
