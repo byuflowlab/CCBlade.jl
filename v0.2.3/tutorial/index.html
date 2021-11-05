@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Quick Start · CCBlade.jl</title><link href="https://fonts.googleapis.com/css?family=Lato|Roboto+Mono" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.0/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.11.1/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit">CCBlade.jl</span></div><form class="docs-search" action="../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../">Intro</a></li><li class="is-active"><a class="tocitem" href>Quick Start</a></li><li><a class="tocitem" href="../howto/">Guided Examples</a></li><li><a class="tocitem" href="../reference/">API Reference</a></li><li><a class="tocitem" href="../theory/">Theory</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Quick Start</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Quick Start</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/byuflowlab/CCBlade.jl/blob/master/docs/src/tutorial.md#L" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Quick-Start"><a class="docs-heading-anchor" href="#Quick-Start">Quick Start</a><a id="Quick-Start-1"></a><a class="docs-heading-anchor-permalink" href="#Quick-Start" title="Permalink"></a></h1><p>This starter tutorial walks through the mechanics of running a analysis.  This is designing as a starting point and does not explain every option or consideration.  More specific and advanced usage are described in the <a href="../howto/">how to guide</a>.</p><p>We will simulate the APC thin electric 10 x 5 propeller.  The geometry, and wind tunnel data for this propeller is available from <a href="https://m-selig.ae.illinois.edu/props/volume-1/propDB-volume-1.html#APC">UIUC</a>. Let&#39;s load CCBlade and a plotting package (I chose to use PyPlot in this example).  </p><p>There are two parts of the geometry we need to define: the first are quantities for the whole rotor, and the second part defines properties that vary along the blade radius.  For the rotor, we only need to define the hub radius, tip radius, and the number of blades.</p><p>This is a two-bladed propeller, and the 10 in the name (10 x 5) means it has a diameter of 10 inches (and so the tip radius is half of that).  I prefer to do all calculations in metric units so I&#39;ll convert it.  From the <a href="https://m-selig.ae.illinois.edu/props/volume-1/data/apce_10x5_geom.txt">geometry table</a> for this propeller we see that the hub radius is less than <span>$0.15 R_{tip}$</span>.  It isn&#39;t defined exactly, and is less critical, we&#39;ll assume <span>$0.10 R_{tip}$</span> for this example.</p><pre><code class="language-julia">Rtip = 10/2.0 * 0.0254  # inches to meters
+Rhub = 0.10*Rtip
+B = 2  # number of blades
+
+rotor = Rotor(Rhub, Rtip, B)</code></pre><p>Next, we define the geometry along the different radial stations.   The more radial stations we add, the more points we will compute loads at.  There is a tradeoff here in computational time and accuracy in representing (and integrating) loads. The geometry table defines the normalized radial stations, normalized chord, and the twist angle in degrees.  CCBlade assumes all angles are given in radians so we will need to convert that, we will also unnormalize the radius and chord (alternatively we could do everything in consistent nondimensional units).</p><pre><code class="language-julia">propgeom = [
+0.15   0.130   32.76
+0.20   0.149   37.19
+0.25   0.173   33.54
+0.30   0.189   29.25
+0.35   0.197   25.64
+0.40   0.201   22.54
+0.45   0.200   20.27
+0.50   0.194   18.46
+0.55   0.186   17.05
+0.60   0.174   15.97
+0.65   0.160   14.87
+0.70   0.145   14.09
+0.75   0.128   13.39
+0.80   0.112   12.84
+0.85   0.096   12.25
+0.90   0.081   11.37
+0.95   0.061   10.19
+1.00   0.041   8.99
+]
+
+r = propgeom[:, 1] * Rtip
+chord = propgeom[:, 2] * Rtip
+theta = propgeom[:, 3] * pi/180</code></pre><p>The remaining piece in defining the geometry is the airfoils.  We don&#39;t actually define the airfoil geometry, but rather the aerodynamic performance data of the airfoils at each station (lift and drag coefficients).  This propeller uses the NACA 4412 airfoil, for which experimental data is readily available, or for which computational data can be easily provided. The data for this airfoil is contained in a file &quot;naca4412.dat&quot; (in the <code>data</code> directory of the repository).  The file format is discussed in <a href="../reference/#Airfoil-Files">Airfoil Files</a>.  There are some important details to be aware of when providing airfoil data–-the way this file was constructed is covered in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.  For now, we just assume provided airfoil data.  The file extension is not important, all that matters is that the format has columns of data for: angle of attack | lift coefficient | drag coefficient (after an informational header row, a row for Reynolds number, and a row for Mach number).  We can either put in the full or relative path to the file, for example if you were in the home directory of this repository:</p><pre><code class="language-julia">af = AlphaAF(&quot;data/naca4412.dat&quot;)</code></pre><p>or we can change directory (note the semicolon to enter shell mode from the REPL):</p><pre><code class="language-none">; cd data
+af = AlphaAF(&quot;naca4412.dat&quot;)</code></pre><p>We can now define the sections using this airfoil data.  Since Section is defined for one section, and we&#39;d like to define them all simultaneously, we use broadcasting (see the dot after Section).  The airfoil is the same for all stations along the rotor so we wrap it in a <code>Ref()</code> call so that it can be broadcast across.</p><pre><code class="language-julia">sections = Section.(r, chord, theta, Ref(af))</code></pre><p>Next, we define the operating point(s).  You can define your own arbitrary inflow struct, but for this example we will assume constant inflow across the rotor.  We again use broadcasting because the velocities will vary at each radial station <code>r</code>.  For this simple method we just need to know the freestream speed, rotation speed, and the air density.</p><pre><code class="language-julia">Vinf = 5.0
+Omega = 5400*pi/30  # convert to rad/s
+rho = 1.225
+
+op = simple_op.(Vinf, Omega, r, rho)</code></pre><p>We have now defined the requisite inputs and can start using the BEM methodology.  The solve function is the core of the BEM. Note that we use broadcasting to solve all sections in one call.  However, since rotor is not an Array, and is the same for all sections, we wrap it in Ref so that it can broadcast as a &quot;scalar&quot;.</p><pre><code class="language-julia">out = solve.(Ref(rotor), sections, op)</code></pre><p>There are many outputs, and although the return variable is actually an array of structs, convenience methods are provided to access the fields as if it was a struct of arrays.  For example, we can access the angles of attack at each radial station as:</p><pre><code class="language-julia">out.alpha*180/pi  # angle of attack in degrees</code></pre><pre class="documenter-example-output">18-element Array{Float64,1}:
+ 1.6775778421741854
+ 8.358564583802222
+ 8.415893286356741
+ 7.179966221624963
+ 6.121087792681808
+ 5.1444777125110575
+ 4.555092236064599
+ 4.175897516702776
+ 3.935139932160625
+ 3.862983493725478
+ 3.718529482894817
+ 3.738448565846664
+ 3.786857587115428
+ 3.8709976652382454
+ 3.8564178687455724
+ 3.5100794719833104
+ 2.8505053557041027
+ 0.0</pre><p>The full list of outputs and their positive directions are shown in <a href="../reference/#Output-Struct">Output Struct</a>.</p><p>Let&#39;s now plot the distributed loads.</p><pre><code class="language-julia">figure()
+plot(r/Rtip, out.Np)
+plot(r/Rtip, out.Tp)
+xlabel(&quot;r/Rtip&quot;)
+ylabel(&quot;distributed loads (N/m)&quot;)
+legend([&quot;flapwise&quot;, &quot;lead-lag&quot;])</code></pre><p><img src="../loads-prop.svg" alt/></p><p>We will also look at the induced velocities.  For propellers these velocities are useful to assess, for example, prop-on-wing interactions.</p><pre><code class="language-julia">figure()
+plot(r/Rtip, out.u/Vinf)
+plot(r/Rtip, out.v/Vinf)
+xlabel(&quot;r/Rtip&quot;)
+ylabel(&quot;(normalized) induced velocity at rotor disk&quot;)
+legend([&quot;axial velocity&quot;, &quot;swirl velocity&quot;])</code></pre><p><img src="../velocity-prop.svg" alt/></p><p>As before, we&#39;d like to evaluate integrated quantities at multiple conditions in a for loop (advance ratios as is convention for propellers).  The normalization conventions for a propeller are:</p><p class="math-container">\[\begin{aligned}
+C_T &amp;= \frac{T}{\rho n^2 D^4}\\
+C_Q &amp;= \frac{Q}{\rho n^2 D^5}\\
+C_P &amp;= \frac{P}{\rho n^3 D^5} = \frac{C_Q}{2 \pi}\\
+\eta &amp;= \frac{C_T J}{C_P}
+\end{aligned}\]</p><p>where</p><p class="math-container">\[\begin{aligned}
+n &amp;= \frac{\Omega}{2\pi} \text{ rev per sec}\\
+D &amp;= 2 R_{tip} \cos(\text{precone})\\
+J &amp;= \frac{V}{n D}
+\end{aligned}\]</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>Efficiency is set to zero if the thrust is negative (producing drag).  </p></div></div><p>The code below performs this analysis then plots thrust coefficient, power coefficient, and efficiency as a function of advance ratio as compared to the experimental data.</p><pre><code class="language-julia">nJ = 20  # number of advance ratios
+
+J = range(0.1, 0.6, length=nJ)  # advance ratio
+
+Omega = 5400.0*pi/30
+n = Omega/(2*pi)
+D = 2*Rtip
+
+eff = zeros(nJ)
+CT = zeros(nJ)
+CQ = zeros(nJ)
+
+for i = 1:nJ
+    local Vinf = J[i] * D * n
+
+    local op = simple_op.(Vinf, Omega, r, rho)
+    outputs = solve.(Ref(rotor), sections, op)
+    T, Q = thrusttorque(rotor, sections, outputs)
+    eff[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, &quot;propeller&quot;)
+
+end
+
+exp = [
+0.113   0.0912   0.0381   0.271
+0.145   0.0890   0.0386   0.335
+0.174   0.0864   0.0389   0.387
+0.200   0.0834   0.0389   0.429
+0.233   0.0786   0.0387   0.474
+0.260   0.0734   0.0378   0.505
+0.291   0.0662   0.0360   0.536
+0.316   0.0612   0.0347   0.557
+0.346   0.0543   0.0323   0.580
+0.375   0.0489   0.0305   0.603
+0.401   0.0451   0.0291   0.620
+0.432   0.0401   0.0272   0.635
+0.466   0.0345   0.0250   0.644
+0.493   0.0297   0.0229   0.640
+0.519   0.0254   0.0210   0.630
+0.548   0.0204   0.0188   0.595
+0.581   0.0145   0.0162   0.520
+]
+Jexp = exp[:, 1]
+CTexp = exp[:, 2]
+CPexp = exp[:, 3]
+etaexp = exp[:, 4]
+
+
+figure()
+plot(J, CT)
+plot(J, CQ*2*pi)
+plot(Jexp, CTexp, &quot;ko&quot;)
+plot(Jexp, CPexp, &quot;ko&quot;)
+xlabel(L&quot;J&quot;)
+legend([L&quot;C_T&quot;, L&quot;C_P&quot;, &quot;experimental&quot;])
+
+figure()
+plot(J, eff)
+plot(Jexp, etaexp, &quot;ko&quot;)
+xlabel(L&quot;J&quot;)
+ylabel(L&quot;\eta&quot;)
+legend([&quot;CCBlade&quot;, &quot;experimental&quot;])</code></pre><p><img src="../ctcp-prop.svg" alt/> <img src="../eta-prop.svg" alt/></p><p>There is reasonable agreement in thrust and torque coefficient, certainly within experimental/computational error.  Efficiency is overpredicted, but always harder to match as it is the ratio of two estimated values.  Spending time providing more accurate airfoil data could improve the accuracy, and is discussed more in <a href="../howto/#Airfoil-Data">Airfoil Data</a>.</p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Intro</a><a class="docs-footer-nextpage" href="../howto/">Guided Examples »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> on <span class="colophon-date" title="Friday 5 November 2021 21:35">Friday 5 November 2021</span>. Using Julia version 1.5.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
