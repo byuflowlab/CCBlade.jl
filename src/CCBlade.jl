@@ -533,6 +533,9 @@ function simple_op(Vinf, Omega, r, rho; pitch=zero(rho), mu=one(rho), asound=one
     Vx = Vinf * cos(precone) 
     Vy = Omega * r * cos(precone)
 
+    # for the case where Omega is of type Dual and Vinf is not
+    Vx, Vy = promote(Vx, Vy) 
+    
     return OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
 end

@@ -730,6 +730,36 @@ J2 = FiniteDiff.finite_difference_jacobian(ccbladewrapper, x, Val{:central})
 
 @test maximum(abs.(J - J2)) < 1e-6
 
+# test chord, twist, and Omega as duals
+function ccbladewrapper3(x)
+
+    n = Int((length(x)-1) / 2)
+
+    rp = r
+    chordp = x[1:n]
+    thetap = x[n+1:2*n]
+    Rhubp = Rhub
+    Rtipp = Rtip
+    pitchp = pitch
+    preconep = precone
+    Vinfp = Vinf
+    Omegap = x[2*n+1]
+    rhop = rho
+
+    rotor = Rotor(Rhubp, Rtipp, B; turbine=turbine, precone=preconep)
+    sections = Section.(rp, chordp, thetap, airfoils)
+    ops = simple_op.(Vinfp, Omegap, rp, rhop; pitch=pitchp)
+
+    outputs = solve.(Ref(rotor), sections, ops)
+
+    T, Q = thrusttorque(rotor, sections, outputs)
+
+    return [T; Q]
+end
+
+x3 = [chord; theta; Omega]
+
+J3 = ForwardDiff.jacobian(ccbladewrapper3, x3)
 end
 
 @testset "type stability" begin
