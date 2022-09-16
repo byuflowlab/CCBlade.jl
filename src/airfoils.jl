@@ -692,7 +692,7 @@ Tip corrections for 3D flow.
 **Returns**
 - `F::Float64`: tip loss factor to multiple against loads.
 """
-function tip_correction(::TipCorrection, cl, cd, Mach)
+function tip_correction(::TipCorrection, r, Rhub, Rtip, phi, B)
     return 1.0
 end
 
