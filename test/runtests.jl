@@ -724,6 +724,11 @@ x = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
 
 J = ForwardDiff.jacobian(ccbladewrapper, x)
 
+# using BenchmarkTools
+# @btime ForwardDiff.jacobian($ccbladewrapper, $x)
+# original: 584.041 μs (9910 allocations: 1.15 MiB) 
+# with ImplicitAD: 323.208 μs (11862 allocations: 747.50 KiB)
+
 import FiniteDiff
 
 J2 = FiniteDiff.finite_difference_jacobian(ccbladewrapper, x, Val{:central})
