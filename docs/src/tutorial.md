@@ -226,5 +226,5 @@ savefig("eta-prop.svg"); nothing # hide
 ![](eta-prop.svg)
 
 
-There is reasonable agreement in thrust and torque coefficient, certainly within experimental/computational error.  Efficiency is overpredicted, but always harder to match as it is the ratio of two estimated values.  Spending time providing more accurate airfoil data could improve the accuracy, and is discussed more in [Airfoil Data](@ref).
+There is reasonable agreement, certainly within experimental/computational error.  Accurate airfoil data is always the most crucial input for these methods.  Working with various corrections and setup of the airfoil data is discussed more in [Airfoil Data](@ref).
 
