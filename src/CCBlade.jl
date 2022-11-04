@@ -121,7 +121,7 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 
 
 # convenience constructor when Re and Mach are not used.
-OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) 
+OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::AbstractVector{<:OperatingPoint}, sym::Symbol)
