@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.4] - Nov 2022
+
+- more flexible AD compatibility
+- included ImplicitAD to speed up derivative computation (minor speed in this case because residual is just 1D, maybe 2x)
+- fixed Reynolds number used in one of the doc examples
 
 ## [0.2.3] - Nov 2021
 
