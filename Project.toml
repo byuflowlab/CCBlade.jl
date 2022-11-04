@@ -11,4 +11,5 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
 FLOWMath = "0.3"
+ImplicitAD = "0.2.2"
 julia = "1.6"
