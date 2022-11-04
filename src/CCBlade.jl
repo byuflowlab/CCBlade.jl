@@ -87,7 +87,7 @@ end
 
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:Section}, sym::Symbol)
+function Base.getproperty(obj::AbstractVector{<:Section}, sym::Symbol)
     return getfield.(obj, sym)
 end # This is not always type stable b/c we don't know if the return type will be float or af function.
 
@@ -121,10 +121,10 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 
 
 # convenience constructor when Re and Mach are not used.
-OperatingPoint(Vx, Vy, rho) = OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) 
+OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:OperatingPoint}, sym::Symbol)
+function Base.getproperty(obj::AbstractVector{<:OperatingPoint}, sym::Symbol)
     return getfield.(obj, sym)
 end
 
@@ -176,7 +176,7 @@ Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G) = Outputs(prom
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 # convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:Outputs}, sym::Symbol)
+function Base.getproperty(obj::AbstractVector{<:Outputs}, sym::Symbol)
     return getfield.(obj, sym)
 end
 
@@ -382,8 +382,8 @@ Solve the BEM equations for given rotor geometry and operating point.
 function solve(rotor, section, op)
 
     # error handling
-    if typeof(section) <: Vector
-        error("You passed in an vector for section, but this funciton does not accept an vector.\nProbably you intended to use broadcasting (notice the dot): solve.(Ref(rotor), sections, ops)")
+    if typeof(section) <: AbstractVector
+        error("You passed in an vector for section, but this function does not accept an vector.\nProbably you intended to use broadcasting (notice the dot): solve.(Ref(rotor), sections, ops)")
     end
 
     # check if we are at hub/tip
@@ -529,7 +529,7 @@ Uniform inflow through rotor.  Returns an OperatingPoint object.
 function simple_op(Vinf, Omega, r, rho; pitch=zero(rho), mu=one(rho), asound=one(rho), precone=zero(Vinf))
 
     # error handling
-    if typeof(r) <: Vector
+    if typeof(r) <: AbstractVector
         error("You passed in an vector for r, but this function does not accept an vector.\nProbably you intended to use broadcasting")
     end
 
@@ -606,7 +606,7 @@ end
 # -------- convenience methods ------------
 
 """
-    thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
+    thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
 
 integrate the thrust/torque across the blade, 
 including 0 loads at hub/tip, using a trapezoidal rule.
@@ -620,7 +620,7 @@ including 0 loads at hub/tip, using a trapezoidal rule.
 - `T::Float64`: thrust (along x-dir see Documentation).
 - `Q::Float64`: torque (along x-dir see Documentation).
 """
-function thrusttorque(rotor, sections, outputs::Vector{TO}) where TO
+function thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
 
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rvec = [s.r for s in sections]
@@ -640,13 +640,13 @@ end
 
 
 """
-    thrusttorque(rotor, sections, outputs::Matrix{TO}) where TO
+    thrusttorque(rotor, sections, outputs::AbstractMatrix{TO}) where TO
 
 Integrate the thrust/torque across the blade given an array of output data.
 Generally used for azimuthal averaging of thrust/torque.
 `outputs[i, j]` corresponds to `sections[i], azimuth[j]`.  Integrates across azimuth
 """
-function thrusttorque(rotor, sections, outputs::Matrix{TO}) where TO
+function thrusttorque(rotor, sections, outputs::AbstractMatrix{TO}) where TO
 
     T = 0.0
     Q = 0.0
