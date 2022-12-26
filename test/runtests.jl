@@ -189,11 +189,15 @@ out = solve.(Ref(rotor_no_F), sections, op)
 T = sum(out.Np*(r[2]-r[1]))*B
 Q = sum(r.*out.Tp*(r[2]-r[1]))*B
 eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
+eff1, T1, Q1 = getdim(CT, CQ, Vinf, Omega, rho, rotor, "propeller")
 
 
 @test isapprox(CT, 0.056110238632657, atol=1e-7)
 @test isapprox(CQ, 0.004337202960642, atol=1e-8)
 @test isapprox(eff, 0.735350632777002, atol=1e-6)
+@test isapprox(T1, T, atol=1e-6)
+@test isapprox(Q1, Q, atol=1e-6)
+@test isapprox(eff1, eff, atol=1e-6)
 
 
 # ---------------------------------------------
@@ -351,6 +355,13 @@ ntsr = 20  # number of tip-speed ratios
 tsrvec = range(2, stop=15, length=ntsr)
 cpvec = zeros(ntsr)  # initialize arrays
 ctvec = zeros(ntsr)
+cqvec = zeros(ntsr)
+Pvec = zeros(ntsr)
+Tvec = zeros(ntsr)
+Qvec = zeros(ntsr)
+Pvec1 = zeros(ntsr)
+Tvec1 = zeros(ntsr)
+Qvec1 = zeros(ntsr)
 
 azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
 
@@ -360,8 +371,10 @@ for i = 1:ntsr
     ops = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
     outs = solve.(Ref(rotor), sections, ops)
     T, Q = thrusttorque(rotor, sections, outs)
+    Pvec[i], Tvec[i], Qvec[i] = Q*Omega, T, Q
 
-    cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor, "windturbine")
+    cpvec[i], ctvec[i], cqvec[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "windturbine")
+    Pvec1[i], Tvec1[i], Qvec1[i] = getdim(ctvec[i], cqvec[i], Vinf, Omega, rho, rotor, "windturbine")
 end
 
 cpvec_test = [0.02350364982213779, 0.07009444382724848, 0.1389142676582008, 0.21796006904596332, 0.30793648085907793, 0.39220377428841097, 0.4358126426438294, 0.45890373500510734, 0.4692861367774551, 0.4675297063104674, 0.45763823228659106, 0.442190136700292, 0.4231819091376136, 0.4013611296914438, 0.37661228050658546, 0.3487266071360946, 0.31761016554953614, 0.2831513131286119, 0.24519843834864297, 0.20383577257448457]
@@ -370,6 +383,9 @@ ctvec_test = [0.12346062066554207, 0.19135957414241508, 0.2753773487370145, 0.36
 for i = 1:ntsr
     @test isapprox(cpvec[i], cpvec_test[i], atol=1e-3)
     @test isapprox(ctvec[i], ctvec_test[i], atol=1e-3)
+    @test isapprox(Pvec1[i], Pvec[i], atol=1e-3)
+    @test isapprox(Tvec1[i], Tvec[i], atol=1e-3)
+    @test isapprox(Qvec1[i], Qvec[i], atol=1e-3)
 end
 
 
@@ -488,6 +504,12 @@ pitch = range(1e-4, 20*pi/180, length=nP)
 
 CT = zeros(nP)
 CQ = zeros(nP)
+FM = zeros(nP)
+Tvec = zeros(nP)
+Qvec = zeros(nP)
+T1 = zeros(nP)
+Q1 = zeros(nP)
+FM1 = zeros(nP)
 
 
 for i = 1:nP
@@ -495,7 +517,9 @@ for i = 1:nP
     op = simple_op.(Vinf, Omega, r, rho, pitch=pitch[i])
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
-    _, CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "helicopter")
+    Tvec[i], Qvec[i] = T, Q
+    FM[i], CT[i], CQ[i] = nondim(T, Q, Vinf, Omega, rho, rotor, "helicopter")
+    FM1[i], T1[i], Q1[i] = getdim(CT[i], CQ[i], Vinf, Omega, rho, rotor, "helicopter")
 end
 
 # these are not directly from the experimental data, but have been compared to the experimental data and compare favorably.
@@ -506,6 +530,9 @@ CQcomp = [0.000226663607327854, 0.0002270862930229147, 0.0002292742856722754, 0.
 for i = 1:nP
     @test isapprox(CT[i], CTcomp[i], atol=1e-4)
     @test isapprox(CQ[i], CQcomp[i], atol=1e-4)
+    @test isapprox(T1[i], Tvec[i], atol=1e-4)
+    @test isapprox(Q1[i], Qvec[i], atol=1e-4)
+    @test isapprox(FM1[i], FM[i], atol=1e-4)
 end
 
 end

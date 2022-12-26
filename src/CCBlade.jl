@@ -18,7 +18,7 @@ using ImplicitAD
 
 export Rotor, Section, OperatingPoint, Outputs
 export simple_op, windturbine_op
-export solve, thrusttorque, nondim
+export solve, thrusttorque, nondim, getdim
 
 
 include("airfoils.jl")  # all the code related to airfoil data
@@ -738,5 +738,79 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
 end
 
+"""
+    getdim(CT, CQ, Vhub, Omega, rho, rotor, rotortype)
+
+Dimensionalize the outputs.
+
+**Arguments**
+- `CT::Float64`: thrust coefficient
+- `CQ::Float64`: torque coefficient
+- `Vhub::Float64`: hub speed used in turbine normalization (m/s)
+- `Omega::Float64`: rotation speed used in propeller normalization (rad/s)
+- `rho::Float64`: air density (kg/m^3)
+- `rotor::Rotor`: rotor object
+- `rotortype::String`: normalization type
+
+**Returns**
+
+`if rotortype == "windturbine"`
+- `P::Float64`: power
+- `T::Float64`: thrust
+- `Q::Float64`: torque
+
+`if rotortype == "propeller"`
+- `eff::Float64`: efficiency
+- `T::Float64`: thrust
+- `Q::Float64`: torque
+
+`if rotortype == "helicopter"`
+- `FM::Float64`: figure of merit
+- `T::Float64`: thrust
+- `Q or P::Float64`: torque/power (they are identical)
+"""
+function getdim(CT, CQ, Vhub, Omega, rho, rotor, rotortype)
+
+    Rp = rotor.Rtip*cos(rotor.precone)
+
+    if rotortype == "windturbine"  # wind turbine normalizations
+
+        q = 0.5 * rho * Vhub^2
+        A = pi * Rp^2
+
+        Q = (q * Rp * A) * CQ
+        P = Q * Omega
+        T = (q * A) * CT
+
+        return P, T, Q
+
+    elseif rotortype == "propeller"
+
+        n = Omega/(2*pi)
+        Dp = 2*Rp
+
+        T = (rho * n^2 * Dp^4) * CT
+        Q = (rho * n^2 * Dp^5) * CQ
+        P = Q * Omega
+        if T < 0
+            eff = 0.0  # creating drag not thrust
+        else
+            eff = T*Vhub/P
+        end
+
+        return eff, T, Q
+
+    elseif rotortype == "helicopter"
+
+        A = pi * Rp^2
+
+        T = (rho * A * (Omega*Rp)^2) * CT
+        Q = (rho * A * (Omega*Rp)^2 * Rp) * CQ # note that CQ = CP
+        FM = CT^(3.0/2)/(sqrt(2)*CQ)
+
+        return FM, T, Q
+    end
+
+end
 
 end  # module
