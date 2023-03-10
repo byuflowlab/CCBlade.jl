@@ -731,7 +731,7 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
         CT = T / (rho * A * (Omega*Rp)^2)
         CP = P / (rho * A * (Omega*Rp)^3)  # note that CQ = CP
-        if CP < 0
+        if CT < 0
             FM = 0.0 # creating drag not thrust
         else
             FM = CT^(3.0/2)/(sqrt(2)*CP)
