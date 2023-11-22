@@ -376,10 +376,13 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `section::Section`: section properties
 - `op::OperatingPoint`: operating point
 
+**Keyword Arguments**
+- `implicitad_option=true`: if true, uses ImplicitAD to solve the residual when Duals are passed through; if false, bypasses the ImplicitAD solve
+
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op)
+function solve(rotor, section, op; implicitad_option=true)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -491,7 +494,11 @@ function solve(rotor, section, op)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
-            phistar = implicit(solve, residual, xv, pv)
+            if implicitad_option
+                phistar = implicit(solve, residual, xv, pv)
+            else
+                phistar = solve(xv, pv)
+            end
             _, outputs = residual_and_outputs(phistar, xv, pv)
             return outputs
         end    
