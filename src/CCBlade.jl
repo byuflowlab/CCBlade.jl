@@ -342,7 +342,7 @@ interval (xmin, xmax) into n intervals.
 Returns found, xl, xu.
 If found = true a bracket was found between (xl, xu)
 """
-function firstbracket(f, xmin, xmax, n, backwardsearch=false)
+function firstbracket(f, xmin, xmax, n, backwardsearch=false, verbose=false)
 
     xvec = range(xmin, xmax, length=n)
     if backwardsearch  # start from xmax and work backwards
@@ -352,6 +352,9 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false)
     fprev = f(xvec[1])
     for i = 2:n
         fnext = f(xvec[i])
+        if verbose
+            println("xprev = $(xvec[i-1]), xnext = $(xvec[i]), fprev = $(fprev), fnext = $(fnext)")
+        end
         if fprev*fnext < 0  # bracket found
             if backwardsearch
                 return true, xvec[i], xvec[i-1]
@@ -367,7 +370,7 @@ end
 
 
 """
-    solve(rotor, section, op, npts=10)
+    solve(rotor, section, op; npts=10, forcebackwardsearch=false)
 
 Solve the BEM equations for given rotor geometry and operating point.
 
@@ -376,11 +379,12 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `section::Section`: section properties
 - `op::OperatingPoint`: operating point
 - `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
+- `forcebackwardsearch::Bool = false`: if true, force bracket search from high `phi` values to low, otherwise let `solve` decide
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op, npts=10)
+function solve(rotor, section, op; npts=10, forcebackwardsearch=false)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -470,15 +474,19 @@ function solve(rotor, section, op, npts=10)
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
 
-        # check to see if it would be faster to reverse the bracket search direction
-        backwardsearch = false
-        if !startfrom90
-            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
-                backwardsearch = true
-            end
+        if forcebackwardsearch
+            backwardsearch = true
         else
-            if phimax == pi/2  # q1
-                backwardsearch = true
+            # check to see if it would be faster to reverse the bracket search direction
+            backwardsearch = false
+            if !startfrom90
+                if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                    backwardsearch = true
+                end
+            else
+                if phimax == pi/2  # q1
+                    backwardsearch = true
+                end
             end
         end
 
