@@ -370,7 +370,7 @@ end
 
 
 """
-    solve(rotor, section, op; npts=10, forcebackwardsearch=false)
+    solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
 
 Solve the BEM equations for given rotor geometry and operating point.
 
@@ -380,11 +380,12 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `op::OperatingPoint`: operating point
 - `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
 - `forcebackwardsearch::Bool = false`: if true, force bracket search from high `phi` values to low, otherwise let `solve` decide
+- `epsilon_everywhere::Bool = false`: if true, don't evaluate at intersections of `phi` quadrants (`pi/2`, `-pi/2`, etc.)
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op; npts=10, forcebackwardsearch=false)
+function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -410,10 +411,17 @@ function solve(rotor, section, op; npts=10, forcebackwardsearch=false)
 
     # quadrants
     epsilon = 1e-6
-    q1 = [epsilon, pi/2]
-    q2 = [-pi/2, -epsilon]
-    q3 = [pi/2, pi-epsilon]
-    q4 = [-pi+epsilon, -pi/2]
+    if epsilon_everywhere
+        q1 = [epsilon, pi/2-epsilon]
+        q2 = [-pi/2+epsilon, -epsilon]
+        q3 = [pi/2+epsilon, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2-epsilon]
+    else
+        q1 = [epsilon, pi/2]
+        q2 = [-pi/2, -epsilon]
+        q3 = [pi/2, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2]
+    end
 
     if Vx_is_zero && Vy_is_zero
         return Outputs()
