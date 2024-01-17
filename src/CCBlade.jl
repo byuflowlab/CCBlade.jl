@@ -367,7 +367,7 @@ end
 
 
 """
-    solve(rotor, section, op)
+    solve(rotor, section, op, npts=10)
 
 Solve the BEM equations for given rotor geometry and operating point.
 
