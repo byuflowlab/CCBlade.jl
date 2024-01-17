@@ -375,11 +375,12 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `rotor::Rotor`: rotor properties
 - `section::Section`: section properties
 - `op::OperatingPoint`: operating point
+- `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op)
+function solve(rotor, section, op, npts=10)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -392,7 +393,7 @@ function solve(rotor, section, op)
     end
 
     # parameters
-    npts = 10  # number of discretization points to find bracket in residual solve
+    # npts = 10  # number of discretization points to find bracket in residual solve
 
     # unpack
     Vx = op.Vx
