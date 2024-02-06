@@ -300,7 +300,6 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         R = sin(phi)/(1 + a) - Vx/Vy*cos(phi)/(1 - ap)
     end
 
-
     # ------- loads ---------
     W = sqrt((Vx + u)^2 + (Vy - v)^2)
     Np = cn*0.5*rho*W^2*chord
@@ -342,7 +341,7 @@ interval (xmin, xmax) into n intervals.
 Returns found, xl, xu.
 If found = true a bracket was found between (xl, xu)
 """
-function firstbracket(f, xmin, xmax, n, backwardsearch=false, verbose=false)
+function firstbracket(f, xmin, xmax, n, backwardsearch=false)
 
     xvec = range(xmin, xmax, length=n)
     if backwardsearch  # start from xmax and work backwards
@@ -352,9 +351,6 @@ function firstbracket(f, xmin, xmax, n, backwardsearch=false, verbose=false)
     fprev = f(xvec[1])
     for i = 2:n
         fnext = f(xvec[i])
-        if verbose
-            println("xprev = $(xvec[i-1]), xnext = $(xvec[i]), fprev = $(fprev), fnext = $(fnext)")
-        end
         if fprev*fnext < 0  # bracket found
             if backwardsearch
                 return true, xvec[i], xvec[i-1]
