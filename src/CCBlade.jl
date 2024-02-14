@@ -300,7 +300,6 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         R = sin(phi)/(1 + a) - Vx/Vy*cos(phi)/(1 - ap)
     end
 
-
     # ------- loads ---------
     W = sqrt((Vx + u)^2 + (Vy - v)^2)
     Np = cn*0.5*rho*W^2*chord
@@ -367,7 +366,7 @@ end
 
 
 """
-    solve(rotor, section, op)
+    solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
 
 Solve the BEM equations for given rotor geometry and operating point.
 
@@ -375,11 +374,14 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `rotor::Rotor`: rotor properties
 - `section::Section`: section properties
 - `op::OperatingPoint`: operating point
+- `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
+- `forcebackwardsearch::Bool = false`: if true, force bracket search from high `phi` values to low, otherwise let `solve` decide
+- `epsilon_everywhere::Bool = false`: if true, don't evaluate at intersections of `phi` quadrants (`pi/2`, `-pi/2`, etc.)
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op)
+function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -392,7 +394,7 @@ function solve(rotor, section, op)
     end
 
     # parameters
-    npts = 10  # number of discretization points to find bracket in residual solve
+    # npts = 10  # number of discretization points to find bracket in residual solve
 
     # unpack
     Vx = op.Vx
@@ -405,10 +407,17 @@ function solve(rotor, section, op)
 
     # quadrants
     epsilon = 1e-6
-    q1 = [epsilon, pi/2]
-    q2 = [-pi/2, -epsilon]
-    q3 = [pi/2, pi-epsilon]
-    q4 = [-pi+epsilon, -pi/2]
+    if epsilon_everywhere
+        q1 = [epsilon, pi/2-epsilon]
+        q2 = [-pi/2+epsilon, -epsilon]
+        q3 = [pi/2+epsilon, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2-epsilon]
+    else
+        q1 = [epsilon, pi/2]
+        q2 = [-pi/2, -epsilon]
+        q3 = [pi/2, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2]
+    end
 
     if Vx_is_zero && Vy_is_zero
         return Outputs()
@@ -469,15 +478,19 @@ function solve(rotor, section, op)
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
 
-        # check to see if it would be faster to reverse the bracket search direction
-        backwardsearch = false
-        if !startfrom90
-            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
-                backwardsearch = true
-            end
+        if forcebackwardsearch
+            backwardsearch = true
         else
-            if phimax == pi/2  # q1
-                backwardsearch = true
+            # check to see if it would be faster to reverse the bracket search direction
+            backwardsearch = false
+            if !startfrom90
+                if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                    backwardsearch = true
+                end
+            else
+                if phimax == pi/2  # q1
+                    backwardsearch = true
+                end
             end
         end
 
