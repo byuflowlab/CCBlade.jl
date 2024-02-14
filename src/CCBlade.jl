@@ -377,11 +377,12 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
 - `forcebackwardsearch::Bool = false`: if true, force bracket search from high `phi` values to low, otherwise let `solve` decide
 - `epsilon_everywhere::Bool = false`: if true, don't evaluate at intersections of `phi` quadrants (`pi/2`, `-pi/2`, etc.)
+- `implicitad_option=true`: if true, uses ImplicitAD to compute derivatives around solver when using AD; if false, bypasses ImplicitAD
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
+function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false, implicitad_option=true)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -504,7 +505,11 @@ function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_e
 
         # once bracket is found, solve root finding problem and compute loads
         if success
-            phistar = implicit(solve, residual, xv, pv)
+            if implicitad_option
+                phistar = implicit(solve, residual, xv, pv)
+            else
+                phistar = solve(xv, pv)
+            end
             _, outputs = residual_and_outputs(phistar, xv, pv)
             return outputs
         end    
@@ -744,7 +749,11 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
         CT = T / (rho * A * (Omega*Rp)^2)
         CP = P / (rho * A * (Omega*Rp)^3)  # note that CQ = CP
-        FM = CT^(3.0/2)/(sqrt(2)*CP)
+        if CT < 0
+            FM = 0.0 # creating drag not thrust
+        else
+            FM = CT^(3.0/2)/(sqrt(2)*CP)
+        end
 
         return FM, CT, CP
     end
