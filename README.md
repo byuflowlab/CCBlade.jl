@@ -47,3 +47,5 @@ Ning, A., “Using Blade Element Momentum Methods with Gradient-Based Design Opt
 **Python / OpenMDAO users**
 
 In the `openmdao` folder there is a Python wrapper to this package to enable usage from [OpenMDAO](https://openmdao.org).  This wrapper was developed/maintained by Daniel Ingraham and Justin Gray at NASA Glenn.
+
+In the `python` folder there is a Python wrapper developed by BYU FLOWLab
