@@ -65,3 +65,8 @@ Manifest.toml
 # OpenMDAO stuff
 coloring_files
 n2.html
+
+# Python stuff
+python/build
+*egg-info
+python/dist

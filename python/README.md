@@ -11,4 +11,4 @@
 
 Navigate to `CCBlade/python/`
 
-`pip install setup.py`
+`python setup.py`
