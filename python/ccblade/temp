@@ -1,0 +1,11 @@
+{
+    "julia": "1.9.1",
+    "packages": { 
+        "CCBlade": { 
+            "uuid": "e1828068-15df-11e9-03e4-ef195ea46fa4",
+            "version": "0.2.5"
+        }
+    }
+
+
+}
