@@ -20,7 +20,7 @@ jobs:
           # https://discourse.julialang.org/t/running-ci-for-julia-1-6-on-github-macos-runners-seems-to-fail/116577/3
           # macOS-latest implies arm64, which isn't available for Julia 1.6, so skip that.
           - os: macOS-latest
-          - julia-version: 1.6
+            julia-version: 1.6
 
 
     steps:
