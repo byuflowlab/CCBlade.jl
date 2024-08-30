@@ -22,6 +22,10 @@ jobs:
           - os: macOS-latest
             julia-version: 1.6
 
+        include:
+          # macOS-13 appears to be the last x64 macOS.
+          - os: macOS-13
+            julia-version: 1.6
 
     steps:
       - uses: actions/checkout@v1.0.0
