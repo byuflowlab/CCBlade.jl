@@ -86,10 +86,10 @@ function Section(r, chord, theta, af)
 end
 
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:Section}, sym::Symbol)
-    return getfield.(obj, sym)
-end # This is not always type stable b/c we don't know if the return type will be float or af function.
+# # convenience function to access fields within an array of structs
+# function Base.getproperty(obj::Vector{<:Section}, sym::Symbol)
+#     return getfield.(obj, sym)
+# end # This is not always type stable b/c we don't know if the return type will be float or af function.
 
 """
     OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
@@ -123,10 +123,10 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:OperatingPoint}, sym::Symbol)
-    return getfield.(obj, sym)
-end
+# # convenience function to access fields within an array of structs
+# function Base.getproperty(obj::Vector{<:OperatingPoint}, sym::Symbol)
+#     return getfield.(obj, sym)
+# end
 
 
 """
@@ -175,10 +175,10 @@ Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G) = Outputs(prom
 # convenience constructor to initialize
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:Outputs}, sym::Symbol)
-    return getfield.(obj, sym)
-end
+# # convenience function to access fields within an array of structs
+# function Base.getproperty(obj::Vector{<:Outputs}, sym::Symbol)
+#     return getfield.(obj, sym)
+# end
 
 # -------------------------------
 
@@ -643,8 +643,8 @@ function thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
     # add hub/tip for complete integration.  loads go to zero at hub/tip.
     rvec = [s.r for s in sections]
     rfull = [rotor.Rhub; rvec; rotor.Rtip]
-    Npfull = [0.0; outputs.Np; 0.0]
-    Tpfull = [0.0; outputs.Tp; 0.0]
+    Npfull = [0.0; getproperty.(outputs, :Np); 0.0]
+    Tpfull = [0.0; getproperty.(outputs, :Tp); 0.0]
 
     # integrate Thrust and Torque (trapezoidal)
     thrust = Npfull*cos(rotor.precone)
