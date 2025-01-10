@@ -55,22 +55,24 @@ ops = simple_op.(Vinf, Omega, r, rho)
 
 out = solve.(Ref(rotor), sections, ops)
 
-ivec = out.phi*180/pi .- theta*180/pi
-betavec = 90 .- out.phi*180/pi
+ivec = getproperty.(out, :phi)*180/pi .- theta*180/pi
+betavec = 90 .- getproperty.(out, :phi).*180/pi
 
 
 # outputs[1] is uncomparable because the classical method fails at the root so they fixed cl
 
-@test isapprox(out.a[2], 0.2443, atol=1e-4)
-@test isapprox(out.ap[2], 0.0676, atol=1e-4)
-@test isapprox(out.a[3], 0.2497, atol=1e-4)
-@test isapprox(out.ap[3], 0.0180, atol=1e-4)
-@test isapprox(out.a[4], 0.2533, atol=1e-4)
-@test isapprox(out.ap[4], 0.0081, atol=1e-4)
-@test isapprox(out.a[5], 0.2556, atol=1e-4)
-@test isapprox(out.ap[5], 0.0046, atol=1e-4)
-@test isapprox(out.a[6], 0.25725, atol=1e-4)  # note that their spreadsheet is not converged so I ran their method longer.
-@test isapprox(out.ap[6], 0.0030, atol=1e-4)
+a = getproperty.(out, :a)
+ap = getproperty.(out, :ap)
+@test isapprox(a[2], 0.2443, atol=1e-4)
+@test isapprox(ap[2], 0.0676, atol=1e-4)
+@test isapprox(a[3], 0.2497, atol=1e-4)
+@test isapprox(ap[3], 0.0180, atol=1e-4)
+@test isapprox(a[4], 0.2533, atol=1e-4)
+@test isapprox(ap[4], 0.0081, atol=1e-4)
+@test isapprox(a[5], 0.2556, atol=1e-4)
+@test isapprox(ap[5], 0.0046, atol=1e-4)
+@test isapprox(a[6], 0.25725, atol=1e-4)  # note that their spreadsheet is not converged so I ran their method longer.
+@test isapprox(ap[6], 0.0030, atol=1e-4)
 
 @test isapprox(betavec[2], 66.1354, atol=1e-3)
 @test isapprox(betavec[3], 77.0298, atol=1e-3)
@@ -170,8 +172,10 @@ for i = 1:60
     # Np, Tp = loads(outputs)
     # T, Q = thrusttorque(r[1], r, r[end], Np, Tp, B)
     # their spreadsheet did not use trapzezoidal rule, so just do a rect sum.
-    T = sum(out.Np*(r[2]-r[1]))*B
-    Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+    Np = getproperty.(out, :Np)
+    Tp = getproperty.(out, :Tp)
+    T = sum(Np*(r[2]-r[1]))*B
+    Q = sum(r.*Tp*(r[2]-r[1]))*B
 
     @test isapprox(T, tsim[i], atol=1e-2)  # 2 decimal places
     @test isapprox(Q, qsim[i], atol=2e-3)
@@ -186,8 +190,10 @@ op = simple_op.(Vinf, Omega, r, rho)
 
 out = solve.(Ref(rotor_no_F), sections, op)
 
-T = sum(out.Np*(r[2]-r[1]))*B
-Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+Np = getproperty.(out, :Np)
+Tp = getproperty.(out, :Tp)
+T = sum(Np*(r[2]-r[1]))*B
+Q = sum(r.*Tp*(r[2]-r[1]))*B
 eff, CT, CQ = nondim(T, Q, Vinf, Omega, rho, rotor, "propeller")
 
 
@@ -220,8 +226,10 @@ ops = simple_op.(Vinf, Omega, r, rho)
 
 out = solve.(Ref(rotor_no_F), sections, ops)
 
-T = sum(out.Np*(r[2]-r[1]))*B
-Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+Np = getproperty.(out, :Np)
+Tp = getproperty.(out, :Tp)
+T = sum(Np*(r[2]-r[1]))*B
+Q = sum(r.*Tp*(r[2]-r[1]))*B
 
 @test isapprox(T, 1223.0506862888788, atol=1e-8)
 @test isapprox(Q, 113.79919472569034, atol=1e-8)
@@ -246,8 +254,10 @@ theta = atan.(pitch./(2*pi*r)) .- 3*pi/180
 
 sections = Section.(r, chord, theta, Ref(affunc3))
 out = solve.(Ref(rotor_no_F), sections, ops)
-T = sum(out.Np*(r[2]-r[1]))*B
-Q = sum(r.*out.Tp*(r[2]-r[1]))*B
+Np = getproperty.(out, :Np)
+Tp = getproperty.(out, :Tp)
+T = sum(Np*(r[2]-r[1]))*B
+Q = sum(r.*Tp*(r[2]-r[1]))*B
 
 @test isapprox(T, 1e3*0.962407923825140, atol=1e-3)
 @test isapprox(Q, 1e2*0.813015017103876, atol=1e-4)
@@ -332,9 +342,11 @@ out = solve.(Ref(rotor), sections, op)
 nr = length(r)
 Npnorm = [0.09718339956327719, 0.13149361678303992, 0.12220741751313423, 1.1634860128761517, 1.7001259694801125, 2.0716257635881257, 2.5120015027019678, 3.1336171133495045, 3.6916824972696465, 4.388661772599469, 5.068896486058948, 5.465165634664408, 6.035059239683594, 6.539134070994739, 6.831387531628286, 6.692665814418597, 4.851568452578296]
 Tpnorm = [-0.03321034106737285, -0.08727189682145081, -0.12001897678344217, 0.4696423333976085 , 0.6226256283641799 , 0.6322961942049257 , 0.6474145670774534 , 0.6825021056687035 , 0.6999861694557595 , 0.7218774840801262 , 0.7365515905555542 , 0.7493905698765747 , 0.7529143446199785 , 0.7392483947274653, 0.6981206044592225, 0.614524256128813, 0.40353047553570615]
+Np = getproperty.(out, :Np)
+Tp = getproperty.(out, :Tp)
 for i = 1:nr
-    @test isapprox.(out.Np[i]/1e3, Npnorm[i], atol=1e-3)
-    @test isapprox.(out.Tp[i]/1e3, Tpnorm[i], atol=1e-3)
+    @test isapprox.(Np[i]/1e3, Npnorm[i], atol=1e-3)
+    @test isapprox.(Tp[i]/1e3, Tpnorm[i], atol=1e-3)
 end
 
 # T, Q = thrusttorque(rotor, sections, out)
@@ -413,11 +425,15 @@ Tptest = [1.481919153409856, 1.5816880353415623, 1.6702432911163534, 1.750239790
 unormtest = [0.1138639166930624, 0.1215785884908478, 0.12836706426605704, 0.13442694075150818, 0.13980334658952898, 0.14527249541450538, 0.15287706861957473, 0.15952130275430465, 0.16497198426904225, 0.16942902209255595, 0.17308482185019125, 0.17607059901193356, 0.17850357997819633, 0.1803781237713692, 0.18177831882512596, 0.18267665167815783, 0.18311924527883217, 0.18305367052760668, 0.182487470134022, 0.1814205780851561, 0.17980424363698078, 0.1775794222894007, 0.1747493664535781, 0.1712044765873724, 0.1669243629724566, 0.16177907188793106, 0.155616714947619, 0.14815634397029886, 0.13888287431637295, 0.12464247057085576, 0.09292645450646951]
 vnormtest = [0.09042291182918308, 0.090986677078917, 0.09090479653774426, 0.09038728871285233, 0.08954144817337718, 0.08836143378908702, 0.08598138211326231, 0.08315706129440237, 0.08022297890584436, 0.07727195122065926, 0.07437202068064472, 0.07155384528141737, 0.06883664444997291, 0.0662014244622726, 0.06365995181515205, 0.061184457505937574, 0.05878201223442723, 0.056423985398129595, 0.05410845965501752, 0.05183227774671869, 0.04957767474023305, 0.04732717658478895, 0.04508635659098153, 0.04282827989707323, 0.04055808783300249, 0.03825394697198818, 0.0358976247398962, 0.033456013675480394, 0.030869388594900515, 0.027466462150913407, 0.020268236545135546]
 nr = length(r)
+Np = getproperty.(outputs, :Np)
+Tp = getproperty.(outputs, :Tp)
+u = getproperty.(outputs, :u)
+v = getproperty.(outputs, :v)
 for i = 1:nr
-    @test isapprox(outputs.Np[i], Nptest[i], atol=1e-3)
-    @test isapprox(outputs.Tp[i], Tptest[i], atol=1e-3)
-    @test isapprox(outputs.u[i]/Vinf, unormtest[i], atol=1e-3)
-    @test isapprox(outputs.v[i]/Vinf, vnormtest[i], atol=1e-3)
+    @test isapprox(Np[i], Nptest[i], atol=1e-3)
+    @test isapprox(Tp[i], Tptest[i], atol=1e-3)
+    @test isapprox(u[i]/Vinf, unormtest[i], atol=1e-3)
+    @test isapprox(v[i]/Vinf, vnormtest[i], atol=1e-3)
 end
 
 
