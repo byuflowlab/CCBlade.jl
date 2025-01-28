@@ -13,6 +13,7 @@ makedocs(
     repo="https://github.com/byuflowlab/CCBlade.jl/blob/{commit}{path}#L{line}",
     sitename="CCBlade.jl",
     authors="Andrew Ning <aning@byu.edu>",
+    warnonly = Documenter.except(:linkcheck, :footnote),
 )
 
 deploydocs(
