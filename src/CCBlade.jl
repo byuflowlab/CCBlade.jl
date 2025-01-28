@@ -26,10 +26,10 @@ include("airfoils.jl")  # all the code related to airfoil data
 # --------- structs -------------
 
 """
-    Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, 
+    Rotor(Rhub, Rtip, B; precone=0.0, turbine=false,
         mach=nothing, re=nothing, rotation=nothing, tip=PrandtlTipHub())
 
-Parameters defining the rotor (apply to all sections).  
+Parameters defining the rotor (apply to all sections).
 
 **Arguments**
 - `Rhub::Float64`: hub radius (along blade length)
@@ -42,8 +42,8 @@ Parameters defining the rotor (apply to all sections).
 - `rotation::RotationCorrection`: correction method for blade rotation
 - `tip::TipCorrection`: correction method for hub/tip loss
 """
-struct Rotor{TF, TI, TB, 
-        T1 <: Union{Nothing, MachCorrection}, T2 <: Union{Nothing, ReCorrection}, 
+struct Rotor{TF, TI, TB,
+        T1 <: Union{Nothing, MachCorrection}, T2 <: Union{Nothing, ReCorrection},
         T3 <: Union{Nothing, RotationCorrection}, T4 <: Union{Nothing, TipCorrection}}
     Rhub::TF
     Rtip::TF
@@ -65,7 +65,7 @@ Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, mach=nothing, re=nothing, rotat
     Section(r, chord, theta, af)
 
 Define sectional properties for one station along rotor
-    
+
 **Arguments**
 - `r::Float64`: radial location along blade
 - `chord::Float64`: corresponding local chord length
@@ -77,7 +77,7 @@ struct Section{TF, TAF}
     chord::TF
     theta::TF
     af::TAF
-end  
+end
 
 # promote to same type, e.g., duals
 function Section(r, chord, theta, af)
@@ -88,14 +88,18 @@ end
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::AbstractVector{<:Section}, sym::Symbol)
-    return getfield.(obj, sym)
+    if sym == :ref
+        return getfield(obj, sym)
+    else
+        return getfield.(obj, sym)
+    end
 end # This is not always type stable b/c we don't know if the return type will be float or af function.
 
 """
     OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
 
-Operation point for a rotor.  
-The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
+Operation point for a rotor.
+The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.
 See Documentation for more detail on coordinate systems.
 `Vx` and `Vy` vary radially at same locations as `r` in the rotor definition.
 
@@ -111,7 +115,7 @@ struct OperatingPoint{TF}
     Vx::TF
     Vy::TF
     rho::TF
-    pitch::TF  
+    pitch::TF
     mu::TF
     asound::TF
 end
@@ -125,7 +129,11 @@ OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = Ope
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::AbstractVector{<:OperatingPoint}, sym::Symbol)
-    return getfield.(obj, sym)
+    if sym == :ref
+        return getfield(obj, sym)
+    else
+        return getfield.(obj, sym)
+    end
 end
 
 
@@ -177,7 +185,11 @@ Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
 
 # convenience function to access fields within an array of structs
 function Base.getproperty(obj::AbstractVector{<:Outputs}, sym::Symbol)
-    return getfield.(obj, sym)
+    if sym == :ref
+        return getfield(obj, sym)
+    else
+        return getfield.(obj, sym)
+    end
 end
 
 # -------------------------------
@@ -195,7 +207,7 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     # unpack inputs
     r, chord, theta, Rhub, Rtip, Vx, Vy, rho, pitch, mu, asound = x  # variables
     af, B, turbine, re_corr, mach_corr, rotation_corr, tip_corr = p  # parameters
-    
+
     # constants
     sigma_p = B*chord/(2.0*pi*r)
     sphi = sin(phi)
@@ -235,7 +247,7 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     # hub/tip loss
     F = 1.0
     if !isnothing(tip_corr)
-        F = tip_correction(tip_corr, r, Rhub, Rtip, phi, B)   
+        F = tip_correction(tip_corr, r, Rhub, Rtip, phi, B)
     end
 
     # sec parameters
@@ -252,13 +264,13 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         R = sign(phi) - k
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
-        
+
         u = zero(phi)
         v = k*ct/cn*abs(Vx)
         a = zero(phi)
         ap = zero(phi)
         R = sign(Vx) + kp
-    
+
     else
 
         if phi < 0
@@ -272,8 +284,8 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         if k >= -2.0/3  # momentum region
             a = k/(1 - k)
 
-        else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.  
-            # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if 
+        else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.
+            # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if
             # using CT/CP directly as a design variables.  Suggestion courtesy of Kenneth Lønbæk.
             g1 = 2*k + 1.0/9
             g2 = -2*k - 1.0/3
@@ -305,14 +317,14 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     Np = cn*0.5*rho*W^2*chord
     Tp = ct*0.5*rho*W^2*chord
 
-    # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
-    # This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
+    # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.
+    # This is the most common way to implement a BEM, but it means that the raw velocities are misleading
     # as they do not contain any hub/tip loss corrections.
     # To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.
     # In other words:
     # CT = 4 a (1 + a) F = 4 a G (1 + a G)\n
     # This is solved for G, then multiplied against the wake velocities.
-    
+
     if isapprox(Vx, 0.0, atol=1e-6)
         G = sqrt(F)
     elseif isapprox(Vy, 0.0, atol=1e-6)
@@ -512,13 +524,13 @@ function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_e
             end
             _, outputs = residual_and_outputs(phistar, xv, pv)
             return outputs
-        end    
-    end    
+        end
+    end
 
     # it shouldn't get to this point.  if it does it means no solution was found
     # it will return empty outputs
     # alternatively, one could increase npts and try again
-    
+
     @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return Outputs()
 end
@@ -551,7 +563,7 @@ function simple_op(Vinf, Omega, r, rho; pitch=zero(rho), mu=one(rho), asound=one
         error("You passed in an vector for r, but this function does not accept an vector.\nProbably you intended to use broadcasting")
     end
 
-    Vx = Vinf * cos(precone) 
+    Vx = Vinf * cos(precone)
     Vy = Omega * r * cos(precone)
 
     return OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
@@ -626,7 +638,7 @@ end
 """
     thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
 
-integrate the thrust/torque across the blade, 
+integrate the thrust/torque across the blade,
 including 0 loads at hub/tip, using a trapezoidal rule.
 
 **Arguments**

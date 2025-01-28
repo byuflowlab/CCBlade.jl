@@ -37,7 +37,7 @@ function affunc(alpha, Re, M)
     cl = 0.084*alpha*180/pi
 
     return cl, 0.0
-end 
+end
 
 sections = Section.(r, chord, theta, Ref(affunc))
 
@@ -79,8 +79,8 @@ betavec = 90 .- out.phi*180/pi
 @test isapprox(betavec[6], 84.7113, atol=1e-3)  # using my more converged solution
 
 
-# 
-# 
+#
+#
 
 # idx = 6
 
@@ -143,7 +143,7 @@ function affunc2(alpha, Re, M)
     cd = 0.008 - 0.003*cl + 0.01*cl*cl
 
     return cl, cd
-end 
+end
 
 sections = Section.(r, chord, theta, Ref(affunc2))
 
@@ -159,7 +159,7 @@ qsim = 1e2*[0.803638686218187, 0.806984572453978, 0.809709290183008, 0.811743686
 for i = 1:60
 
     Vinf = float(i)
-    Omega = RPM * pi/30 
+    Omega = RPM * pi/30
 
     ops = simple_op.(Vinf, Omega, r, rho)
 
@@ -209,13 +209,13 @@ function affunc3(alpha, Re, M)
     cd = 0.008 - 0.003*cl + 0.01*cl*cl
 
     return cl, cd
-end 
+end
 
 
 sections = Section.(r, chord, theta, Ref(affunc3))
 
 Vinf = 5.0
-Omega = RPM * pi/30 
+Omega = RPM * pi/30
 ops = simple_op.(Vinf, Omega, r, rho)
 
 out = solve.(Ref(rotor_no_F), sections, ops)
@@ -266,7 +266,7 @@ end
 # empirical data.  Rather they are from the figures used in the documentaiton.  Qualitatively
 # the output is about right.  Minor changes in, for example, the airfoil interpolation method
 # coudl slightly change the outputs.  The main purpose of these tests is to alert us if something
-# significant changes.  
+# significant changes.
 
 Rhub = 1.5
 Rtip = 63.0
@@ -298,7 +298,7 @@ aftypes[8] = AlphaAF("airfoils/NACA64_A17.dat", radians=false)
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 
-# create airfoil array 
+# create airfoil array
 airfoils = aftypes[af_idx]
 
 sections = Section.(r, chord, theta, airfoils)
@@ -491,7 +491,7 @@ CQ = zeros(nP)
 
 
 for i = 1:nP
-    
+
     op = simple_op.(Vinf, Omega, r, rho, pitch=pitch[i])
     outputs = solve.(Ref(rotor), sections, op)
     T, Q = thrusttorque(rotor, sections, outputs)
@@ -674,7 +674,7 @@ function affunc(alpha, Re, M)
     cd = 0.008 - 0.003*cl + 0.01*cl*cl
 
     return cl, cd
-end 
+end
 
 n = length(r)
 airfoils = fill(affunc, n)
@@ -687,10 +687,10 @@ precone = 0.0
 rho = 1.225
 Vinf = 30.0
 RPM = 2100
-Omega = RPM * pi/30 
+Omega = RPM * pi/30
 
 function ccbladewrapper(x)
-    
+
     # unpack
     nall = length(x)
     nvec = nall - 7
@@ -726,7 +726,7 @@ J = ForwardDiff.jacobian(ccbladewrapper, x)
 
 # using BenchmarkTools
 # @btime ForwardDiff.jacobian($ccbladewrapper, $x)
-# original: 584.041 μs (9910 allocations: 1.15 MiB) 
+# original: 584.041 μs (9910 allocations: 1.15 MiB)
 # with ImplicitAD: 323.208 μs (11862 allocations: 747.50 KiB)
 
 import FiniteDiff
@@ -749,10 +749,10 @@ function ccbladewrapper(x)
 
         cl = 6.2*alpha
         cd = 0.008 - 0.003*cl + 0.01*cl*cl
-    
+
         return cl, cd
-    end 
-    
+    end
+
     # unpack
     nall = length(x)
     nvec = nall - 7
@@ -797,7 +797,7 @@ precone = 0.0
 rho = 1.225
 Vinf = 30.0
 RPM = 2100
-Omega = RPM * pi/30 
+Omega = RPM * pi/30
 
 xvec = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
 

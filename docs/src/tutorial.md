@@ -2,9 +2,13 @@
 
 This starter tutorial walks through the mechanics of running a analysis.  This is designing as a starting point and does not explain every option or consideration.  More specific and advanced usage are described in the [how to guide](howto.md).
 
-We will simulate the APC thin electric 10 x 5 propeller.  The geometry, and wind tunnel data for this propeller is available from [UIUC](https://m-selig.ae.illinois.edu/props/volume-1/propDB-volume-1.html#APC). Let's load CCBlade and a plotting package (I chose to use PyPlot in this example).  
+We will simulate the APC thin electric 10 x 5 propeller.  The geometry, and wind tunnel data for this propeller is available from [UIUC](https://m-selig.ae.illinois.edu/props/volume-1/propDB-volume-1.html#APC). Let's load CCBlade and a plotting package (I chose to use PyPlot in this example).
 
 ```@setup prop
+using CCBlade
+using PyPlot
+```
+```julia
 using CCBlade
 using PyPlot
 ```
@@ -151,7 +155,7 @@ J &= \frac{V}{n D}
 ```
 
 !!! note
-    Efficiency is set to zero if the thrust is negative (producing drag).  
+    Efficiency is set to zero if the thrust is negative (producing drag).
 
 The code below performs this analysis then plots thrust coefficient, power coefficient, and efficiency as a function of advance ratio as compared to the experimental data.
 
