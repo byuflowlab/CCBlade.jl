@@ -180,6 +180,10 @@ function Base.getproperty(obj::AbstractVector{<:Outputs}, sym::Symbol)
     return getfield.(obj, sym)
 end
 
+function is_no_loads(outputs::Outputs)
+    return outputs.Np == 0.0 && outputs.Tp == 0.0 && outputs.a == 0.0 && outputs.ap == 0.0 && outputs.u == 0.0 && outputs.v == 0.0 && outputs.phi == 0.0 && outputs.alpha == 0.0 && outputs.W == 0.0 && outputs.cl == 0.0 && outputs.cd == 0.0 && outputs.cn == 0.0 && outputs.ct == 0.0 && outputs.F == 0.0 && outputs.G == 0.0
+end
+
 # -------------------------------
 
 
@@ -321,6 +325,7 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     else
         G = (-1.0 + sqrt(1.0 + 4*a*(1.0 + a)*F))/(2*a)
     end
+    G = 1
     u *= G
     v *= G
 
@@ -384,6 +389,40 @@ function solve(rotor, section, op)
     # error handling
     if typeof(section) <: AbstractVector
         error("You passed in an vector for section, but this function does not accept an vector.\nProbably you intended to use broadcasting (notice the dot): solve.(Ref(rotor), sections, ops)")
+    end
+
+    if typeof(section.af) <: Cylinder
+        # return Outputs()  # no loads on a cylinder
+
+        ### Geometric approach (ignoring induced velocity) #TODO: Figure out induced velocity -> I think I should be able to analyticaly solve this
+        phi = atan(op.Vx, op.Vy) 
+        alpha = phi - (section.theta + op.pitch)
+        a = 0.0 #Induction factors
+        ap = 0.0
+        u = 0.0 #induced velocities
+        v = 0.0
+        W = sqrt(op.Vx^2 + op.Vy^2)
+
+        sphi = sin(phi)
+        cphi = cos(phi)
+
+        cl = 0.0
+        cd = section.af.cd
+
+        cn = cl*cphi - cd*sphi
+        ct = cl*sphi + cd*cphi
+
+        Np = cn*0.5*op.rho*W^2*section.chord
+        Tp = ct*0.5*op.rho*W^2*section.chord
+
+        F = 1 #TODO: add hub/tip loss -> I think these should be the same... yeah? 
+        G = 1
+        
+        if rotor.turbine #Does it make sense to negate everything -> If I'm doing this, I need to use the propellers convention, not the wind turbine. 
+            return Outputs(-Np, -Tp, -a, -ap, -u, -v, phi, -alpha, W, -cl, cd, -cn, -ct, F, G)
+        else
+            return Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+        end
     end
 
     # check if we are at hub/tip
@@ -483,6 +522,7 @@ function solve(rotor, section, op)
 
         # find bracket
         success, phiL, phiU = firstbracket(phi -> residual(phi, xv, pv), phimin, phimax, npts, backwardsearch)
+        
 
         function solve(x, p)
             phistar, _ = FLOWMath.brent(phi -> residual(phi, x, p), phiL, phiU)
@@ -491,7 +531,12 @@ function solve(rotor, section, op)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
+            # println("CCBlade")
+            # @show phiL, phiU
+            # @show xv
+            # @show pv[2], pv[3], pv[4], pv[5], pv[6], pv[7]
             phistar = implicit(solve, residual, xv, pv)
+            # @show phistar
             _, outputs = residual_and_outputs(phistar, xv, pv)
             return outputs
         end    

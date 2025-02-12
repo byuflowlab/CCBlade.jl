@@ -463,6 +463,13 @@ function write_af(filenames, af::AlphaReMachAF; radians=true)
     return nothing
 end
 
+struct Cylinder{TF} <: AFType
+    cd::TF
+end
+
+afeval(af::Cylinder, alpha, Re, Mach) = (0.0, af.d)
+
+
 #####################################
 
 
