@@ -874,15 +874,15 @@ using FillArrays
     @testset "FillArrays" begin
         sections_fill = Fill(sections[1], 3)
         @test length(sections_fill) == 3
-        sections_fill[3].r ≈ sections[1].r
+        @test sections_fill[3].r ≈ sections[1].r
 
         ops_fill = Fill(ops[1], 3)
         @test length(ops_fill) == 3
-        ops_fill[3].Vx ≈ ops[1].Vx
+        @test ops_fill[3].Vx ≈ ops[1].Vx
 
         outs_fill = Fill(outs[1], 3)
         @test length(outs_fill) == 3
-        outs_fill[3].Np ≈ outs[1].Np
+        @test outs_fill[3].Np ≈ outs[1].Np
     end
 
 end
