@@ -852,6 +852,14 @@ using FillArrays
     G = rand(length(radii))
     outs = Outputs.(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
 
+    @testset "reshape" begin
+        sections_rs = reshape(sections, 1, :, 1)
+        @test sections_rs[1, 2, 1].r ≈ sections[2].r
+        @test sections_rs[1, 3, 1].chord ≈ sections[3].chord
+        @test sections_rs[1, 5, 1].theta ≈ sections[5].theta
+        @test sections_rs[1, 9, 1].af == sections[9].af
+    end
+
     @testset "OffsetArrays" begin
         sections_oa = OffsetArray(sections, 0:length(sections)-1)
         @test sections[1].r ≈ sections_oa[0].r
