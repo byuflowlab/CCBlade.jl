@@ -817,3 +817,72 @@ end
 
 
 end
+
+using OffsetArrays
+using FillArrays
+
+@testset "esoteric arrays" begin
+    radii = rand(10)
+    chord = rand(length(radii))
+    theta = rand(length(radii))
+    sections = Section.(radii, chord, theta, alpha->(1.0, 1.0))
+
+    Vx = rand(length(radii))
+    Vy = rand(length(radii))
+    rho = rand(length(radii))
+    pitch = rand(length(radii))
+    mu = rand(length(radii))
+    asound = rand(length(radii))
+    ops = OperatingPoint.(Vx, Vy, rho, pitch, mu, asound)
+
+    Np = rand(length(radii))
+    Tp = rand(length(radii))
+    a = rand(length(radii))
+    ap = rand(length(radii))
+    u = rand(length(radii))
+    v = rand(length(radii))
+    phi = rand(length(radii))
+    alpha = rand(length(radii))
+    W = rand(length(radii))
+    cl = rand(length(radii))
+    cd = rand(length(radii))
+    cn = rand(length(radii))
+    ct = rand(length(radii))
+    F = rand(length(radii))
+    G = rand(length(radii))
+    outs = Outputs.(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+
+    @testset "reshape" begin
+        sections_rs = reshape(sections, 1, :, 1)
+        @test sections_rs[1, 2, 1].r ≈ sections[2].r
+        @test sections_rs[1, 3, 1].chord ≈ sections[3].chord
+        @test sections_rs[1, 5, 1].theta ≈ sections[5].theta
+        @test sections_rs[1, 9, 1].af == sections[9].af
+    end
+
+    @testset "OffsetArrays" begin
+        sections_oa = OffsetArray(sections, 0:length(sections)-1)
+        @test sections[1].r ≈ sections_oa[0].r
+
+        ops_oa = OffsetArray(ops, 0:length(ops)-1)
+        @test ops[1].Vx ≈ ops_oa[0].Vx
+
+        outs_oa = OffsetArray(outs, 0:length(outs)-1)
+        @test outs[1].Np ≈ outs_oa[0].Np
+    end
+
+    @testset "FillArrays" begin
+        sections_fill = Fill(sections[1], 3)
+        @test length(sections_fill) == 3
+        @test sections_fill[3].r ≈ sections[1].r
+
+        ops_fill = Fill(ops[1], 3)
+        @test length(ops_fill) == 3
+        @test ops_fill[3].Vx ≈ ops[1].Vx
+
+        outs_fill = Fill(outs[1], 3)
+        @test length(outs_fill) == 3
+        @test outs_fill[3].Np ≈ outs[1].Np
+    end
+
+end
