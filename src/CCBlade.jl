@@ -15,6 +15,7 @@ module CCBlade
 
 import FLOWMath
 using ImplicitAD
+using StructArrays: StructArray
 
 export Rotor, Section, OperatingPoint, Outputs
 export simple_op, windturbine_op
@@ -85,15 +86,9 @@ function Section(r, chord, theta, af)
     return Section(r, chord, theta, af)
 end
 
-
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:Section}, sym::Symbol)
-    if sym in (:ref, :size)
-        return getfield(obj, sym)
-    else
-        return getfield.(obj, sym)
-    end
-end # This is not always type stable b/c we don't know if the return type will be float or af function.
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:Section}
+    return StructArray{ElType}(undef, size(bc))
+end
 
 """
     OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
@@ -127,15 +122,9 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:OperatingPoint}, sym::Symbol)
-    if sym in (:ref, :size)
-        return getfield(obj, sym)
-    else
-        return getfield.(obj, sym)
-    end
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:OperatingPoint}
+    return StructArray{ElType}(undef, size(bc))
 end
-
 
 """
     Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
@@ -183,13 +172,8 @@ Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G) = Outputs(prom
 # convenience constructor to initialize
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::Vector{<:Outputs}, sym::Symbol)
-    if sym in (:ref, :size)
-        return getfield(obj, sym)
-    else
-        return getfield.(obj, sym)
-    end
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:Outputs}
+    return StructArray{ElType}(undef, size(bc))
 end
 
 # -------------------------------
@@ -534,7 +518,6 @@ function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_e
     @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return Outputs()
 end
-
 
 
 # ------------ inflow ------------------

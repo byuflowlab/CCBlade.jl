@@ -818,6 +818,120 @@ end
 
 end
 
+using StructArrays: StructArray
+
+@testset "broadcasting" begin
+    radii = rand(10)
+    chord = rand(length(radii), 2)
+    theta = rand(length(radii), 1, 3)
+    af = alpha->(1.0, 1.0)
+    sections = Section.(radii, chord, theta, af)
+    @test typeof(sections) <: StructArray
+    @test size(sections) == (10, 2, 3)
+    @test all(sections.r .≈ radii)
+    @test all(sections.chord .≈ chord)
+    @test all(sections.theta .≈ theta)
+    @test all(sections.af .=== af)
+
+    Vx = rand(length(radii))
+    Vy = rand(length(radii), 2)
+    rho = rand(length(radii), 1, 3)
+    pitch = rand(length(radii), 2, 3)
+    mu = rand(1, 2, 3)
+    asound = rand(length(radii), 2, 1)
+    ops = OperatingPoint.(Vx, Vy, rho, pitch, mu, asound)
+    @test typeof(ops) <: StructArray
+    @test all(ops.Vx .≈ Vx)
+    @test all(ops.Vy .≈ Vy)
+    @test all(ops.rho .≈ rho)
+    @test all(ops.pitch .≈ pitch)
+    @test all(ops.mu .≈ mu)
+    @test all(ops.asound .≈ asound)
+
+    Np = rand(length(radii), 2)
+    Tp = rand(length(radii), 1, 3)
+    a = rand(length(radii), 2, 3)
+    ap = rand(1, 2, 3)
+    u = rand(length(radii), 2, 1)
+    v = rand(length(radii), 1, 3)
+    phi = rand(length(radii), 2, 3)
+    alpha = rand(length(radii), 1, 1)
+    W = rand(length(radii), 2, 1)
+    cl = rand(length(radii), 1, 3)
+    cd = rand(length(radii), 2, 3)
+    cn = rand(length(radii), 1, 1)
+    ct = rand(length(radii), 2, 3)
+    F = rand(length(radii), 1, 1)
+    G = rand(length(radii), 1, 3)
+    outs = Outputs.(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    @test typeof(outs) <: StructArray
+    @test all(outs.Np .≈ Np)
+    @test all(outs.Tp .≈ Tp)
+    @test all(outs.a .≈ a)
+    @test all(outs.ap .≈ ap)
+    @test all(outs.u .≈ u)
+    @test all(outs.v .≈ v)
+    @test all(outs.phi .≈ phi)
+    @test all(outs.alpha .≈ alpha)
+    @test all(outs.W .≈ W)
+    @test all(outs.cl .≈ cl)
+    @test all(outs.cd .≈ cd)
+    @test all(outs.cn .≈ cn)
+    @test all(outs.ct .≈ ct)
+    @test all(outs.F .≈ F)
+    @test all(outs.G .≈ G)
+
+    # Does solve work with broadcasting?
+    D = 1.6
+    R = D/2.0
+    Rhub = 0.01
+    Rtip = D/2
+    r = range(R/10, stop=9/10*R, length=11)
+    chord = 0.1*ones(length(r))
+    proppitch = 1.0  # pitch distance in meters.
+    theta = atan.(proppitch./(2*pi*r))
+
+    function affunc(alpha, Re, M)
+
+        cl = 6.2*alpha
+        cd = 0.008 - 0.003*cl + 0.01*cl*cl
+
+        return cl, cd
+    end
+
+    n = length(r)
+    airfoils = fill(affunc, n)
+
+    B = 2  # number of blades
+    turbine = false
+    pitch = 0.0
+    precone = 0.0
+
+    rho = 1.225
+    Vinf = 30.0
+    RPM = 2100
+    Omega = RPM * pi/30
+
+    # Do we get a `StructArray`s when using `simple_op`, `windturbine_op`, and `solve`?
+    rotor = Rotor(Rhub, Rtip, B; turbine=turbine, precone=precone)
+    sections = Section.(r, chord, theta, Ref(affunc))
+    ops = simple_op.(Vinf, Omega, r, rho; pitch=pitch)
+    @test typeof(ops) <: StructArray
+
+    outputs = solve.(Ref(rotor), sections, ops)
+    @test typeof(outputs) <: StructArray
+
+    yaw = 0.0*pi/180
+    tilt = 5.0*pi/180
+    hubHt = 90.0
+    shearExp = 0.2
+    azangles = pi/180*[0.0, 90.0, 180.0, 270.0]
+
+    ops_wt = windturbine_op.(Vinf, Omega, pitch, r, precone, yaw, tilt, azangles', hubHt, shearExp, rho)
+    @test typeof(ops_wt) <: StructArray
+    @test size(ops_wt) == (length(r), length(azangles))
+end
+
 using OffsetArrays
 using FillArrays
 
