@@ -815,6 +815,75 @@ end
 
 @test checkstability()
 
+function get_section_r()
+    radii = rand(10)
+    chord = rand(length(radii), 2)
+    theta = rand(length(radii), 1, 3)
+    af = alpha->(1.0, 1.0)
+    sections = Section.(radii, chord, theta, af)
+    return sections.r
+end
+function test_section_type_stability()
+    try
+        @inferred Array{Float64, 3} get_section_r()
+        return true
+    catch err
+        println(err)
+        return false
+    end
+end
+@test test_section_type_stability()
+
+function get_operating_point_rho()
+    Vx = rand(10)
+    Vy = rand(10, 2)
+    rho = rand(10, 1, 3)
+    pitch = rand(10, 2, 3)
+    mu = rand(1, 2, 3)
+    asound = rand(10, 2, 1)
+    ops = OperatingPoint.(Vx, Vy, rho, pitch, mu, asound)
+    return ops.rho
+end
+function test_operating_point_type_stability()
+    try
+        @inferred Array{Float64, 3} get_operating_point_rho()
+        return true
+    catch err
+        println(err)
+        return false
+    end
+end
+@test test_operating_point_type_stability()
+
+function get_outputs_cl()
+    Np = rand(10, 2)
+    Tp = rand(10, 1, 3)
+    a = rand(10, 2, 3)
+    ap = rand(1, 2, 3)
+    u = rand(10, 2, 1)
+    v = rand(10, 1, 3)
+    phi = rand(10, 2, 3)
+    alpha = rand(10, 1, 1)
+    W = rand(10, 2, 1)
+    cl = rand(10, 1, 3)
+    cd = rand(10, 2, 3)
+    cn = rand(10, 1, 1)
+    ct = rand(10, 2, 3)
+    F = rand(10, 1, 1)
+    G = rand(10, 1, 3)
+    outs = Outputs.(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
+    return outs.cl
+end
+function test_outputs_type_stability()
+    try
+        @inferred Array{Float64, 3} get_outputs_cl()
+        return true
+    catch err
+        println(err)
+        return false
+    end
+end
+@test test_outputs_type_stability()
 
 end
 
