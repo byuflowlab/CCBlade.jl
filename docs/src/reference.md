@@ -80,7 +80,31 @@ Most of these parameters are defined in the figure below.  The variables Np and 
 
 ![inflow2](inflow2.png)
 
-When using broadcasting to retrieve multiple outputs as once (as would be commonly done for multiple sections along a blade) the return type is an array of structs.  However, the `dot` notation is overloaded so that the outputs can be accessed as if it was a struct of arrays (e.g., `outputs.Np`).  This was shown in the introductory [tutorial](tutorial.md).
+When using broadcasting to retrieve multiple outputs at once (as would be commonly done for multiple sections along a blade) the return type is a `StructArray` from [the StructArrays.jl package](https://github.com/JuliaArrays/StructArrays.jl). A `StructArray` acts like a normal `Array` when indexed with integers, but can also be indexed with the output names like `Np` and `Tp`.
+To show this, we'll create an example `Output` array of length 4 with random data:
+
+```@example structarray
+using CCBlade
+
+# Create an array of `N` Outputs
+N = 4
+outs = Outputs.(rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N), rand(N))
+```
+
+Now we can retrieve all of the inputs for e.g. the third entry by indexing with an integer:
+
+```@example structarray
+outs[3]
+```
+
+But we can also get all of the e.g. `Np` outputs using `outs.Np`:
+
+```@example structarray
+outs.Np
+```
+
+This was shown in the introductory [tutorial](tutorial.md).
+The same is true for the [`Section`](@ref) and [`OperatingPoint`](@ref) structs.
 
 
 One subtle notes regarding the way the tip-loss factor works.  The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  This is the most common way to implement a BEM, but it means that the raw velocities may be misleading as they do not contain any hub/tip loss corrections.  To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.  In other words:
