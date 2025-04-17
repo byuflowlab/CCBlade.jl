@@ -86,8 +86,8 @@ function Section(r, chord, theta, af)
     return Section(r, chord, theta, af)
 end
 
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:Section}
-    return StructArray{ElType}(undef, size(bc))
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{Section{TF,TAF}}) where {N,TF,TAF}
+    return StructArray{Section{TF,TAF}}(undef, size(bc))
 end
 
 """
@@ -122,8 +122,8 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:OperatingPoint}
-    return StructArray{ElType}(undef, size(bc))
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{OperatingPoint{TF}}) where {N,TF}
+    return StructArray{OperatingPoint{TF}}(undef, size(bc))
 end
 
 """
@@ -172,8 +172,8 @@ Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G) = Outputs(prom
 # convenience constructor to initialize
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{ElType}) where {N,ElType<:Outputs}
-    return StructArray{ElType}(undef, size(bc))
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{Outputs{TF}}) where {N,TF}
+    return StructArray{Outputs{TF}}(undef, size(bc))
 end
 
 # -------------------------------
