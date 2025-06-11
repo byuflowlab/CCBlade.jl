@@ -396,7 +396,7 @@ function solve(rotor, section, op)
 
         ### Geometric approach (ignoring induced velocity) #TODO: Figure out induced velocity -> I think I should be able to analyticaly solve this
         phi = atan(op.Vx, op.Vy) 
-        alpha = phi - (section.theta + op.pitch)
+        alpha = phi #- (section.theta + op.pitch) #Twist and pitch don't affect the angle of attack of a cylinder. 
         a = 0.0 #Induction factors
         ap = 0.0
         u = 0.0 #induced velocities
