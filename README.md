@@ -1,7 +1,7 @@
 # CCBlade.jl
 
 [![](https://img.shields.io/badge/docs-stable-blue.svg)](https://flow.byu.edu/CCBlade.jl/stable)
-[![Build Status](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build Status](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml?query=branch%3Amaster)
 
 
 **Summary**: A blade element momentum method for propellers and turbines.
