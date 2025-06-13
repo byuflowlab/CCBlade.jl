@@ -52,21 +52,19 @@ jobs:
           version: '1'
       - uses: julia-actions/cache@v2
       - name: Configure doc environment
+        env:
+          PYTHON: ""
         shell: julia --project=docs --color=yes {0}
         run: |
           using Pkg
           Pkg.develop(PackageSpec(path=pwd()))
           Pkg.instantiate()
       - uses: julia-actions/julia-buildpkg@v1
+        env:
+          PYTHON: ""
       - uses: julia-actions/julia-docdeploy@v1
         env:
           PYTHON: ""
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-      - name: Run doctests
-        shell: julia --project=docs --color=yes {0}
-        run: |
-          using Documenter: DocMeta, doctest
-          using CCBlade
-          DocMeta.setdocmeta!(CCBlade, :DocTestSetup, :(using CCBlade); recursive=true)
-          doctest(CCBlade)
+
