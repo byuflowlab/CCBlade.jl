@@ -4,7 +4,6 @@
 [![Build Status](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 
-
 **Summary**: A blade element momentum method for propellers and turbines.
 
 **Author**: Andrew Ning
