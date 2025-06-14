@@ -7,12 +7,15 @@ This section shows examples of how to perform various tasks in CCBlade.  It assu
 In this example we will construct an airfoil file.  In this case we are interested in the NACA 4412.  The XFOIL simulation data for this case is available [here](http://airfoiltools.com/polar/details?polar=xf-naca4412-il-1000000) for (``Re = 10^6``).
 
 ```@setup af
-using PyPlot  # do this first to avoid displaying matplotlib installation, etc.
+using CCBlade
+```
+
+```julia
+using CCBlade
+using PyPlot
 ```
 
 ```@example af
-using CCBlade
-using PyPlot
 
 xfoildata = [
  -14.000  -1.0990   0.02637   0.02282  -0.0871   0.9992   0.0166
@@ -149,20 +152,20 @@ xfoildata = [
 alpha_0 = xfoildata[:, 1] * pi/180
 cl_0 = xfoildata[:, 2]
 cd_0 = xfoildata[:, 3]
+```
 
+```julia
 figure()
 plot(alpha_0, cl_0)
 xlabel(L"\alpha")
 ylabel(L"c_l")
-savefig("cl1.svg") # hide
+savefig("cl1.svg")
 
 figure()
 plot(alpha_0, cd_0)
 xlabel(L"\alpha")
 ylabel(L"c_d")
-savefig("cd1.svg") # hide
-
-nothing # hide
+savefig("cd1.svg")
 ```
 
 ![](cl1.svg)
@@ -175,18 +178,20 @@ We now need to extrapolate the data to higher angles of attack.  Even though the
 # ---- extrapolate ------
 cr75 = 0.128
 alpha_ext, cl_ext, cd_ext = viterna(alpha_0, cl_0, cd_0, cr75)
+```
 
+```julia
 figure()
 plot(alpha_ext, cl_ext)
 xlabel(L"\alpha")
 ylabel(L"c_l")
-savefig("cl2.svg") # hide
+savefig("cl2.svg")
 
 figure()
 plot(alpha_ext, cd_ext)
 xlabel(L"\alpha")
 ylabel(L"c_d")
-savefig("cd2.svg") # hide
+savefig("cd2.svg")
 ```
 
 ![](cl2.svg)
@@ -194,7 +199,7 @@ savefig("cd2.svg") # hide
 
 Now we need to add various corrections.  These can either be done beforehand, or they can be evaluated on the fly.  In general one needs corrections for rotation (three-dimensional stall delay), Reynolds number, and Mach number.  The most accurate approach is to precompute the variation in Reynolds and Mach number and to evaluate rotation corrections on the fly.  However, all three can be done in any combination of precomputing or on-the-fly.  For the example we will start with the most accurate case (precompute Re/Mach and on-the-fly rotation), but will show the other variations as well.
 
-To address Reynolds number and Mach number variations beforehand we create 2D or 3D splines.  CCBlade provides helper functions for those scenarios.  The process is the same for Reynolds number and Mach number, and because the Mach number variation is not significant for this small propeller we will ignore it and focus just on Reynolds number.  For Reynolds number variation we would repeat the above process at multiple Reynolds numbers.  In this example we will use three different Reynolds numbers.  
+To address Reynolds number and Mach number variations beforehand we create 2D or 3D splines.  CCBlade provides helper functions for those scenarios.  The process is the same for Reynolds number and Mach number, and because the Mach number variation is not significant for this small propeller we will ignore it and focus just on Reynolds number.  For Reynolds number variation we would repeat the above process at multiple Reynolds numbers.  In this example we will use three different Reynolds numbers.
 
 ```@example af
 # data previously computed for Re = 1e6, renaming for convenience
@@ -444,7 +449,7 @@ alpha1, cl1, cd1 = viterna(alpha, cl, cd, cr75)
 nothing #hide
 ```
 
-All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.  To do the interpolation we are going to use the FLOWMath package (which is already a dependency of CCBlade so should already be installed). 
+All the data must be the same angles of attack.  They are not in this case, so we need to interpolate the data onto a common set.  Next, we combine the cl and cd data into one matrix.  To do the interpolation we are going to use the FLOWMath package (which is already a dependency of CCBlade so should already be installed).
 
 ```@example af
 import FLOWMath
@@ -462,16 +467,16 @@ cd = [cd1 cd2 cd3]
 nothing # hide
 ```
 
-We can load that data directly into an airfoil object for usage in CCBlade.  The airfoil object creates a smooth spline based on the data (an Akima spline, or recursive Akima splines in higher dimensions). 
+We can load that data directly into an airfoil object for usage in CCBlade.  The airfoil object creates a smooth spline based on the data (an Akima spline, or recursive Akima splines in higher dimensions).
 
 ```@example af
 af = AlphaReAF(alpha, Re, cl, cd, "NACA4412 (no rotation)")
 nothing #hide
 ```
 
-More commonly we first save it to a file so we don't have to repeat these calculations when we want to reuse this airfoil in future simulations.  We added the subscript `norot` in the file name just to remind ourselves that this data does not have rotational corrections.  
+More commonly we first save it to a file so we don't have to repeat these calculations when we want to reuse this airfoil in future simulations.  We added the subscript `norot` in the file name just to remind ourselves that this data does not have rotational corrections.
 
-One file corresponds to one Reynolds number and one Mach number.  The file format first contains one header line.  That is just a convenience to provide information about the airfoil data.  The next line is the Reynolds number, and the next line is the Mach number.  The rest of the file contains data in columns split by whitespace (not commas) in the following order: alpha, cl, cd.  You can add additional columns of data (e.g., cm), but they will be ignored.  
+One file corresponds to one Reynolds number and one Mach number.  The file format first contains one header line.  That is just a convenience to provide information about the airfoil data.  The next line is the Reynolds number, and the next line is the Mach number.  The rest of the file contains data in columns split by whitespace (not commas) in the following order: alpha, cl, cd.  You can add additional columns of data (e.g., cm), but they will be ignored.
 For example, a simple file (a cylinder section) would look like:
 ```
 Cylinder section with a Cd of 0.50.  Re = 1 million.
@@ -489,7 +494,7 @@ write_af(filenames, af)
 ```
 
 To reload the data from file later we can use:
-```
+```julia
 af2 = AlphaReAF(filenames, radians=true)  # angle of attack is given in radians in the file
 ```
 
@@ -553,7 +558,7 @@ nothing # hide
 
 A similar procedure can be followed for any of the other correction methods.
 
-The last variation to consider is precomputing rotational corrections instead of  computing them on-the-fly.  While it might be more accurate to do them on-the-fly, the main advantage to precomputing everything is that we can inspect the airfoil data and make sure everything looks reasonable, and it is a bit more efficient.  This is the approach we use most frequently in optimization applications to ensure smooth input data. 
+The last variation to consider is precomputing rotational corrections instead of  computing them on-the-fly.  While it might be more accurate to do them on-the-fly, the main advantage to precomputing everything is that we can inspect the airfoil data and make sure everything looks reasonable, and it is a bit more efficient.  This is the approach we use most frequently in optimization applications to ensure smooth input data.
 
 We will use the same airfoil (NACA 4412), but because we  reuse this data for the validation in the introductory tutorial, we will pick out a Reynolds number closer to that operating point.  At 70% radius the Reynolds number is about 60,000.  We will use this [data](http://airfoiltools.com/polar/details?polar=xf-naca4412-il-50000-n5) at a Reynolds number of 50,000.
 
@@ -679,7 +684,7 @@ alpha_ext, cl_ext, cd_ext = viterna(alpha_0, cl_0, cd_0, cr75)
 nothing # hide
 ```
 
-Now we can apply the rotational corrections.  Most rotational correction methods require some nondimensional geometric and operational data (usually r/R, c/R, and tip-speed ratio).  Because we are doing this beforehand we don't know where on the blade we will evaluate, so we just have to pick some representative location, and some representative tip-speed ratio.  For location, 75% radius is often used, and for tip-speed ratio usually these fall within a fairly narrow range so it won't make a big difference as long we choose something reasonable.  In this example we will use a tsr of 6.  Propellers usually use advance ratio rather than tip-speed ratio, but these two quantities are related by: 
+Now we can apply the rotational corrections.  Most rotational correction methods require some nondimensional geometric and operational data (usually r/R, c/R, and tip-speed ratio).  Because we are doing this beforehand we don't know where on the blade we will evaluate, so we just have to pick some representative location, and some representative tip-speed ratio.  For location, 75% radius is often used, and for tip-speed ratio usually these fall within a fairly narrow range so it won't make a big difference as long we choose something reasonable.  In this example we will use a tsr of 6.  Propellers usually use advance ratio rather than tip-speed ratio, but these two quantities are related by:
 ``\lambda = \pi / J``
 (so a tip-speed ratio of 6 would be an advance ratio of about 0.5)
 
@@ -699,8 +704,7 @@ end
 
 We will plot these just for visualization.
 
-```@example af
-using PyPlot
+```julia
 
 figure()
 plot(alpha_0, cl_0, label="original")
@@ -709,7 +713,7 @@ plot(alpha_rot, cl_rot, label="rotation")
 xlabel(L"\alpha")
 ylabel(L"c_l")
 legend()
-savefig("clcomp.svg") # hide
+savefig("clcomp.svg")
 
 figure()
 plot(alpha_0, cd_0, label="original")
@@ -718,7 +722,7 @@ plot(alpha_rot, cd_rot, label="rotation")
 xlabel(L"\alpha")
 ylabel(L"c_d")
 legend()
-savefig("cdcomp.svg") # hide
+savefig("cdcomp.svg")
 ```
 
 ![](clcomp.svg)
@@ -748,7 +752,11 @@ Nothing changes in the theory to permit operation as a propeller or as a turbine
 
 As an example we will simulate the NREL 5 MW wind turbine.  Wind turbines generally have more complex inflow and airfoil schedules as compared to propellers, so this will also serve as a more advanced case compared to the introductory tutorial.  First, we load the packages.
 
-```@example wt
+```@setup wt
+using CCBlade
+```
+
+```julia
 using CCBlade
 using PyPlot
 ```
@@ -800,7 +808,7 @@ aftypes[8] = AlphaAF("data/NACA64_A17.dat", radians=false)
 # indices correspond to which airfoil is used at which station
 af_idx = [1, 1, 2, 3, 4, 4, 5, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8]
 
-# create airfoil array 
+# create airfoil array
 airfoils = aftypes[af_idx]
 
 # define sections
@@ -842,7 +850,7 @@ nothing # hide
 and plot the distributed loads:
 
 
-```@example wt
+```julia
 # plot distributed loads
 figure()
 plot(r/Rtip, out.Np/1e3)
@@ -850,7 +858,7 @@ plot(r/Rtip, out.Tp/1e3)
 xlabel("r/Rtip")
 ylabel("distributed loads (kN/m)")
 legend(["flapwise", "lead-lag"])
-savefig("loads-turbine.svg"); nothing # hide
+savefig("loads-turbine.svg")
 ```
 
 ![](loads-turbine.svg)
@@ -861,7 +869,7 @@ Next, we integrate the loads to get thrust and torque.
 T, Q = thrusttorque(rotor, sections, out)
 ```
 
-This would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you would compute multiple inflow conditions with different azimuth angles and then average the resulting forces.  This can be conveniently done with broadcasting.  
+This would give the thrust and torque assuming the inflow conditions were constant with azimuth (overly optimistic with this case at azimuth=0).  If one wanted to compute thrust and torque using azimuthal averaging you would compute multiple inflow conditions with different azimuth angles and then average the resulting forces.  This can be conveniently done with broadcasting.
 
 To do this we are broadcast across `r` and `az_angles` as a matrix of conditions. We will transpose `az_angles` into a row vector to make this happen.  If uncomfortable with broadcasting, all of these could all be done easily with for loops.  Notice that we transpose azangles so that the there is an input column vector for `r` and input row vector for `azangles` and the output is then a matrix corresponding to all these combinations.  The `thrusttorque` function is overloaded with a version that accepts a matrix of outputs where outputs[i, j] corresponds to r[i], azimuth[j] then performs an integration using averaging across the azimuthal conditions (or any other parameter).
 
@@ -893,13 +901,15 @@ for i = 1:ntsr
 
     cpvec[i], ctvec[i], _ = nondim(T, Q, Vinf, Omega, rho, rotor, "windturbine")
 end
+```
 
+```julia
 figure()
 plot(tsrvec, cpvec)
 plot(tsrvec, ctvec)
 xlabel("tip speed ratio")
 legend([L"C_P", L"C_T"])
-savefig("cpct-turbine.svg"); nothing # hide
+savefig("cpct-turbine.svg")
 ```
 
 ![](cpct-turbine.svg)
@@ -907,10 +917,18 @@ savefig("cpct-turbine.svg"); nothing # hide
 
 ## Helicopter Operation
 
-Let's simulate the rotorcraft geometry from this [NASA report](https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf).  The setup is standard to begin with.  
+Let's simulate the rotorcraft geometry from this [NASA report](https://rotorcraft.arc.nasa.gov/Publications/files/RamasamyGB_ERF10_836.pdf).  The setup is standard to begin with.
+
+```@setup heli
+using CCBlade
+```
+
+```julia
+using CCBlade
+using PyPlot
+```
 
 ```@example heli
-using CCBlade
 
 chord = 0.060
 theta = 0.0
@@ -959,9 +977,7 @@ nothing # hide
 
 Plotting the results against the provided experimental data.
 
-```@example heli
-using PyPlot
-
+```julia
 
 figure()
 plot(CT/sigma, CQ/sigma, color="#348ABD")
@@ -1042,7 +1058,7 @@ plot(data[:, 1], data[:, 2], "o", color="#A60628")
 text(0.12, 0.67, "BEM", color="#348ABD")
 text(0.12, 0.5, "experimental", color="#A60628")
 gca().yaxis.set_label_coords(0,1.05)
-savefig("rotorcraft2.svg"); nothing # hide
+savefig("rotorcraft2.svg");
 ```
 
 ![](rotorcraft1.svg)
@@ -1079,7 +1095,7 @@ function affunc(alpha, Re, M)
     cd = 0.008 - 0.003*cl + 0.01*cl*cl
 
     return cl, cd
-end 
+end
 
 n = length(r)
 airfoils = fill(affunc, n)
@@ -1092,7 +1108,7 @@ precone = 0.0
 rho = 1.225
 Vinf = 30.0
 RPM = 2100
-Omega = RPM * pi/30 
+Omega = RPM * pi/30
 
 nothing # hide
 ```
@@ -1103,7 +1119,7 @@ Both `ForwardDiff` and `ReverseDiff` expect a function with a vector input and a
 
 # parameters that passthrough: af, B, turbine
 function ccbladewrapper(x)
-    
+
     # unpack
     nall = length(x)
     nvec = nall - 7
@@ -1180,7 +1196,7 @@ dTdchord = J[1, n+1:2*n]
 
 ## Computing Derivatives More Efficiently
 
-The above method is simple, but not the most efficient.  First, most of the time we want to compute the derivatives many times (e.g., during an optimization) and so we should preallocate the Jacobian and populate it in place.  Second, the outputs of the wraqpper function are being reallocated many times so we should change that to be done in-place as well.  Third, if sparsity exists we should take advantage of it.  One case where sparsity occurs is when we are evaluting multiple inflow conditions (e.g., multiple flight states or multiple points on a power curve).  Each state/point is independent of the others and so there exists significant sparsity (see [theory](theory.md) for more details). 
+The above method is simple, but not the most efficient.  First, most of the time we want to compute the derivatives many times (e.g., during an optimization) and so we should preallocate the Jacobian and populate it in place.  Second, the outputs of the wraqpper function are being reallocated many times so we should change that to be done in-place as well.  Third, if sparsity exists we should take advantage of it.  One case where sparsity occurs is when we are evaluting multiple inflow conditions (e.g., multiple flight states or multiple points on a power curve).  Each state/point is independent of the others and so there exists significant sparsity (see [theory](theory.md) for more details).
 
 We'll use the same geometry/setup as the previous example, but with a few changes: 1) we used a setup function so that variables are not in the global scope, 2) we allow for more than one inflow conditions (nV) and so instead of 2 outputs there are 2*nV outputs, 3) we modify the outputs in place (hence the use of an exclamation mark in the function name `ccbladewrapper!` per Julia convention).
 
@@ -1215,7 +1231,7 @@ function setup(nV)
         cd = 0.008 - 0.003*cl + 0.01*cl*cl
 
         return cl, cd
-    end 
+    end
 
     airfoils = fill(affunc, n)
 
@@ -1225,7 +1241,7 @@ function setup(nV)
     if nV == 1
         Vinf = [30.0]
     else
-        Vinf = range(29.0, 31.0, length=nV) 
+        Vinf = range(29.0, 31.0, length=nV)
     end
 
     Omega = RPM * pi/30 * ones(nV)
@@ -1233,7 +1249,7 @@ function setup(nV)
 
     x = [r; chord; theta; Rhub; Rtip; pitch; precone; Vinf; Omega; rho]
     y = zeros(2*nV)
-    
+
     # parameters that passthrough: airfoils, B, turbine, n, nV
     function ccbladewrapper!(y, x)
 

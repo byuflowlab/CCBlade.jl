@@ -2,11 +2,10 @@
 
 This starter tutorial walks through the mechanics of running a analysis.  This is designing as a starting point and does not explain every option or consideration.  More specific and advanced usage are described in the [how to guide](howto.md).
 
-We will simulate the APC thin electric 10 x 5 propeller.  The geometry, and wind tunnel data for this propeller is available from [UIUC](https://m-selig.ae.illinois.edu/props/volume-1/propDB-volume-1.html#APC). Let's load CCBlade and a plotting package (I chose to use PyPlot in this example).
+We will simulate the APC thin electric 10 x 5 propeller.  The geometry, and wind tunnel data for this propeller is available from [UIUC](https://m-selig.ae.illinois.edu/props/volume-1/propDB-volume-1.html#APC). Let's load CCBlade and a plotting package (I use PyPlot in these examples).
 
 ```@setup prop
 using CCBlade
-using PyPlot
 ```
 ```julia
 using CCBlade
@@ -107,29 +106,28 @@ The full list of outputs and their positive directions are shown in [Output Stru
 
 Let's now plot the distributed loads.
 
-```@example prop
+```julia
 figure()
 plot(r/Rtip, out.Np)
 plot(r/Rtip, out.Tp)
 xlabel("r/Rtip")
 ylabel("distributed loads (N/m)")
 legend(["flapwise", "lead-lag"])
-savefig("loads-prop.svg"); nothing # hide
 ```
+<!-- # savefig("loads-prop.svg") -->
 
 ![](loads-prop.svg)
 
 
 We will also look at the induced velocities.  For propellers these velocities are useful to assess, for example, prop-on-wing interactions.
 
-```@example prop
+```julia
 figure()
 plot(r/Rtip, out.u/Vinf)
 plot(r/Rtip, out.v/Vinf)
 xlabel("r/Rtip")
 ylabel("(normalized) induced velocity at rotor disk")
 legend(["axial velocity", "swirl velocity"])
-savefig("velocity-prop.svg"); nothing # hide
 ```
 
 ![](velocity-prop.svg)
@@ -206,8 +204,9 @@ Jexp = exp[:, 1]
 CTexp = exp[:, 2]
 CPexp = exp[:, 3]
 etaexp = exp[:, 4]
+```
 
-
+```julia
 figure()
 plot(J, CT)
 plot(J, CQ*2*pi)
@@ -215,7 +214,6 @@ plot(Jexp, CTexp, "ko")
 plot(Jexp, CPexp, "ko")
 xlabel(L"J")
 legend([L"C_T", L"C_P", "experimental"])
-savefig("ctcp-prop.svg") # hide
 
 figure()
 plot(J, eff)
@@ -223,7 +221,6 @@ plot(Jexp, etaexp, "ko")
 xlabel(L"J")
 ylabel(L"\eta")
 legend(["CCBlade", "experimental"])
-savefig("eta-prop.svg"); nothing # hide
 ```
 
 ![](ctcp-prop.svg)
