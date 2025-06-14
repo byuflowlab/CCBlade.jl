@@ -9,7 +9,7 @@ makedocs(
     sitename="CCBlade.jl",
     format=Documenter.HTML(;
         canonical="https://flow.byu.edu/CCBlade.jl",
-        edit_link="main",
+        edit_link="master",
         assets=String[],
     ),
     pages = [
@@ -24,5 +24,5 @@ makedocs(
 
 deploydocs(;
     repo="github.com/byuflowlab/CCBlade.jl",
-    devbranch="main",
+    devbranch="master",
 )
