@@ -24,6 +24,5 @@ makedocs(
 
 deploydocs(;
     repo="github.com/byuflowlab/CCBlade.jl",
-    versions = ["stable" => "master"],
-    # devbranch="master",
+    devbranch="master",
 )
