@@ -15,6 +15,7 @@ module CCBlade
 
 import FLOWMath
 using ImplicitAD
+using StructArrays: StructArray
 
 export Rotor, Section, OperatingPoint, Outputs
 export simple_op, windturbine_op
@@ -26,10 +27,10 @@ include("airfoils.jl")  # all the code related to airfoil data
 # --------- structs -------------
 
 """
-    Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, 
+    Rotor(Rhub, Rtip, B; precone=0.0, turbine=false,
         mach=nothing, re=nothing, rotation=nothing, tip=PrandtlTipHub())
 
-Parameters defining the rotor (apply to all sections).  
+Parameters defining the rotor (apply to all sections).
 
 **Arguments**
 - `Rhub::Float64`: hub radius (along blade length)
@@ -42,8 +43,8 @@ Parameters defining the rotor (apply to all sections).
 - `rotation::RotationCorrection`: correction method for blade rotation
 - `tip::TipCorrection`: correction method for hub/tip loss
 """
-struct Rotor{TF, TI, TB, 
-        T1 <: Union{Nothing, MachCorrection}, T2 <: Union{Nothing, ReCorrection}, 
+struct Rotor{TF, TI, TB,
+        T1 <: Union{Nothing, MachCorrection}, T2 <: Union{Nothing, ReCorrection},
         T3 <: Union{Nothing, RotationCorrection}, T4 <: Union{Nothing, TipCorrection}}
     Rhub::TF
     Rtip::TF
@@ -65,7 +66,7 @@ Rotor(Rhub, Rtip, B; precone=0.0, turbine=false, mach=nothing, re=nothing, rotat
     Section(r, chord, theta, af)
 
 Define sectional properties for one station along rotor
-    
+
 **Arguments**
 - `r::Float64`: radial location along blade
 - `chord::Float64`: corresponding local chord length
@@ -77,7 +78,7 @@ struct Section{TF, TAF}
     chord::TF
     theta::TF
     af::TAF
-end  
+end
 
 # promote to same type, e.g., duals
 function Section(r, chord, theta, af)
@@ -85,17 +86,15 @@ function Section(r, chord, theta, af)
     return Section(r, chord, theta, af)
 end
 
-
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:Section}, sym::Symbol)
-    return getfield.(obj, sym)
-end # This is not always type stable b/c we don't know if the return type will be float or af function.
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{Section{TF,TAF}}) where {N,TF,TAF}
+    return StructArray{Section{TF,TAF}}(undef, size(bc))
+end
 
 """
     OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
 
-Operation point for a rotor.  
-The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.  
+Operation point for a rotor.
+The x direction is the axial direction, and y direction is the tangential direction in the rotor plane.
 See Documentation for more detail on coordinate systems.
 `Vx` and `Vy` vary radially at same locations as `r` in the rotor definition.
 
@@ -111,7 +110,7 @@ struct OperatingPoint{TF}
     Vx::TF
     Vy::TF
     rho::TF
-    pitch::TF  
+    pitch::TF
     mu::TF
     asound::TF
 end
@@ -123,11 +122,9 @@ OperatingPoint(Vx, Vy, rho, pitch, mu, asound) = OperatingPoint(promote(Vx, Vy, 
 # convenience constructor when Re and Mach are not used.
 OperatingPoint(Vx, Vy, rho; pitch=zero(rho), mu=one(rho), asound=one(rho)) = OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:OperatingPoint}, sym::Symbol)
-    return getfield.(obj, sym)
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{OperatingPoint{TF}}) where {N,TF}
+    return StructArray{OperatingPoint{TF}}(undef, size(bc))
 end
-
 
 """
     Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G)
@@ -175,9 +172,8 @@ Outputs(Np, Tp, a, ap, u, v, phi, alpha, W, cl, cd, cn, ct, F, G) = Outputs(prom
 # convenience constructor to initialize
 Outputs() = Outputs(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
-# convenience function to access fields within an array of structs
-function Base.getproperty(obj::AbstractVector{<:Outputs}, sym::Symbol)
-    return getfield.(obj, sym)
+function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}}, ::Type{Outputs{TF}}) where {N,TF}
+    return StructArray{Outputs{TF}}(undef, size(bc))
 end
 
 function is_no_loads(outputs::Outputs)
@@ -199,7 +195,7 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     # unpack inputs
     r, chord, theta, Rhub, Rtip, Vx, Vy, rho, pitch, mu, asound = x  # variables
     af, B, turbine, re_corr, mach_corr, rotation_corr, tip_corr = p  # parameters
-    
+
     # constants
     sigma_p = B*chord/(2.0*pi*r)
     sphi = sin(phi)
@@ -239,7 +235,7 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
     # hub/tip loss
     F = 1.0
     if !isnothing(tip_corr)
-        F = tip_correction(tip_corr, r, Rhub, Rtip, phi, B)   
+        F = tip_correction(tip_corr, r, Rhub, Rtip, phi, B)
     end
 
     # sec parameters
@@ -256,13 +252,13 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         R = sign(phi) - k
 
     elseif isapprox(Vy, 0.0, atol=1e-6)
-        
+
         u = zero(phi)
         v = k*ct/cn*abs(Vx)
         a = zero(phi)
         ap = zero(phi)
         R = sign(Vx) + kp
-    
+
     else
 
         if phi < 0
@@ -276,8 +272,8 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         if k >= -2.0/3  # momentum region
             a = k/(1 - k)
 
-        else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.  
-            # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if 
+        else  # empirical region. Not Buhl's correction but instead uses Buhl with F = 1 then multiplied by F.
+            # (Buhl(F = 1)*F).  The original method does not force CT -> 0 as f->0.  This can be problematic if
             # using CT/CP directly as a design variables.  Suggestion courtesy of Kenneth Lønbæk.
             g1 = 2*k + 1.0/9
             g2 = -2*k - 1.0/3
@@ -304,20 +300,19 @@ function residual_and_outputs(phi, x, p)  #rotor, section, op)
         R = sin(phi)/(1 + a) - Vx/Vy*cos(phi)/(1 - ap)
     end
 
-
     # ------- loads ---------
     W = sqrt((Vx + u)^2 + (Vy - v)^2)
     Np = cn*0.5*rho*W^2*chord
     Tp = ct*0.5*rho*W^2*chord
 
-    # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.  
-    # This is the most common way to implement a BEM, but it means that the raw velocities are misleading 
+    # The BEM methodology applies hub/tip losses to the loads rather than to the velocities.
+    # This is the most common way to implement a BEM, but it means that the raw velocities are misleading
     # as they do not contain any hub/tip loss corrections.
     # To fix this we compute the effective hub/tip losses that would produce the same thrust/torque.
     # In other words:
     # CT = 4 a (1 + a) F = 4 a G (1 + a G)\n
     # This is solved for G, then multiplied against the wake velocities.
-    
+
     if isapprox(Vx, 0.0, atol=1e-6)
         G = sqrt(F)
     elseif isapprox(Vy, 0.0, atol=1e-6)
@@ -372,7 +367,7 @@ end
 
 
 """
-    solve(rotor, section, op)
+    solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false)
 
 Solve the BEM equations for given rotor geometry and operating point.
 
@@ -380,11 +375,15 @@ Solve the BEM equations for given rotor geometry and operating point.
 - `rotor::Rotor`: rotor properties
 - `section::Section`: section properties
 - `op::OperatingPoint`: operating point
+- `npts::Int = 10`: number of discretization points for `phi` state variable, used to find bracket for residual solve
+- `forcebackwardsearch::Bool = false`: if true, force bracket search from high `phi` values to low, otherwise let `solve` decide
+- `epsilon_everywhere::Bool = false`: if true, don't evaluate at intersections of `phi` quadrants (`pi/2`, `-pi/2`, etc.)
+- `implicitad_option=true`: if true, uses ImplicitAD to compute derivatives around solver when using AD; if false, bypasses ImplicitAD
 
 **Returns**
 - `outputs::Outputs`: BEM output data including loads, induction factors, etc.
 """
-function solve(rotor, section, op)
+function solve(rotor, section, op; npts=10, forcebackwardsearch=false, epsilon_everywhere=false, implicitad_option=true)
 
     # error handling
     if typeof(section) <: AbstractVector
@@ -431,7 +430,7 @@ function solve(rotor, section, op)
     end
 
     # parameters
-    npts = 10  # number of discretization points to find bracket in residual solve
+    # npts = 10  # number of discretization points to find bracket in residual solve
 
     # unpack
     Vx = op.Vx
@@ -444,10 +443,17 @@ function solve(rotor, section, op)
 
     # quadrants
     epsilon = 1e-6
-    q1 = [epsilon, pi/2]
-    q2 = [-pi/2, -epsilon]
-    q3 = [pi/2, pi-epsilon]
-    q4 = [-pi+epsilon, -pi/2]
+    if epsilon_everywhere
+        q1 = [epsilon, pi/2-epsilon]
+        q2 = [-pi/2+epsilon, -epsilon]
+        q3 = [pi/2+epsilon, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2-epsilon]
+    else
+        q1 = [epsilon, pi/2]
+        q2 = [-pi/2, -epsilon]
+        q3 = [pi/2, pi-epsilon]
+        q4 = [-pi+epsilon, -pi/2]
+    end
 
     if Vx_is_zero && Vy_is_zero
         return Outputs()
@@ -510,15 +516,19 @@ function solve(rotor, section, op)
     for j = 1:length(order)  # quadrant orders.  In most cases it should find root in first quadrant searched.
         phimin, phimax = order[j]
 
-        # check to see if it would be faster to reverse the bracket search direction
-        backwardsearch = false
-        if !startfrom90
-            if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
-                backwardsearch = true
-            end
+        if forcebackwardsearch
+            backwardsearch = true
         else
-            if phimax == pi/2  # q1
-                backwardsearch = true
+            # check to see if it would be faster to reverse the bracket search direction
+            backwardsearch = false
+            if !startfrom90
+                if phimin == -pi/2 || phimax == -pi/2  # q2 or q4
+                    backwardsearch = true
+                end
+            else
+                if phimax == pi/2  # q1
+                    backwardsearch = true
+                end
             end
         end
 
@@ -533,25 +543,23 @@ function solve(rotor, section, op)
 
         # once bracket is found, solve root finding problem and compute loads
         if success
-            # println("CCBlade")
-            # @show phiL, phiU
-            # @show xv
-            # @show pv[2], pv[3], pv[4], pv[5], pv[6], pv[7]
-            phistar = implicit(solve, residual, xv, pv)
-            # @show phistar
+            if implicitad_option
+                phistar = implicit(solve, residual, xv, pv)
+            else
+                phistar = solve(xv, pv)
+            end
             _, outputs = residual_and_outputs(phistar, xv, pv)
             return outputs
-        end    
-    end    
+        end
+    end
 
     # it shouldn't get to this point.  if it does it means no solution was found
     # it will return empty outputs
     # alternatively, one could increase npts and try again
-    
+
     @warn "Invalid data (likely) for this section.  Zero loading assumed."
     return Outputs()
 end
-
 
 
 # ------------ inflow ------------------
@@ -580,7 +588,7 @@ function simple_op(Vinf, Omega, r, rho; pitch=zero(rho), mu=one(rho), asound=one
         error("You passed in an vector for r, but this function does not accept an vector.\nProbably you intended to use broadcasting")
     end
 
-    Vx = Vinf * cos(precone) 
+    Vx = Vinf * cos(precone)
     Vy = Omega * r * cos(precone)
 
     return OperatingPoint(Vx, Vy, rho, pitch, mu, asound)
@@ -655,7 +663,7 @@ end
 """
     thrusttorque(rotor, sections, outputs::AbstractVector{TO}) where TO
 
-integrate the thrust/torque across the blade, 
+integrate the thrust/torque across the blade,
 including 0 loads at hub/tip, using a trapezoidal rule.
 
 **Arguments**
@@ -778,7 +786,11 @@ function nondim(T, Q, Vhub, Omega, rho, rotor, rotortype)
 
         CT = T / (rho * A * (Omega*Rp)^2)
         CP = P / (rho * A * (Omega*Rp)^3)  # note that CQ = CP
-        FM = CT^(3.0/2)/(sqrt(2)*CP)
+        if CT < 0
+            FM = 0.0 # creating drag not thrust
+        else
+            FM = CT^(3.0/2)/(sqrt(2)*CP)
+        end
 
         return FM, CT, CP
     end

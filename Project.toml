@@ -1,15 +1,17 @@
 name = "CCBlade"
 uuid = "e1828068-15df-11e9-03e4-ef195ea46fa4"
 authors = ["Andrew Ning <aning@byu.edu>"]
-version = "0.2.4"
+version = "1.0.0"
 
 [deps]
 FLOWMath = "6cb5d3fb-0fe8-4cc2-bd89-9fe0b19a99d3"
 ImplicitAD = "e7cbb90b-9b31-4eb2-a8c8-45099c074ee1"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+StructArrays = "09ab397b-f2b6-538f-b94a-2f83cf4a842a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [compat]
-FLOWMath = "0.3 - 0.5"
-ImplicitAD = ">= 0.2.2"
-julia = "1.6"
+FLOWMath = "0.3, 0.4, 1"
+ImplicitAD = "0.3.1, 1"
+StructArrays = "0.6.12, 0.7.1"
+julia = "1.10"
