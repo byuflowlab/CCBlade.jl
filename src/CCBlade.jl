@@ -452,7 +452,7 @@ function solve(rotor, section, op)
     if Vx_is_zero && Vy_is_zero
         return Outputs()
 
-    elseif Vx_is_zero
+    elseif Vx_is_zero #Hover case
 
         startfrom90 = false  # start bracket at 0 deg.
 
@@ -466,7 +466,9 @@ function solve(rotor, section, op)
             order = (q4, q3)
         end
 
-    elseif Vy_is_zero
+    elseif Vy_is_zero #Parked case
+        # println("Parked case")
+        npts = 5000 #Artificially chosen to bracket a root near the boundary.
 
         startfrom90 = true  # start bracket search from 90 deg
 
