@@ -90,6 +90,16 @@ function Base.similar(bc::Broadcast.Broadcasted{Broadcast.DefaultArrayStyle{N}},
     return StructArray{Section{TF,TAF}}(undef, size(bc))
 end
 
+function Sections(rvec, chordvec, thetavec, afvec)
+    # convenience constructor for vector of sections
+    # rvec, chordvec, thetavec, afvec must all be same length
+    if length(rvec) != length(chordvec) || length(rvec) != length(thetavec) || length(rvec) != length(afvec)
+        error("r, chord, theta, and af vectors must all be same length")
+    end
+
+    return StructArray{Section}((rvec, chordvec, thetavec, afvec))
+end
+
 """
     OperatingPoint(Vx, Vy, rho; pitch=0.0, mu=1.0, asound=1.0)
 
