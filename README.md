@@ -28,7 +28,7 @@
 
 **Documentation**:
 
-The [documentation](https://flow.byu.edu/CCBlade.jl/stable/) contains
+The [documentation](https://flow.byu.edu/CCBlade.jl/dev/) contains
 - A quick start tutorial to learn basic usage,
 - Guided examples to address specific or more advanced tasks,
 - A reference describing the API,
