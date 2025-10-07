@@ -27,6 +27,7 @@ pkg> add CCBlade
 - More advanced or specific queries are addressed in the [guided examples](howto.md).
 - Full details of the API are listed in [reference](reference.md).
 - Full details of the theory are linked from the [theory](theory.md) page.
+- A [example](python.md) calling CCBlade.jl from Python (including derivatives).
 
 **Run Unit Tests**:
 

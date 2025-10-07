@@ -17,7 +17,8 @@ makedocs(
         "Quick Start" => "tutorial.md",
         "Guided Examples" => "howto.md",
         "API Reference" => "reference.md",
-        "Theory" => "theory.md"
+        "Theory" => "theory.md",
+        "Python" => "python.md"
     ],
     warnonly = Documenter.except(:linkcheck, :footnote),
 )

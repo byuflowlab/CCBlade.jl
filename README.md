@@ -18,6 +18,7 @@
 - Allows for flow reversals (negative inflow/rotation velocities)
 - Allows for a hover condition (only rotation, no inflow) and rotor locked (no rotation, only inflow)
 - Compatible with AD tools like ForwardDiff
+- Callable from Python, with derivatives included (optionally)
 
 **Installation**:
 
@@ -32,6 +33,7 @@ The [documentation](https://flow.byu.edu/CCBlade.jl/stable/) contains
 - Guided examples to address specific or more advanced tasks,
 - A reference describing the API,
 - Theory in full detail.
+- An example calling CCBlade.jl from Python, optionally with derivatives.
 
 **Run Unit Tests**:
 
