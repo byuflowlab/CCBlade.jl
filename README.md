@@ -1,6 +1,6 @@
 # CCBlade.jl
 
-[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://flow.byu.edu/CCBlade.jl/stable)
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://flow.byu.edu/CCBlade.jl/dev)
 [![Build Status](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml/badge.svg?branch=master)](https://github.com/byuflowlab/CCBlade.jl/actions/workflows/CI.yml?query=branch%3Amaster)
 
 
