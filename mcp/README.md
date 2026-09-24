@@ -54,6 +54,10 @@ custom blade. Operating-point fields you omit fall back to the preset's defaults
 are reported back under `operating_point_defaults_used`. Optional airfoil corrections
 (Prandtl-Glauert Mach, Du-Selig/Eggers rotation, tip-loss model) are exposed as flags.
 
+Every image a tool returns (the four `plot_*` tools and `optimize_rotor`) is also written
+to `mcp/output/<preset>_<plot>_<timestamp>.png`, and the path comes back as `image_file`
+in the JSON, so the figure is on disk even when the client doesn't display images.
+
 ## Setup
 
 Requires Julia 1.10 or newer and about 3 GB of disk for packages. From the repository

@@ -10,6 +10,17 @@ using .RotorTools
 text(d) = TextContent(text = JSON3.write(d))
 image(bytes) = ImageContent(data = bytes, mime_type = "image/png")
 
+# Every plot is also written to OUTPUT_DIR so the user has a file to open; the path goes
+# into the JSON as "image_file". Names are <label>_<tool>_<timestamp>.png.
+function saved_plot(result::Dict, bytes, label, tool)
+    mkpath(OUTPUT_DIR)
+    stamp = Libc.strftime("%Y%m%d-%H%M%S", time()) * "-" * lpad(round(Int, 1000 * time()) % 1000, 3, '0')
+    path = joinpath(OUTPUT_DIR, replace("$(label)_$(tool)_$(stamp)", r"[^A-Za-z0-9_.-]" => "_") * ".png")
+    write(path, bytes)
+    result["image_file"] = path
+    return [text(result), image(bytes)]
+end
+
 # Handlers return a Dict (serialized to JSON) or a Vector of content blocks. Input
 # problems come back as {"error": ...} so the model can correct its call; anything else
 # is logged with a stack trace to stderr and reported briefly.
@@ -139,8 +150,8 @@ convert_units_impl(p) = convert_units(p)
 
 function plot_geometry_impl(p)
     g = resolve_geometry(p)
-    return [text(Dict{String,Any}("geometry" => geometry_info(g), "stations" => geometry_arrays(g))),
-            image(plot_geometry_png(g))]
+    return saved_plot(Dict{String,Any}("geometry" => geometry_info(g), "stations" => geometry_arrays(g)),
+                      plot_geometry_png(g), g.preset, "geometry")
 end
 
 function plot_performance_impl(p)
@@ -149,15 +160,16 @@ function plot_performance_impl(p)
     values = getvec(p, "values")
     values === nothing && fail("values is required")
     rows = sweep(g, p, variable, values)
-    return [text(sweep_result(g, rows, variable)), image(plot_performance_png(rows, variable, g.rotor_type, g))]
+    return saved_plot(sweep_result(g, rows, variable), plot_performance_png(rows, variable, g.rotor_type, g),
+                      g.preset, "performance_vs_$(variable)")
 end
 
 function plot_spanwise_impl(p)
     g = resolve_geometry(p)
     op = resolve_operating(p, g)
     metrics, out = evaluate(g, op)
-    return [text(Dict{String,Any}("geometry" => geometry_info(g), "performance" => metrics)),
-            image(plot_spanwise_png(g, out, op))]
+    return saved_plot(Dict{String,Any}("geometry" => geometry_info(g), "performance" => metrics),
+                      plot_spanwise_png(g, out, op), g.preset, "spanwise")
 end
 
 function plot_airfoil_impl(p)
@@ -170,7 +182,7 @@ function plot_airfoil_impl(p)
                                "alpha_range_plotted_deg" => collect(rng),
                                "max_cl" => sig(maximum(af.cl), 4), "min_cd" => sig(minimum(af.cd), 4),
                                "max_lift_to_drag" => sig(maximum(af.cl ./ max.(af.cd, 1e-6)), 4))
-    return [text(summary), image(plot_airfoil_png(name; alpha_range_deg = rng))]
+    return saved_plot(summary, plot_airfoil_png(name; alpha_range_deg = rng), splitext(basename(name))[1], "airfoil")
 end
 
 function optimize_rotor_impl(p)
@@ -179,7 +191,7 @@ function optimize_rotor_impl(p)
     result, g1, op1, out0, out1 = optimize_rotor(g, op, p)
     result["initial_geometry"] = geometry_info(g)
     getbool(p, "return_plot", true) || return result
-    return [text(result), image(plot_optimization_png(g, g1, out0, out1))]
+    return saved_plot(result, plot_optimization_png(g, g1, out0, out1), g.preset, "optimization")
 end
 
 function export_blade_vtk_impl(p)
@@ -251,20 +263,20 @@ const CCBLADE_TOOLS = MCPTool[
         handler = guarded(convert_units_impl), annotations = READ_ONLY),
     MCPTool(
         name = "plot_geometry", title = "Plot blade geometry",
-        description = "Image of the chord and twist distributions and the blade planform, plus the station arrays as JSON. Accepts the same geometry inputs as analyze_rotor.",
+        description = "Image of the chord and twist distributions and the blade planform, plus the station arrays as JSON. Accepts the same geometry inputs as analyze_rotor. The PNG is also saved to the mcp/output folder and its path returned as image_file.",
         input_schema = schema(GEOMETRY_PROPERTIES), handler = guarded(plot_geometry_impl), annotations = READ_ONLY),
     MCPTool(
         name = "plot_performance", title = "Plot performance curves",
-        description = "Sweep one operating variable (as in sweep_rotor) and return an image of efficiency or figure of merit or CP, the force coefficients, and thrust and power versus that variable, together with the numeric rows.",
+        description = "Sweep one operating variable (as in sweep_rotor) and return an image of efficiency or figure of merit or CP, the force coefficients, and thrust and power versus that variable, together with the numeric rows. The PNG is also saved to the mcp/output folder and its path returned as image_file.",
         input_schema = schema(merged(GEOMETRY_PROPERTIES, OPERATING_PROPERTIES, SWEEP_PROPERTIES); required = ["sweep_variable", "values"]),
         handler = guarded(plot_performance_impl), annotations = READ_ONLY),
     MCPTool(
         name = "plot_spanwise", title = "Plot spanwise distributions",
-        description = "Image of the spanwise normal and tangential loads, angle of attack and inflow angle, cl and cd, and induction factors at one operating point, plus the integrated performance.",
+        description = "Image of the spanwise normal and tangential loads, angle of attack and inflow angle, cl and cd, and induction factors at one operating point, plus the integrated performance. The PNG is also saved to the mcp/output folder and its path returned as image_file.",
         input_schema = schema(merged(GEOMETRY_PROPERTIES, OPERATING_PROPERTIES)), handler = guarded(plot_spanwise_impl), annotations = READ_ONLY),
     MCPTool(
         name = "plot_airfoil", title = "Plot an airfoil polar",
-        description = "Image of cl and cd versus angle of attack and the drag polar for one bundled airfoil file (see list_airfoils).",
+        description = "Image of cl and cd versus angle of attack and the drag polar for one bundled airfoil file (see list_airfoils). The PNG is also saved to the mcp/output folder and its path returned as image_file.",
         input_schema = schema(Dict{String,Any}(
             "airfoil" => prop("string", "Polar file name from list_airfoils, or an absolute path."),
             "alpha_range_deg" => numarray("[min, max] angle of attack window in degrees to plot. Default [-30, 30]; the files cover -180 to 180."; minItems = 2, maxItems = 2));
@@ -272,7 +284,7 @@ const CCBLADE_TOOLS = MCPTool[
         handler = guarded(plot_airfoil_impl), annotations = READ_ONLY),
     MCPTool(
         name = "optimize_rotor", title = "Optimize chord, twist and rpm",
-        description = "Gradient-based blade optimization with SNOW.jl (Ipopt, exact derivatives by ForwardDiff through CCBlade). Design variables are chord/R and twist at a few control points along the span (smoothly interpolated) and optionally rpm. Objectives: min_power or max_efficiency subject to thrust >= thrust_min_N, max_thrust subject to power <= power_max_W, or max_figure_of_merit (hover) subject to thrust >= thrust_min_N. Returns initial and optimized performance, the optimized geometry arrays (which can be passed back to any other tool) and a comparison image. Typical run time is a few seconds.",
+        description = "Gradient-based blade optimization with SNOW.jl (Ipopt, exact derivatives by ForwardDiff through CCBlade). Design variables are chord/R and twist at a few control points along the span (smoothly interpolated) and optionally rpm. Objectives: min_power or max_efficiency subject to thrust >= thrust_min_N, max_thrust subject to power <= power_max_W, or max_figure_of_merit (hover) subject to thrust >= thrust_min_N. Returns initial and optimized performance, the optimized geometry arrays (which can be passed back to any other tool) and a comparison image. The PNG is also saved to the mcp/output folder and its path returned as image_file. Typical run time is a few seconds.",
         input_schema = schema(merged(GEOMETRY_PROPERTIES, OPERATING_PROPERTIES, Dict{String,Any}(
             "objective" => prop("string", "What to optimize. Default min_power."; enum = collect(OBJECTIVES)),
             "thrust_min_N" => prop("number", "Minimum thrust constraint in newtons (required for min_power, max_efficiency and max_figure_of_merit)."; exclusiveMinimum = 0),
