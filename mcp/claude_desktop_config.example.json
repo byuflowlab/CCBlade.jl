@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ccblade": {
+      "command": "/Applications/Julia-1.10.app/Contents/Resources/julia/bin/julia",
+      "args": [
+        "--startup-file=no",
+        "--project=/ABSOLUTE/PATH/TO/CCBlade.jl/mcp",
+        "/ABSOLUTE/PATH/TO/CCBlade.jl/mcp/server.jl"
+      ]
+    }
+  }
+}
