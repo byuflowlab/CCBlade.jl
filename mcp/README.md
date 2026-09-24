@@ -106,16 +106,15 @@ All inputs and outputs are in SI units, with angles in degrees.
 ## If something goes wrong
 
 - **Server shows "failed" or "timed out".** Julia can take longer to start than the
-  client is willing to wait, especially the first time. Run `./mcp/smoke_test.sh` once
+  client is willing to wait, especially the first time. Run `./mcp/test_server.sh` once
   to warm it up, then reconnect (`/mcp` in Claude Code, or restart Claude Desktop). In
   Claude Code, you can also start it with a longer timeout: `MCP_TIMEOUT=120000 claude`.
 - **Wrong Julia version.** MCP clients don't read your shell setup, so the config needs
   the full path to Julia. Re-run with `JULIA=/path/to/julia ./mcp/print_client_config.sh`.
-- **Check the server without an AI.** `./mcp/smoke_test.sh` calls every tool and should
+- **Check the server without an AI.** `./mcp/test_server.sh` calls every tool and should
   finish without errors.
 
 ## More
 
-- [DEVELOPING.md](DEVELOPING.md): code layout, tests, adding tools, HTTP mode, and the
-  Pluto notebook.
-- [DEMO.md](DEMO.md): notes for presenting this in a talk or training.
+[DEVELOPING.md](DEVELOPING.md) covers the code layout, tests, adding tools, HTTP mode,
+and the Pluto notebook.

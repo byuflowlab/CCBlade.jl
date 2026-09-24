@@ -3,8 +3,8 @@
 # Sends the JSON-RPC handshake, lists the tools and calls each one, then prints a
 # summary of every response. Images are saved under mcp/output/ for inspection.
 #
-#   ./mcp/smoke_test.sh                 # uses `julia` from PATH
-#   JULIA=/path/to/julia ./mcp/smoke_test.sh
+#   ./mcp/test_server.sh                 # uses `julia` from PATH
+#   JULIA=/path/to/julia ./mcp/test_server.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
 JULIA="${JULIA:-julia}"
@@ -16,7 +16,7 @@ call() {  # id name json-arguments
 }
 
 {
-  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"smoke-test","version":"0.0.1"}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-server","version":"0.0.1"}}}'
   printf '%s\n' '{"jsonrpc":"2.0","method":"notifications/initialized"}'
   printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
   call 3  list_presets        '{}'
@@ -30,10 +30,10 @@ call() {  # id name json-arguments
   call 11 plot_spanwise       '{"Vinf_m_s":5.0,"rpm":5400}'
   call 12 plot_airfoil        '{"airfoil":"naca4412.dat"}'
   call 13 optimize_rotor      '{"Vinf_m_s":10.0,"rpm":5400,"objective":"min_power","thrust_min_N":2.0}'
-  call 14 export_blade_vtk    '{"Vinf_m_s":5.0,"rpm":5400,"name":"smoke_apc"}'
+  call 14 export_blade_vtk    '{"Vinf_m_s":5.0,"rpm":5400,"name":"test_server_apc"}'
   call 15 analyze_rotor       '{"Vinf_m_s":5.0,"rpm":5400,"airfoil":"does_not_exist.dat"}'
 } | "$JULIA" --startup-file=no --project=mcp mcp/server.jl 2>"$STDERR_LOG" \
-  | python3 mcp/smoke_print.py
+  | python3 mcp/test_server_print.py
 status=("${PIPESTATUS[@]}")
 echo "server stderr log: $STDERR_LOG"
 if [ "${status[1]}" != "0" ]; then

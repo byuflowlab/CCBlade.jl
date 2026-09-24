@@ -1,7 +1,7 @@
-"""Pretty-print the JSON-RPC responses produced by smoke_test.sh.
+"""Pretty-print the JSON-RPC responses produced by test_server.sh.
 
 Reads newline-delimited JSON from stdin, prints one summary line per message and saves
-any image content blocks to mcp/output/smoke_<id>.png.
+any image content blocks to mcp/output/test_server_<id>.png.
 """
 import base64
 import json
@@ -58,7 +58,7 @@ for line in sys.stdin:
         for block in result["content"]:
             if block.get("type") == "image":
                 data = base64.b64decode(block["data"])
-                path = os.path.join(OUT_DIR, f"smoke_{mid}.png")
+                path = os.path.join(OUT_DIR, f"test_server_{mid}.png")
                 with open(path, "wb") as f:
                     f.write(data)
                 parts.append(f"<image {block.get('mimeType')} {len(data)} bytes -> {os.path.relpath(path)}>")

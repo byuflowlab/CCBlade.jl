@@ -22,7 +22,7 @@ mcp/
 ├── tools.jl                       MCP layer: JSON schemas + thin handlers over RotorTools
 ├── server.jl                      entry point: warm-up, then serve over stdio or HTTP
 ├── notebook/rotor_explorer.jl     Pluto notebook over the same RotorTools module
-├── smoke_test.sh                  drives every tool over stdio with raw JSON-RPC, no LLM needed
+├── test_server.sh                  drives every tool over stdio with raw JSON-RPC, no LLM needed
 ├── check_all.sh                   runs every test and check below
 ├── test/                          library, notebook and headless-Pluto tests
 └── output/                        images, VTK files and ipopt.out land here (gitignored)
@@ -33,7 +33,7 @@ mcp/
 ```bash
 julia --startup-file=no --project=mcp mcp/test/run_lib_tests.jl       # vs. CCBlade docs values
 julia --startup-file=no --project=mcp mcp/test/run_notebook_tests.jl  # notebook cell logic
-./mcp/smoke_test.sh                                                    # whole server over stdio
+./mcp/test_server.sh                                                    # whole server over stdio
 ./mcp/check_all.sh                                                     # all of the above
 ```
 

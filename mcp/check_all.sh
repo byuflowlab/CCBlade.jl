@@ -26,7 +26,7 @@ step "notebook cell logic" \
   "$JULIA" --startup-file=no --project=mcp mcp/test/run_notebook_tests.jl
 step "notebook runs in Pluto (all branches)" \
   "$JULIA" --startup-file=no --project=mcp mcp/test/check_notebook_runs.jl --buttons
-step "MCP server over stdio" ./mcp/smoke_test.sh
+step "MCP server over stdio" ./mcp/test_server.sh
 
 printf '\n'
 if [ "$fails" -eq 0 ]; then
